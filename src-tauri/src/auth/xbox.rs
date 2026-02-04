@@ -8,8 +8,8 @@ const XSTS_AUTH_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 
 #[derive(Debug, Deserialize)]
 pub struct XboxAuthResponse {
-    pub Token: String,
-    pub DisplayClaims: XboxDisplayClaims,
+    pub token: String,
+    pub display_claims: XboxDisplayClaims,
 }
 
 #[derive(Debug, Deserialize)]
