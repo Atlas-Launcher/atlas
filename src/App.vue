@@ -4,15 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import Button from "./components/ui/button/Button.vue";
-import Card from "./components/ui/card/Card.vue";
-import CardHeader from "./components/ui/card/CardHeader.vue";
-import CardTitle from "./components/ui/card/CardTitle.vue";
-import CardDescription from "./components/ui/card/CardDescription.vue";
-import CardContent from "./components/ui/card/CardContent.vue";
-import CardFooter from "./components/ui/card/CardFooter.vue";
-import Input from "./components/ui/input/Input.vue";
-import Progress from "./components/ui/progress/Progress.vue";
+import AccountCard from "./components/AccountCard.vue";
+import ActivityCard from "./components/ActivityCard.vue";
+import PlayCard from "./components/PlayCard.vue";
+import SettingsCard from "./components/SettingsCard.vue";
+import SidebarNav from "./components/SidebarNav.vue";
 
 interface Profile {
   id: string;
@@ -281,199 +277,54 @@ async function downloadMinecraftFiles() {
       </header>
 
       <div class="grid gap-6 md:grid-cols-[220px_1fr]">
-        <aside class="glass flex h-fit flex-col gap-4 rounded-3xl border border-border/40 bg-card/60 p-4">
-          <div class="space-y-1">
-            <div class="text-xs uppercase tracking-[0.3em] text-muted-foreground">Navigation</div>
-            <div class="text-lg font-semibold text-foreground">Atlas</div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <button
-              class="group flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition"
-              :class="
-                activeTab === 'library'
-                  ? 'border-primary/60 bg-primary/10 text-foreground'
-                  : 'border-border/40 bg-secondary/40 text-muted-foreground hover:text-foreground'
-              "
-              @click="activeTab = 'library'"
-            >
-              <span class="font-semibold">Library</span>
-              <span class="text-xs uppercase tracking-widest opacity-60">Games</span>
-            </button>
-            <button
-              class="group flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition"
-              :class="
-                activeTab === 'settings'
-                  ? 'border-primary/60 bg-primary/10 text-foreground'
-                  : 'border-border/40 bg-secondary/40 text-muted-foreground hover:text-foreground'
-              "
-              @click="activeTab = 'settings'"
-            >
-              <span class="font-semibold">Settings</span>
-              <span class="text-xs uppercase tracking-widest opacity-60">Config</span>
-            </button>
-          </div>
-          <div class="mt-auto rounded-2xl border border-border/40 bg-secondary/40 px-4 py-3 text-xs text-muted-foreground">
-            <div class="text-xs uppercase tracking-widest">Status</div>
-            <div class="mt-2 font-semibold text-foreground">{{ status }}</div>
-          </div>
-        </aside>
+        <SidebarNav
+          :active-tab="activeTab"
+          :status="status"
+          @select="activeTab = $event"
+        />
 
         <main class="space-y-6">
           <section v-if="activeTab === 'library'" class="space-y-6">
             <div class="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-              <Card class="glass">
-                <CardHeader>
-                  <CardTitle>Account</CardTitle>
-                  <CardDescription>Connect your Microsoft account to play.</CardDescription>
-                </CardHeader>
-                <CardContent class="space-y-4">
-                  <div class="grid gap-3">
-                    <div class="rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm">
-                      <div class="text-xs uppercase tracking-widest text-muted-foreground">Status</div>
-                      <div class="mt-1 font-semibold text-foreground">
-                        {{ profile ? `Signed in as ${profile.name}` : "Not signed in" }}
-                      </div>
-                    </div>
-                    <Button :disabled="working" @click="startLogin">Sign in</Button>
-                    <div
-                      v-if="authFlow === 'device_code' && deviceCode"
-                      class="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm"
-                    >
-                      <div class="text-xs uppercase tracking-widest text-muted-foreground">
-                        Verification URL
-                      </div>
-                      <div class="mt-1 break-all text-foreground">{{ deviceCode.verification_uri }}</div>
-                      <div class="mt-3 text-xs uppercase tracking-widest text-muted-foreground">
-                        User Code
-                      </div>
-                      <div class="mt-1 text-base font-semibold text-foreground">
-                        {{ deviceCode.user_code }}
-                      </div>
-                    </div>
-                    <Button
-                      v-if="authFlow === 'device_code' && deviceCode"
-                      :disabled="working"
-                      variant="secondary"
-                      @click="completeDeviceLogin"
-                    >
-                      Complete sign-in
-                    </Button>
-                    <div v-if="authFlow !== 'device_code' && !profile" class="space-y-2">
-                      <div
-                        v-if="pendingDeeplink"
-                        class="rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm"
-                      >
-                        <div class="text-xs uppercase tracking-widest text-muted-foreground">
-                          Redirect Received
-                        </div>
-                        <div class="mt-1 break-all text-foreground">{{ pendingDeeplink }}</div>
-                      </div>
-                      <div class="space-y-2">
-                        <label class="text-xs uppercase tracking-widest text-muted-foreground">
-                          Auth Callback URL (optional)
-                        </label>
-                        <Input
-                          v-model="manualCallbackUrl"
-                          placeholder="atlas://auth?code=...&state=..."
-                        />
-                        <div class="text-xs text-muted-foreground">
-                          Use this if the deep link didn't open automatically.
-                        </div>
-                      </div>
-                      <Button :disabled="working" variant="secondary" @click="finishDeeplinkLogin()">
-                        Finish sign-in
-                      </Button>
-                    </div>
-                    <Button v-if="profile" variant="ghost" :disabled="working" @click="signOut">
-                      Sign out
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card class="glass">
-                <CardHeader>
-                  <CardTitle>Play</CardTitle>
-                  <CardDescription>Atlas manages files and Java for you.</CardDescription>
-                </CardHeader>
-                <CardContent class="space-y-4">
-                  <div class="grid gap-3">
-                    <Button :disabled="working" variant="secondary" @click="downloadMinecraftFiles">
-                      Download game files
-                    </Button>
-                    <Button :disabled="working || !profile" @click="launchMinecraft">
-                      Launch Minecraft
-                    </Button>
-                  </div>
-                  <div class="text-xs text-muted-foreground">
-                    Files are stored in your app data folder and updated automatically.
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <div class="w-full space-y-2">
-                    <div class="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Launch progress</span>
-                      <span>{{ progress }}%</span>
-                    </div>
-                    <Progress :model-value="progress" />
-                  </div>
-                </CardFooter>
-              </Card>
+              <AccountCard
+                :profile="profile"
+                :working="working"
+                :auth-flow="authFlow"
+                :device-code="deviceCode"
+                :pending-deeplink="pendingDeeplink"
+                v-model:manualCallbackUrl="manualCallbackUrl"
+                @start-login="startLogin"
+                @complete-device-login="completeDeviceLogin"
+                @finish-deeplink-login="finishDeeplinkLogin"
+                @sign-out="signOut"
+              />
+              <PlayCard
+                :profile="profile"
+                :working="working"
+                :progress="progress"
+                @download="downloadMinecraftFiles"
+                @launch="launchMinecraft"
+              />
             </div>
 
-            <Card class="glass">
-              <CardHeader>
-                <CardTitle>Activity</CardTitle>
-                <CardDescription>Most recent launcher events.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul class="space-y-2 text-sm text-muted-foreground">
-                  <li v-for="(entry, index) in logs" :key="index">{{ entry }}</li>
-                  <li v-if="logs.length === 0">No events yet.</li>
-                </ul>
-              </CardContent>
-            </Card>
+            <ActivityCard
+              title="Activity"
+              description="Most recent launcher events."
+              :logs="logs"
+            />
           </section>
 
           <section v-else class="space-y-6">
-            <Card class="glass">
-              <CardHeader>
-                <CardTitle>Settings</CardTitle>
-                <CardDescription>Optional sign-in overrides.</CardDescription>
-              </CardHeader>
-              <CardContent class="space-y-3">
-                <div class="space-y-2">
-                  <label class="text-xs uppercase tracking-widest text-muted-foreground">
-                    Microsoft Client ID (optional)
-                  </label>
-                  <Input
-                    v-model="settingsClientId"
-                    placeholder="Leave blank to use the bundled client ID"
-                  />
-                </div>
-                <div class="text-xs text-muted-foreground">
-                  This only affects new sign-ins. Sign out and sign back in to apply.
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button :disabled="working" variant="secondary" @click="saveSettings">
-                  Save settings
-                </Button>
-              </CardFooter>
-            </Card>
-
-            <Card class="glass">
-              <CardHeader>
-                <CardTitle>Recent activity</CardTitle>
-                <CardDescription>Helpful signals while tuning Atlas.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul class="space-y-2 text-sm text-muted-foreground">
-                  <li v-for="(entry, index) in logs" :key="index">{{ entry }}</li>
-                  <li v-if="logs.length === 0">No events yet.</li>
-                </ul>
-              </CardContent>
-            </Card>
+            <SettingsCard
+              v-model:settingsClientId="settingsClientId"
+              :working="working"
+              @save-settings="saveSettings"
+            />
+            <ActivityCard
+              title="Recent activity"
+              description="Helpful signals while tuning Atlas."
+              :logs="logs"
+            />
           </section>
         </main>
       </div>
