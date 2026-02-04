@@ -5,11 +5,29 @@ mod paths;
 mod settings;
 mod state;
 
-use crate::models::{AppSettings, DeviceCodeResponse, LaunchOptions, Profile};
+use crate::models::{
+    AppSettings, DeviceCodeResponse, FabricLoaderVersion, LaunchOptions, ModEntry, Profile,
+    VersionManifestSummary, VersionSummary,
+};
 use crate::state::AppState;
+use reqwest::Client;
+use serde::Deserialize;
+use std::fs;
+use std::path::Component;
 
 const DEFAULT_MS_CLIENT_ID: &str = "REDACTED-MS-CLIENT-ID";
 const DEFAULT_REDIRECT_URI: &str = "atlas://auth";
+
+#[derive(Deserialize)]
+struct FabricLoaderEntry {
+    loader: FabricLoaderInfo,
+}
+
+#[derive(Deserialize)]
+struct FabricLoaderInfo {
+    version: String,
+    stable: bool,
+}
 
 fn resolve_client_id(settings: &AppSettings) -> String {
     settings
@@ -23,6 +41,188 @@ fn resolve_client_id(settings: &AppSettings) -> String {
 #[tauri::command]
 fn get_default_game_dir() -> String {
     paths::default_game_dir().to_string_lossy().to_string()
+}
+
+#[tauri::command]
+async fn get_version_manifest_summary() -> Result<VersionManifestSummary, String> {
+    let client = Client::new();
+    let manifest: launcher::manifest::VersionManifest =
+        launcher::download::fetch_json(&client, launcher::manifest::VERSION_MANIFEST_URL).await?;
+    let versions = manifest
+        .versions
+        .into_iter()
+        .map(|version| VersionSummary {
+            id: version.id,
+            kind: version.kind,
+        })
+        .collect();
+    Ok(VersionManifestSummary {
+        latest_release: manifest.latest.release,
+        versions,
+    })
+}
+
+#[tauri::command]
+async fn get_fabric_loader_versions(
+    minecraft_version: String,
+) -> Result<Vec<FabricLoaderVersion>, String> {
+    let client = Client::new();
+    let url = format!("https://meta.fabricmc.net/v2/versions/loader/{minecraft_version}");
+    let entries: Vec<FabricLoaderEntry> =
+        launcher::download::fetch_json(&client, &url).await?;
+    Ok(entries
+        .into_iter()
+        .map(|entry| FabricLoaderVersion {
+            version: entry.loader.version,
+            stable: entry.loader.stable,
+        })
+        .collect())
+}
+
+#[tauri::command]
+fn list_installed_versions(game_dir: String) -> Result<Vec<String>, String> {
+    let base_dir = paths::normalize_path(&game_dir);
+    let versions_dir = base_dir.join("versions");
+    if !versions_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut versions = Vec::new();
+    let entries = fs::read_dir(&versions_dir)
+        .map_err(|err| format!("Failed to read versions dir: {err}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|err| format!("Failed to read versions dir entry: {err}"))?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        let json_path = path.join(format!("{name}.json"));
+        if json_path.exists() {
+            versions.push(name);
+        }
+    }
+    versions.sort();
+    Ok(versions)
+}
+
+#[tauri::command]
+fn list_mods(game_dir: String) -> Result<Vec<ModEntry>, String> {
+    let base_dir = paths::normalize_path(&game_dir);
+    let mods_dir = base_dir.join("mods");
+    paths::ensure_dir(&mods_dir)?;
+
+    let mut mods = Vec::new();
+    let entries = fs::read_dir(&mods_dir)
+        .map_err(|err| format!("Failed to read mods dir: {err}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|err| format!("Failed to read mods dir entry: {err}"))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !is_mod_filename(&name) {
+            continue;
+        }
+        let enabled = !name.ends_with(".disabled");
+        let display_name = format_mod_display_name(&name);
+        let metadata = fs::metadata(&path)
+            .map_err(|err| format!("Failed to read mod metadata: {err}"))?;
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        mods.push(ModEntry {
+            file_name: name,
+            display_name,
+            enabled,
+            size: metadata.len(),
+            modified,
+        });
+    }
+    mods.sort_by(|a, b| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()));
+    Ok(mods)
+}
+
+#[tauri::command]
+fn set_mod_enabled(game_dir: String, file_name: String, enabled: bool) -> Result<(), String> {
+    let base_dir = paths::normalize_path(&game_dir);
+    let mods_dir = base_dir.join("mods");
+    paths::ensure_dir(&mods_dir)?;
+
+    let safe_name = sanitize_mod_filename(&file_name)?;
+    let current_path = mods_dir.join(&safe_name);
+    if !current_path.exists() {
+        return Err(format!("Mod {safe_name} not found."));
+    }
+
+    let currently_disabled = safe_name.ends_with(".disabled");
+    let target_name = match (enabled, currently_disabled) {
+        (true, true) => safe_name.trim_end_matches(".disabled").to_string(),
+        (false, false) => format!("{safe_name}.disabled"),
+        _ => safe_name.clone(),
+    };
+
+    if target_name == safe_name {
+        return Ok(());
+    }
+
+    let target_path = mods_dir.join(&target_name);
+    if target_path.exists() {
+        return Err(format!(
+            "Cannot toggle mod. Target file already exists: {target_name}"
+        ));
+    }
+
+    fs::rename(&current_path, &target_path)
+        .map_err(|err| format!("Failed to rename mod: {err}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_mod(game_dir: String, file_name: String) -> Result<(), String> {
+    let base_dir = paths::normalize_path(&game_dir);
+    let mods_dir = base_dir.join("mods");
+    paths::ensure_dir(&mods_dir)?;
+
+    let safe_name = sanitize_mod_filename(&file_name)?;
+    let path = mods_dir.join(&safe_name);
+    if !path.exists() {
+        return Ok(());
+    }
+    fs::remove_file(&path).map_err(|err| format!("Failed to delete mod: {err}"))?;
+    Ok(())
+}
+
+fn is_mod_filename(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.ends_with(".jar")
+        || lower.ends_with(".zip")
+        || lower.ends_with(".jar.disabled")
+        || lower.ends_with(".zip.disabled")
+}
+
+fn format_mod_display_name(name: &str) -> String {
+    let trimmed = name.trim_end_matches(".disabled");
+    let trimmed = trimmed.trim_end_matches(".jar").trim_end_matches(".zip");
+    trimmed.to_string()
+}
+
+fn sanitize_mod_filename(file_name: &str) -> Result<String, String> {
+    if file_name.trim().is_empty() {
+        return Err("Mod filename is required.".to_string());
+    }
+    let path = std::path::Path::new(file_name);
+    if path
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err("Invalid mod filename.".to_string());
+    }
+    Ok(file_name.to_string())
 }
 
 #[tauri::command]
@@ -239,6 +439,12 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_default_game_dir,
+            get_version_manifest_summary,
+            get_fabric_loader_versions,
+            list_installed_versions,
+            list_mods,
+            set_mod_enabled,
+            delete_mod,
             start_device_code,
             begin_deeplink_login,
             complete_deeplink_login,

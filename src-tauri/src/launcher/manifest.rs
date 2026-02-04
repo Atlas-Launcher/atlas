@@ -36,12 +36,16 @@ pub struct VersionData {
     pub arguments: Option<Arguments>,
     #[serde(default, rename = "minecraftArguments")]
     pub minecraft_arguments: Option<String>,
-    #[serde(rename = "assetIndex")]
-    pub asset_index: AssetIndex,
-    pub downloads: VersionDownloads,
+    #[serde(default, rename = "assetIndex")]
+    pub asset_index: Option<AssetIndex>,
+    #[serde(default)]
+    pub downloads: Option<VersionDownloads>,
+    #[serde(default)]
     pub libraries: Vec<Library>,
     #[serde(default, rename = "javaVersion")]
     pub java_version: Option<JavaVersion>,
+    #[serde(default, rename = "inheritsFrom")]
+    pub inherits_from: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -93,6 +97,8 @@ pub struct Library {
     pub name: String,
     #[serde(default)]
     pub downloads: Option<LibraryDownloads>,
+    #[serde(default)]
+    pub url: Option<String>,
     #[serde(default)]
     pub natives: Option<HashMap<String, String>>,
     #[serde(default)]

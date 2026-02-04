@@ -13,22 +13,23 @@ fn base_version() -> VersionData {
         main_class: "Main".to_string(),
         arguments: None,
         minecraft_arguments: None,
-        asset_index: AssetIndex {
+        asset_index: Some(AssetIndex {
             id: "idx".to_string(),
             url: "https://example.com".to_string(),
             sha1: None,
             size: None,
-        },
-        downloads: VersionDownloads {
+        }),
+        downloads: Some(VersionDownloads {
             client: Download {
                 path: None,
                 url: "https://example.com".to_string(),
                 sha1: None,
                 size: None,
             },
-        },
+        }),
         libraries: Vec::<Library>::new(),
         java_version: None,
+        inherits_from: None,
     }
 }
 

@@ -1,10 +1,10 @@
 mod args;
-mod download;
+pub(crate) mod download;
 mod java;
 mod libraries;
-mod manifest;
+pub(crate) mod manifest;
 
-use crate::models::{AuthSession, LaunchEvent, LaunchOptions};
+use crate::models::{AuthSession, LaunchEvent, LaunchOptions, ModLoaderKind};
 use crate::paths::{ensure_dir, file_exists, normalize_path};
 use download::{download_if_needed, download_raw, fetch_json, DOWNLOAD_CONCURRENCY};
 use futures::stream::{self, StreamExt};
@@ -50,7 +50,13 @@ pub async fn launch_minecraft(
     replace_map.insert("version_name", version_data.id.clone());
     replace_map.insert("game_directory", game_dir.to_string_lossy().to_string());
     replace_map.insert("assets_root", assets_dir.to_string_lossy().to_string());
-    replace_map.insert("assets_index_name", version_data.asset_index.id.clone());
+    let asset_index_id = version_data
+        .asset_index
+        .as_ref()
+        .ok_or_else(|| "Missing asset index after resolving version".to_string())?
+        .id
+        .clone();
+    replace_map.insert("assets_index_name", asset_index_id);
     replace_map.insert("auth_uuid", session.profile.id.clone());
     replace_map.insert("auth_access_token", session.access_token.clone());
     replace_map.insert("user_type", "msa".to_string());
@@ -122,25 +128,8 @@ async fn prepare_minecraft(
     emit(window, "setup", "Fetching version manifest", None, None)?;
     let manifest: VersionManifest = fetch_json(&client, VERSION_MANIFEST_URL).await?;
 
-    let version_id = options
-        .version
-        .clone()
-        .unwrap_or_else(|| manifest.latest.release.clone());
-
-    let version_ref = manifest
-        .versions
-        .into_iter()
-        .find(|version| version.id == version_id)
-        .ok_or_else(|| format!("Version {version_id} not found in manifest"))?;
-
-    emit(
-        window,
-        "setup",
-        format!("Downloading version metadata ({})", version_ref.id),
-        None,
-        None,
-    )?;
-    let version_data: VersionData = fetch_json(&client, &version_ref.url).await?;
+    let version_data =
+        resolve_version_data(window, &client, &manifest, options, &game_dir).await?;
     let version_folder = versions_dir.join(&version_data.id);
     ensure_dir(&version_folder)?;
 
@@ -150,9 +139,13 @@ async fn prepare_minecraft(
     fs::write(&version_json_path, version_bytes)
         .map_err(|err| format!("Failed to write version metadata: {err}"))?;
 
+    let downloads = version_data
+        .downloads
+        .as_ref()
+        .ok_or_else(|| "Missing download metadata after resolving version".to_string())?;
     emit(window, "client", "Downloading client jar", None, None)?;
     let client_jar_path = version_folder.join(format!("{}.jar", version_data.id));
-    download_if_needed(&client, &version_data.downloads.client, &client_jar_path).await?;
+    download_if_needed(&client, &downloads.client, &client_jar_path).await?;
 
     emit(window, "libraries", "Syncing libraries", None, None)?;
     let (library_paths, native_jars) =
@@ -170,16 +163,20 @@ async fn prepare_minecraft(
     }
 
     emit(window, "assets", "Syncing assets", None, None)?;
+    let asset_index = version_data
+        .asset_index
+        .as_ref()
+        .ok_or_else(|| "Missing asset index after resolving version".to_string())?;
     let assets_index_path = assets_dir
         .join("indexes")
-        .join(format!("{}.json", version_data.asset_index.id));
+        .join(format!("{}.json", asset_index.id));
     download_if_needed(
         &client,
         &Download {
             path: None,
-            url: version_data.asset_index.url.clone(),
-            sha1: version_data.asset_index.sha1.clone(),
-            size: version_data.asset_index.size,
+            url: asset_index.url.clone(),
+            sha1: asset_index.sha1.clone(),
+            size: asset_index.size,
         },
         &assets_index_path,
     )
@@ -248,6 +245,201 @@ async fn prepare_minecraft(
         natives_dir,
         java_path,
     })
+}
+
+async fn resolve_version_data(
+    window: &Window,
+    client: &Client,
+    manifest: &VersionManifest,
+    options: &LaunchOptions,
+    game_dir: &PathBuf,
+) -> Result<VersionData, String> {
+    let mut version_data = match options.loader.kind {
+        ModLoaderKind::Vanilla => {
+            let version_id = options
+                .version
+                .clone()
+                .unwrap_or_else(|| manifest.latest.release.clone());
+            let version_ref = manifest
+                .versions
+                .iter()
+                .find(|version| version.id == version_id)
+                .ok_or_else(|| format!("Version {version_id} not found in manifest"))?;
+
+            emit(
+                window,
+                "setup",
+                format!("Downloading version metadata ({})", version_ref.id),
+                None,
+                None,
+            )?;
+            fetch_json::<VersionData>(client, &version_ref.url).await?
+        }
+        ModLoaderKind::Fabric => {
+            let mc_version = options
+                .version
+                .clone()
+                .unwrap_or_else(|| manifest.latest.release.clone());
+            let loader_version = resolve_fabric_loader_version(
+                client,
+                &mc_version,
+                options.loader.loader_version.clone(),
+            )
+            .await?;
+            let profile_url = format!(
+                "https://meta.fabricmc.net/v2/versions/loader/{mc_version}/{loader_version}/profile/json"
+            );
+            emit(
+                window,
+                "setup",
+                format!("Downloading Fabric loader metadata ({mc_version})"),
+                None,
+                None,
+            )?;
+            fetch_json::<VersionData>(client, &profile_url).await?
+        }
+        ModLoaderKind::NeoForge => {
+            let loader_version = options
+                .loader
+                .loader_version
+                .clone()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "NeoForge loader version is required.".to_string())?;
+            let version_id = format!("neoforge-{loader_version}");
+            let version_json_path = game_dir
+                .join("versions")
+                .join(&version_id)
+                .join(format!("{version_id}.json"));
+            if !version_json_path.exists() {
+                return Err(format!(
+                    "NeoForge profile {version_id} not found. Install NeoForge for this instance first."
+                ));
+            }
+            emit(
+                window,
+                "setup",
+                format!("Loading NeoForge profile ({version_id})"),
+                None,
+                None,
+            )?;
+            let bytes = std::fs::read(&version_json_path)
+                .map_err(|err| format!("Failed to read NeoForge profile: {err}"))?;
+            serde_json::from_slice::<VersionData>(&bytes)
+                .map_err(|err| format!("Failed to parse NeoForge profile: {err}"))?
+        }
+    };
+
+    version_data = resolve_inherited_version_data(client, manifest, version_data).await?;
+    Ok(version_data)
+}
+
+#[derive(serde::Deserialize)]
+struct FabricLoaderEntry {
+    loader: FabricLoaderInfo,
+}
+
+#[derive(serde::Deserialize)]
+struct FabricLoaderInfo {
+    version: String,
+    stable: bool,
+}
+
+async fn resolve_fabric_loader_version(
+    client: &Client,
+    minecraft_version: &str,
+    requested: Option<String>,
+) -> Result<String, String> {
+    if let Some(version) = requested {
+        if !version.trim().is_empty() {
+            return Ok(version.trim().to_string());
+        }
+    }
+
+    let url = format!("https://meta.fabricmc.net/v2/versions/loader/{minecraft_version}");
+    let entries: Vec<FabricLoaderEntry> = fetch_json(client, &url).await?;
+    let chosen = entries
+        .iter()
+        .find(|entry| entry.loader.stable)
+        .or_else(|| entries.first())
+        .ok_or_else(|| "No Fabric loader versions found.".to_string())?;
+    Ok(chosen.loader.version.clone())
+}
+
+async fn resolve_inherited_version_data(
+    client: &Client,
+    manifest: &VersionManifest,
+    version_data: VersionData,
+) -> Result<VersionData, String> {
+    let mut visited = std::collections::HashSet::new();
+    let mut chain = vec![version_data];
+    let mut next_parent = chain
+        .last()
+        .and_then(|version| version.inherits_from.clone());
+
+    while let Some(parent_id) = next_parent {
+        if !visited.insert(parent_id.clone()) {
+            return Err(format!("Version inheritance loop detected at {parent_id}"));
+        }
+
+        let parent_ref = manifest
+            .versions
+            .iter()
+            .find(|version| version.id == parent_id)
+            .ok_or_else(|| format!("Parent version {parent_id} not found in manifest"))?;
+        let parent_data: VersionData = fetch_json(client, &parent_ref.url).await?;
+        next_parent = parent_data.inherits_from.clone();
+        chain.push(parent_data);
+    }
+
+    let mut merged = chain
+        .pop()
+        .ok_or_else(|| "Failed to resolve version data.".to_string())?;
+    while let Some(overlay) = chain.pop() {
+        merged = merge_versions(merged, overlay);
+    }
+
+    Ok(merged)
+}
+
+fn merge_versions(base: VersionData, overlay: VersionData) -> VersionData {
+    let mut libraries = base.libraries;
+    libraries.extend(overlay.libraries.clone());
+
+    let arguments = merge_arguments(base.arguments, overlay.arguments.clone());
+
+    VersionData {
+        id: overlay.id,
+        kind: overlay.kind,
+        main_class: if overlay.main_class.trim().is_empty() {
+            base.main_class
+        } else {
+            overlay.main_class
+        },
+        arguments,
+        minecraft_arguments: overlay.minecraft_arguments.or(base.minecraft_arguments),
+        asset_index: overlay.asset_index.or(base.asset_index),
+        downloads: overlay.downloads.or(base.downloads),
+        libraries,
+        java_version: overlay.java_version.or(base.java_version),
+        inherits_from: None,
+    }
+}
+
+fn merge_arguments(
+    base: Option<manifest::Arguments>,
+    overlay: Option<manifest::Arguments>,
+) -> Option<manifest::Arguments> {
+    match (base, overlay) {
+        (Some(mut base), Some(mut overlay)) => {
+            base.game.append(&mut overlay.game);
+            base.jvm.append(&mut overlay.jvm);
+            Some(base)
+        }
+        (Some(base), None) => Some(base),
+        (None, Some(overlay)) => Some(overlay),
+        (None, None) => None,
+    }
 }
 
 pub(crate) fn emit(
