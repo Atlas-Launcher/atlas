@@ -137,7 +137,7 @@ pub fn build_classpath(libraries: &[PathBuf], client_jar: &Path) -> String {
   entries.join(sep)
 }
 
-fn library_path_from_name(name: &str) -> String {
+pub(crate) fn library_path_from_name(name: &str) -> String {
   let parts: Vec<&str> = name.split(':').collect();
   if parts.len() < 3 {
     return name.replace(':', "/");
