@@ -6,6 +6,7 @@ mod state;
 
 use crate::models::{DeviceCodeResponse, LaunchOptions, Profile};
 use crate::state::AppState;
+use tauri::Manager;
 
 const DEFAULT_MS_CLIENT_ID: &str = "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
 
@@ -27,6 +28,24 @@ fn get_default_game_dir() -> String {
 async fn start_device_code(client_id: String) -> Result<DeviceCodeResponse, String> {
   let resolved = resolve_client_id(client_id);
   auth::start_device_code(&resolved).await
+}
+
+#[tauri::command]
+async fn sign_in(window: tauri::Window, state: tauri::State<'_, AppState>) -> Result<Profile, String> {
+  let session = auth::login_with_redirect(DEFAULT_MS_CLIENT_ID, |url| {
+    tauri::api::shell::open(&window.shell_scope(), url, None)
+      .map_err(|err| format!("Failed to open sign-in page: {err}"))
+  })
+  .await?;
+
+  let profile = session.profile.clone();
+  auth::save_session(&session)?;
+  let mut guard = state
+    .auth
+    .lock()
+    .map_err(|_| "Auth state lock poisoned".to_string())?;
+  *guard = Some(session);
+  Ok(profile)
 }
 
 #[tauri::command]
@@ -132,6 +151,7 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       get_default_game_dir,
       start_device_code,
+      sign_in,
       complete_device_code,
       launch_minecraft,
       download_minecraft_files,

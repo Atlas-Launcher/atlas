@@ -1,20 +1,25 @@
 use crate::models::{AuthSession, LaunchEvent, LaunchOptions};
 use crate::paths::{ensure_dir, file_exists, normalize_path};
-use reqwest::Client;
+use futures::stream::{self, StreamExt};
+use reqwest::header::RANGE;
+use reqwest::{Client, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::Window;
+use tokio::fs as async_fs;
+use tokio::io::AsyncWriteExt;
 use zip::ZipArchive;
 
 const VERSION_MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/version_manifest.json";
 const JAVA_RUNTIME_MANIFEST_URL: &str =
   "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
+const DOWNLOAD_CONCURRENCY: usize = 12;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct VersionManifest {
@@ -154,24 +159,15 @@ enum ArgValue {
 struct Rule {
   action: String,
   #[serde(default)]
-  os: Option<RuleOs>
+  os: Option<RuleOs>,
+  #[serde(default)]
+  features: Option<HashMap<String, bool>>
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct RuleOs {
   #[serde(default)]
   name: Option<String>
-}
-
-#[derive(Debug, Deserialize)]
-struct JavaRuntimeManifest {
-  #[serde(flatten)]
-  platforms: HashMap<String, HashMap<String, JavaRuntimeEntry>>
-}
-
-#[derive(Debug, Deserialize)]
-struct JavaRuntimeEntry {
-  manifest: Download
 }
 
 #[derive(Debug, Deserialize)]
@@ -287,24 +283,52 @@ async fn prepare_minecraft(
 
   let total_assets = assets_index_data.objects.len() as u64;
   let mut processed_assets = 0u64;
+  let mut asset_jobs: Vec<(String, PathBuf, u64)> = Vec::new();
   for (_name, asset) in assets_index_data.objects.iter() {
     let hash = &asset.hash;
     let sub = &hash[0..2];
     let object_path = assets_dir.join("objects").join(sub).join(hash);
-    if !file_exists(&object_path) {
-      ensure_dir(object_path.parent().unwrap())?;
-      let url = format!("https://resources.download.minecraft.net/{}/{}", sub, hash);
-      download_raw(&client, &url, &object_path).await?;
+    if file_exists(&object_path) {
+      processed_assets += 1;
+      if processed_assets % 250 == 0 || processed_assets == total_assets {
+        emit(
+          window,
+          "assets",
+          format!("Assets {processed_assets}/{total_assets}"),
+          Some(processed_assets),
+          Some(total_assets)
+        )?;
+      }
+      continue;
     }
-    processed_assets += 1;
-    if processed_assets % 250 == 0 || processed_assets == total_assets {
-      emit(
-        window,
-        "assets",
-        format!("Assets {processed_assets}/{total_assets}"),
-        Some(processed_assets),
-        Some(total_assets)
-      )?;
+    let url = format!("https://resources.download.minecraft.net/{}/{}", sub, hash);
+    asset_jobs.push((url, object_path, asset.size));
+  }
+
+  if !asset_jobs.is_empty() {
+    let mut stream = stream::iter(asset_jobs.into_iter().map(|(url, path, size)| {
+      let client = client.clone();
+      async move {
+        if let Some(parent) = path.parent() {
+          ensure_dir(parent)?;
+        }
+        download_raw(&client, &url, &path, Some(size), true).await
+      }
+    }))
+    .buffer_unordered(DOWNLOAD_CONCURRENCY);
+
+    while let Some(result) = stream.next().await {
+      result?;
+      processed_assets += 1;
+      if processed_assets % 250 == 0 || processed_assets == total_assets {
+        emit(
+          window,
+          "assets",
+          format!("Assets {processed_assets}/{total_assets}"),
+          Some(processed_assets),
+          Some(total_assets)
+        )?;
+      }
     }
   }
 
@@ -431,6 +455,7 @@ async fn fetch_json<T: DeserializeOwned>(client: &Client, url: &str) -> Result<T
 }
 
 async fn download_if_needed(client: &Client, download: &Download, path: &Path) -> Result<(), String> {
+  let mut allow_resume = true;
   if file_exists(path) {
     if let Some(expected) = &download.sha1 {
       if let Ok(actual) = sha1_file(path) {
@@ -438,7 +463,41 @@ async fn download_if_needed(client: &Client, download: &Download, path: &Path) -
           return Ok(());
         }
       }
-    } else {
+      // Corrupt or mismatched checksum: force full download.
+      allow_resume = false;
+    }
+
+    if allow_resume {
+      if let Some(expected_size) = download.size {
+        if let Ok(actual_size) = std::fs::metadata(path).map(|m| m.len()) {
+          if actual_size == expected_size {
+            return Ok(());
+          }
+        }
+      }
+    }
+  }
+
+  download_raw(client, &download.url, path, download.size, allow_resume).await
+}
+
+async fn download_raw(
+  client: &Client,
+  url: &str,
+  path: &Path,
+  expected_size: Option<u64>,
+  allow_resume: bool
+) -> Result<(), String> {
+  let mut existing = if allow_resume && file_exists(path) {
+    std::fs::metadata(path)
+      .map(|m| m.len())
+      .unwrap_or(0)
+  } else {
+    0
+  };
+
+  if let Some(size) = expected_size {
+    if existing >= size {
       return Ok(());
     }
   }
@@ -447,15 +506,41 @@ async fn download_if_needed(client: &Client, download: &Download, path: &Path) -
     ensure_dir(parent)?;
   }
 
-  download_raw(client, &download.url, path).await
-}
+  let mut request = client.get(url);
+  if allow_resume && existing > 0 {
+    request = request.header(RANGE, format!("bytes={}-", existing));
+  }
 
-async fn download_raw(client: &Client, url: &str, path: &Path) -> Result<(), String> {
-  let response = client
-    .get(url)
+  let mut response = request
     .send()
     .await
     .map_err(|err| format!("Download failed: {err}"))?;
+
+  if allow_resume && existing > 0 {
+    match response.status() {
+      StatusCode::PARTIAL_CONTENT => {}
+      StatusCode::RANGE_NOT_SATISFIABLE => {
+        if let Some(size) = expected_size {
+          if existing == size {
+            return Ok(());
+          }
+        }
+        existing = 0;
+        response = client
+          .get(url)
+          .send()
+          .await
+          .map_err(|err| format!("Download failed: {err}"))?;
+      }
+      status if status.is_success() => {
+        existing = 0;
+      }
+      status => {
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("Download failed ({status}): {text}"));
+      }
+    }
+  }
 
   if !response.status().is_success() {
     let status = response.status();
@@ -463,15 +548,42 @@ async fn download_raw(client: &Client, url: &str, path: &Path) -> Result<(), Str
     return Err(format!("Download failed ({status}): {text}"));
   }
 
-  let bytes = response
-    .bytes()
-    .await
-    .map_err(|err| format!("Failed to read download: {err}"))?;
+  let mut file = if allow_resume && existing > 0 && response.status() == StatusCode::PARTIAL_CONTENT {
+    async_fs::OpenOptions::new()
+      .append(true)
+      .open(path)
+      .await
+      .map_err(|err| format!("Failed to open file for resume: {err}"))?
+  } else {
+    async_fs::File::create(path)
+      .await
+      .map_err(|err| format!("Failed to write file: {err}"))?
+  };
 
-  let mut file = File::create(path).map_err(|err| format!("Failed to write file: {err}"))?;
+  let mut stream = response.bytes_stream();
+  while let Some(chunk) = stream.next().await {
+    let bytes = chunk.map_err(|err| format!("Failed to read download: {err}"))?;
+    file
+      .write_all(&bytes)
+      .await
+      .map_err(|err| format!("Failed to write file: {err}"))?;
+  }
+
   file
-    .write_all(&bytes)
-    .map_err(|err| format!("Failed to write file: {err}"))?;
+    .flush()
+    .await
+    .map_err(|err| format!("Failed to flush download: {err}"))?;
+
+  if let Some(size) = expected_size {
+    if let Ok(actual) = std::fs::metadata(path).map(|m| m.len()) {
+      if actual != size {
+        return Err(format!(
+          "Download incomplete: expected {size} bytes, got {actual} bytes"
+        ));
+      }
+    }
+  }
+
   Ok(())
 }
 
@@ -497,6 +609,7 @@ async fn sync_libraries(
 ) -> Result<(Vec<PathBuf>, Vec<PathBuf>), String> {
   let mut library_paths = Vec::new();
   let mut native_paths = Vec::new();
+  let mut downloads: Vec<(Download, PathBuf)> = Vec::new();
 
   let included: Vec<Library> = libraries
     .iter()
@@ -504,29 +617,26 @@ async fn sync_libraries(
     .filter(|lib| rules_allow(&lib.rules))
     .collect();
 
-  let total = included.len() as u64;
-  let mut index = 0u64;
   let os_key = current_os_key();
   let arch = current_arch();
 
   for library in included {
-    index += 1;
-    if let Some(downloads) = &library.downloads {
-      if let Some(artifact) = &downloads.artifact {
+    if let Some(downloads_entry) = &library.downloads {
+      if let Some(artifact) = &downloads_entry.artifact {
         let path = libraries_dir.join(
           artifact
             .path
             .clone()
             .unwrap_or_else(|| library_path_from_name(&library.name))
         );
-        download_if_needed(client, artifact, &path).await?;
         library_paths.push(path);
+        downloads.push((artifact.clone(), library_paths.last().unwrap().clone()));
       }
 
       if let Some(natives) = &library.natives {
         if let Some(classifier) = natives.get(os_key) {
           let classifier = classifier.replace("${arch}", arch);
-          if let Some(classifiers) = &downloads.classifiers {
+          if let Some(classifiers) = &downloads_entry.classifiers {
             if let Some(native) = classifiers.get(&classifier) {
               let path = libraries_dir.join(
                 native
@@ -534,22 +644,36 @@ async fn sync_libraries(
                   .clone()
                   .unwrap_or_else(|| library_path_from_name(&library.name))
               );
-              download_if_needed(client, native, &path).await?;
               native_paths.push(path);
+              downloads.push((native.clone(), native_paths.last().unwrap().clone()));
             }
           }
         }
       }
     }
+  }
 
-    if index % 15 == 0 || index == total {
-      emit(
-        window,
-        "libraries",
-        format!("Libraries {index}/{total}"),
-        Some(index),
-        Some(total)
-      )?;
+  let total = downloads.len() as u64;
+  let mut index = 0u64;
+  if total > 0 {
+    let mut stream = stream::iter(downloads.into_iter().map(|(download, path)| {
+      let client = client.clone();
+      async move { download_if_needed(&client, &download, &path).await }
+    }))
+    .buffer_unordered(DOWNLOAD_CONCURRENCY);
+
+    while let Some(result) = stream.next().await {
+      result?;
+      index += 1;
+      if index % 10 == 0 || index == total {
+        emit(
+          window,
+          "libraries",
+          format!("Libraries {index}/{total}"),
+          Some(index),
+          Some(total)
+        )?;
+      }
     }
   }
 
@@ -657,18 +781,47 @@ fn rules_allow(rules: &Option<Vec<Rule>>) -> bool {
 
   let mut allowed = false;
   for rule in rules {
-    let applies = rule
+    let os_applies = rule
       .os
       .as_ref()
       .and_then(|os| os.name.as_ref())
       .map(|name| name == current_os_key())
       .unwrap_or(true);
 
+    let features_applies = features_match(rule.features.as_ref());
+    let applies = os_applies && features_applies;
+
     if applies {
       allowed = rule.action == "allow";
     }
   }
   allowed
+}
+
+fn features_match(features: Option<&HashMap<String, bool>>) -> bool {
+  let Some(features) = features else {
+    return true;
+  };
+
+  let supported = current_features();
+  for (key, expected) in features {
+    let actual = supported.get(key).copied().unwrap_or(false);
+    if actual != *expected {
+      return false;
+    }
+  }
+  true
+}
+
+fn current_features() -> HashMap<String, bool> {
+  let mut features = HashMap::new();
+  features.insert("is_demo_user".to_string(), false);
+  features.insert("has_custom_resolution".to_string(), false);
+  features.insert("has_quick_plays_support".to_string(), false);
+  features.insert("is_quick_play_singleplayer".to_string(), false);
+  features.insert("is_quick_play_multiplayer".to_string(), false);
+  features.insert("is_quick_play_realms".to_string(), false);
+  features
 }
 
 fn library_path_from_name(name: &str) -> String {
@@ -737,6 +890,45 @@ fn runtime_os_key() -> Result<&'static str, String> {
   Err("Unsupported OS for Java runtime downloads.".to_string())
 }
 
+fn select_java_component(
+  platform: &serde_json::Map<String, serde_json::Value>,
+  desired: &str
+) -> String {
+  if platform
+    .get(desired)
+    .and_then(|value| value.as_array())
+    .map(|items| !items.is_empty())
+    .unwrap_or(false)
+  {
+    return desired.to_string();
+  }
+
+  let mut candidates = vec![
+    "java-runtime-delta",
+    "java-runtime-gamma",
+    "java-runtime-beta",
+    "java-runtime-alpha",
+    "jre-legacy"
+  ];
+
+  if !candidates.iter().any(|item| *item == desired) {
+    candidates.insert(0, desired);
+  }
+
+  for candidate in candidates {
+    if platform
+      .get(candidate)
+      .and_then(|value| value.as_array())
+      .map(|items| !items.is_empty())
+      .unwrap_or(false)
+    {
+      return candidate.to_string();
+    }
+  }
+
+  platform.keys().next().cloned().unwrap_or_else(|| desired.to_string())
+}
+
 async fn resolve_java_path(
   window: &Window,
   game_dir: &Path,
@@ -771,14 +963,38 @@ async fn ensure_java_runtime(
     None
   )?;
 
-  let manifest: JavaRuntimeManifest = fetch_json(&client, JAVA_RUNTIME_MANIFEST_URL).await?;
+  let manifest: serde_json::Value = fetch_json(&client, JAVA_RUNTIME_MANIFEST_URL).await?;
   let platform = manifest
-    .platforms
     .get(os_key)
+    .and_then(|value| value.as_object())
     .ok_or_else(|| format!("Java runtime platform {os_key} not found"))?;
-  let entry = platform
-    .get(component)
-    .ok_or_else(|| format!("Java runtime component {component} not found"))?;
+
+  let chosen_component = select_java_component(platform, component);
+  if chosen_component != component {
+    emit(
+      window,
+      "java",
+      format!(
+        "Java runtime {component} not found. Using {chosen_component} instead."
+      ),
+      None,
+      None
+    )?;
+  }
+
+  let entry_list = platform
+    .get(&chosen_component)
+    .and_then(|value| value.as_array())
+    .ok_or_else(|| "No Java runtime components available for this platform.".to_string())?;
+  let entry = entry_list
+    .iter()
+    .find_map(|value| value.as_object())
+    .ok_or_else(|| "No Java runtime entries available for this platform.".to_string())?;
+  let manifest_url = entry
+    .get("manifest")
+    .and_then(|value| value.get("url"))
+    .and_then(|value| value.as_str())
+    .ok_or_else(|| format!("Java runtime manifest url missing for {chosen_component}"))?;
 
   emit(
     window,
@@ -788,16 +1004,15 @@ async fn ensure_java_runtime(
     None
   )?;
 
-  let runtime_manifest: JavaRuntimeFiles = fetch_json(&client, &entry.manifest.url).await?;
+  let runtime_manifest: JavaRuntimeFiles = fetch_json(&client, manifest_url).await?;
   let runtime_base = game_dir.join("runtime").join(component).join(os_key);
   let runtime_home = runtime_base.join(component);
   ensure_dir(&runtime_home)?;
 
-  let total = runtime_manifest.files.len() as u64;
-  let mut index = 0u64;
+  let mut downloads: Vec<(Download, PathBuf, bool)> = Vec::new();
+  let mut links: Vec<(PathBuf, PathBuf)> = Vec::new();
 
   for (relative_path, file) in runtime_manifest.files.iter() {
-    index += 1;
     let out_path = runtime_home.join(relative_path);
 
     match file.kind.as_str() {
@@ -812,32 +1027,54 @@ async fn ensure_java_runtime(
           .ok_or_else(|| {
             format!("Missing raw download for Java runtime file {relative_path}")
           })?;
-        download_if_needed(&client, download, &out_path).await?;
-        if file.executable {
-          set_executable(&out_path)?;
-        }
+        downloads.push((download.clone(), out_path, file.executable));
       }
       "link" => {
         if let Some(target) = &file.target {
-          let target_path = runtime_home.join(target);
-          create_runtime_link(&target_path, &out_path)?;
+          let base = out_path.parent().unwrap_or(&runtime_home);
+          let target_path = base.join(target);
+          links.push((target_path, out_path));
         }
       }
       _ => {}
     }
+  }
 
-    if index % 200 == 0 || index == total {
-      emit(
-        window,
-        "java",
-        format!("Java runtime files {index}/{total}"),
-        Some(index),
-        Some(total)
-      )?;
+  let total = downloads.len() as u64;
+  let mut index = 0u64;
+  if total > 0 {
+    let mut stream = stream::iter(downloads.into_iter().map(|(download, path, executable)| {
+      let client = client.clone();
+      async move {
+        download_if_needed(&client, &download, &path).await?;
+        if executable {
+          set_executable(&path)?;
+        }
+        Ok::<(), String>(())
+      }
+    }))
+    .buffer_unordered(DOWNLOAD_CONCURRENCY);
+
+    while let Some(result) = stream.next().await {
+      result?;
+      index += 1;
+      if index % 200 == 0 || index == total {
+        emit(
+          window,
+          "java",
+          format!("Java runtime files {index}/{total}"),
+          Some(index),
+          Some(total)
+        )?;
+      }
     }
   }
 
-  let java_path = java_binary_path(&runtime_home);
+  for (target, link) in links {
+    create_runtime_link(&target, &link)?;
+  }
+
+  let java_path = locate_java_binary(&runtime_home, &runtime_manifest);
   if !java_path.exists() {
     return Err("Java runtime download completed but java binary was not found.".to_string());
   }
@@ -845,16 +1082,42 @@ async fn ensure_java_runtime(
   Ok(java_path.to_string_lossy().to_string())
 }
 
-fn java_binary_path(runtime_home: &Path) -> PathBuf {
-  let bin_dir = runtime_home.join("bin");
+fn locate_java_binary(runtime_home: &Path, manifest: &JavaRuntimeFiles) -> PathBuf {
   if cfg!(target_os = "windows") {
-    let javaw = bin_dir.join("javaw.exe");
+    let javaw = runtime_home.join("bin").join("javaw.exe");
     if javaw.exists() {
       return javaw;
     }
-    return bin_dir.join("java.exe");
+    let java = runtime_home.join("bin").join("java.exe");
+    if java.exists() {
+      return java;
+    }
+  } else {
+    let java = runtime_home.join("bin").join("java");
+    if java.exists() {
+      return java;
+    }
   }
-  bin_dir.join("java")
+
+  for (relative_path, file) in manifest.files.iter() {
+    if file.kind != "file" || !file.executable {
+      continue;
+    }
+    let lower = relative_path.to_lowercase();
+    if lower.ends_with("/bin/java") || lower.ends_with("\\bin\\java") {
+      return runtime_home.join(relative_path);
+    }
+    if cfg!(target_os = "windows") {
+      if lower.ends_with("/bin/java.exe") || lower.ends_with("\\bin\\java.exe") {
+        return runtime_home.join(relative_path);
+      }
+      if lower.ends_with("/bin/javaw.exe") || lower.ends_with("\\bin\\javaw.exe") {
+        return runtime_home.join(relative_path);
+      }
+    }
+  }
+
+  runtime_home.join("bin").join("java")
 }
 
 fn set_executable(path: &Path) -> Result<(), String> {
