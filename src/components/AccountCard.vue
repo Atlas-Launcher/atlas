@@ -6,17 +6,7 @@ import CardTitle from "./ui/card/CardTitle.vue";
 import CardDescription from "./ui/card/CardDescription.vue";
 import CardContent from "./ui/card/CardContent.vue";
 import Input from "./ui/input/Input.vue";
-
-interface Profile {
-  id: string;
-  name: string;
-}
-
-interface DeviceCodeResponse {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-}
+import type { DeviceCodeResponse, Profile } from "@/types/auth";
 
 const props = defineProps<{
   profile: Profile | null;

@@ -7,11 +7,7 @@ import CardDescription from "./ui/card/CardDescription.vue";
 import CardContent from "./ui/card/CardContent.vue";
 import CardFooter from "./ui/card/CardFooter.vue";
 import Progress from "./ui/progress/Progress.vue";
-
-interface Profile {
-  id: string;
-  name: string;
-}
+import type { Profile } from "@/types/auth";
 
 const props = defineProps<{
   profile: Profile | null;
