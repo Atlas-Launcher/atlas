@@ -2,7 +2,6 @@
 import { onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/tauri";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/api/shell";
 import Button from "./components/ui/button/Button.vue";
 import Card from "./components/ui/card/Card.vue";
 import CardHeader from "./components/ui/card/CardHeader.vue";
@@ -11,16 +10,6 @@ import CardDescription from "./components/ui/card/CardDescription.vue";
 import CardContent from "./components/ui/card/CardContent.vue";
 import CardFooter from "./components/ui/card/CardFooter.vue";
 import Progress from "./components/ui/progress/Progress.vue";
-
-interface DeviceCodeResponse {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  verification_uri_complete?: string;
-  expires_in: number;
-  interval: number;
-  message?: string;
-}
 
 interface Profile {
   id: string;
@@ -38,7 +27,6 @@ interface LaunchEvent {
 const gameDir = ref("");
 const javaPath = ref("");
 const memoryMb = ref(4096);
-const deviceCode = ref<DeviceCodeResponse | null>(null);
 const profile = ref<Profile | null>(null);
 const status = ref("Ready");
 const logs = ref<string[]>([]);
@@ -75,38 +63,11 @@ onMounted(async () => {
 async function startLogin() {
   working.value = true;
   try {
-    const response = await invoke<DeviceCodeResponse>("start_device_code", {
-      clientId: ""
-    });
-    deviceCode.value = response;
-    status.value = response.message ?? "Device code ready.";
-    if (response.verification_uri_complete) {
-      await open(response.verification_uri_complete);
-    } else if (response.verification_uri) {
-      await open(response.verification_uri);
-    }
-  } catch (err) {
-    status.value = `Login start failed: ${String(err)}`;
-  } finally {
-    working.value = false;
-  }
-}
-
-async function completeLogin() {
-  if (!deviceCode.value) {
-    status.value = "Start login first.";
-    return;
-  }
-  working.value = true;
-  try {
-    const result = await invoke<Profile>("complete_device_code", {
-      clientId: "",
-      deviceCode: deviceCode.value.device_code
-    });
+    const result = await invoke<Profile>("sign_in");
     profile.value = result;
     status.value = `Signed in as ${result.name}.`;
   } catch (err) {
-    status.value = `Login failed: ${String(err)}`;
+    status.value = `Login start failed: ${String(err)}`;
   } finally {
     working.value = false;
   }
@@ -117,7 +78,6 @@ async function signOut() {
   try {
     await invoke("sign_out");
     profile.value = null;
-    deviceCode.value = null;
     status.value = "Signed out.";
   } catch (err) {
     status.value = `Sign out failed: ${String(err)}`;
@@ -197,19 +157,10 @@ async function downloadMinecraftFiles() {
                   {{ profile ? `Signed in as ${profile.name}` : "Not signed in" }}
                 </div>
               </div>
-              <Button :disabled="working" @click="startLogin">Begin sign in</Button>
-              <Button variant="secondary" :disabled="working || !deviceCode" @click="completeLogin">
-                I've signed in
-              </Button>
+              <Button :disabled="working" @click="startLogin">Sign in</Button>
               <Button v-if="profile" variant="ghost" :disabled="working" @click="signOut">
                 Sign out
               </Button>
-            </div>
-            <div v-if="deviceCode" class="rounded-lg border border-border bg-secondary/50 p-3 text-sm">
-              <div class="font-semibold">Code: <span class="mono">{{ deviceCode.user_code }}</span></div>
-              <div class="text-muted-foreground">
-                Use this code in your browser to approve the sign-in.
-              </div>
             </div>
           </CardContent>
         </Card>
