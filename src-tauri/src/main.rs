@@ -234,6 +234,7 @@ fn main() {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
             }
+            let _ = app;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
