@@ -4,7 +4,6 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/api/shell";
 import Button from "./components/ui/button/Button.vue";
-import Input from "./components/ui/input/Input.vue";
 import Card from "./components/ui/card/Card.vue";
 import CardHeader from "./components/ui/card/CardHeader.vue";
 import CardTitle from "./components/ui/card/CardTitle.vue";
@@ -36,9 +35,8 @@ interface LaunchEvent {
   percent?: number;
 }
 
-const clientId = ref(localStorage.getItem("mc_client_id") ?? "");
 const gameDir = ref("");
-const javaPath = ref("java");
+const javaPath = ref("");
 const memoryMb = ref(4096);
 const deviceCode = ref<DeviceCodeResponse | null>(null);
 const profile = ref<Profile | null>(null);
@@ -52,13 +50,6 @@ function pushLog(entry: string) {
 }
 
 onMounted(async () => {
-  try {
-    const dir = await invoke<string>("get_default_game_dir");
-    gameDir.value = dir;
-  } catch (err) {
-    pushLog(`Failed to read default game dir: ${String(err)}`);
-  }
-
   await listen<LaunchEvent>("launch://status", (event) => {
     const payload = event.payload;
     status.value = payload.message;
@@ -69,18 +60,23 @@ onMounted(async () => {
     }
     pushLog(`${payload.phase}: ${payload.message}`);
   });
+
+  try {
+    const restored = await invoke<Profile | null>("restore_session");
+    if (restored) {
+      profile.value = restored;
+      status.value = `Signed in as ${restored.name}.`;
+    }
+  } catch (err) {
+    pushLog(`Failed to restore session: ${String(err)}`);
+  }
 });
 
 async function startLogin() {
-  if (!clientId.value.trim()) {
-    status.value = "Enter your Microsoft client ID first.";
-    return;
-  }
   working.value = true;
   try {
-    localStorage.setItem("mc_client_id", clientId.value.trim());
     const response = await invoke<DeviceCodeResponse>("start_device_code", {
-      clientId: clientId.value.trim()
+      clientId: ""
     });
     deviceCode.value = response;
     status.value = response.message ?? "Device code ready.";
@@ -104,13 +100,27 @@ async function completeLogin() {
   working.value = true;
   try {
     const result = await invoke<Profile>("complete_device_code", {
-      clientId: clientId.value.trim(),
+      clientId: "",
       deviceCode: deviceCode.value.device_code
     });
     profile.value = result;
     status.value = `Signed in as ${result.name}.`;
   } catch (err) {
     status.value = `Login failed: ${String(err)}`;
+  } finally {
+    working.value = false;
+  }
+}
+
+async function signOut() {
+  working.value = true;
+  try {
+    await invoke("sign_out");
+    profile.value = null;
+    deviceCode.value = null;
+    status.value = "Signed out.";
+  } catch (err) {
+    status.value = `Sign out failed: ${String(err)}`;
   } finally {
     working.value = false;
   }
@@ -138,6 +148,25 @@ async function launchMinecraft() {
     working.value = false;
   }
 }
+
+async function downloadMinecraftFiles() {
+  working.value = true;
+  progress.value = 0;
+  try {
+    await invoke("download_minecraft_files", {
+      options: {
+        gameDir: gameDir.value.trim(),
+        javaPath: javaPath.value.trim() || "java",
+        memoryMb: Number(memoryMb.value || 4096)
+      }
+    });
+    status.value = "Minecraft files downloaded.";
+  } catch (err) {
+    status.value = `Download failed: ${String(err)}`;
+  } finally {
+    working.value = false;
+  }
+}
 </script>
 
 <template>
@@ -157,50 +186,48 @@ async function launchMinecraft() {
       <div class="grid gap-6 md:grid-cols-[1.2fr_1fr]">
         <Card class="glass">
           <CardHeader>
-            <CardTitle>Sign in</CardTitle>
-            <CardDescription>Device code login for Microsoft accounts.</CardDescription>
+            <CardTitle>Account</CardTitle>
+            <CardDescription>Connect your Microsoft account to play.</CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div>
-              <label class="text-xs uppercase tracking-widest text-muted-foreground">Microsoft Client ID</label>
-              <Input v-model="clientId" placeholder="GUID from your Azure app" class="mt-2" />
-            </div>
             <div class="grid gap-3">
-              <Button :disabled="working" @click="startLogin">Start device login</Button>
+              <div class="rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm">
+                <div class="text-xs uppercase tracking-widest text-muted-foreground">Status</div>
+                <div class="mt-1 font-semibold text-foreground">
+                  {{ profile ? `Signed in as ${profile.name}` : "Not signed in" }}
+                </div>
+              </div>
+              <Button :disabled="working" @click="startLogin">Begin sign in</Button>
               <Button variant="secondary" :disabled="working || !deviceCode" @click="completeLogin">
-                Complete login
+                I've signed in
+              </Button>
+              <Button v-if="profile" variant="ghost" :disabled="working" @click="signOut">
+                Sign out
               </Button>
             </div>
             <div v-if="deviceCode" class="rounded-lg border border-border bg-secondary/50 p-3 text-sm">
               <div class="font-semibold">Code: <span class="mono">{{ deviceCode.user_code }}</span></div>
-              <div class="text-muted-foreground">{{ deviceCode.verification_uri }}</div>
+              <div class="text-muted-foreground">
+                Use this code in your browser to approve the sign-in.
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Card class="glass">
           <CardHeader>
-            <CardTitle>Launch settings</CardTitle>
-            <CardDescription>Point at a Minecraft folder and JVM.</CardDescription>
+            <CardTitle>Play</CardTitle>
+            <CardDescription>We manage files and Java for you.</CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div>
-              <label class="text-xs uppercase tracking-widest text-muted-foreground">Game directory</label>
-              <Input v-model="gameDir" class="mt-2" />
+            <div class="grid gap-3">
+              <Button :disabled="working" variant="secondary" @click="downloadMinecraftFiles">
+                Download game files
+              </Button>
+              <Button :disabled="working || !profile" @click="launchMinecraft">Launch Minecraft</Button>
             </div>
-            <div class="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label class="text-xs uppercase tracking-widest text-muted-foreground">Java path</label>
-                <Input v-model="javaPath" class="mt-2" />
-              </div>
-              <div>
-                <label class="text-xs uppercase tracking-widest text-muted-foreground">Memory (MB)</label>
-                <Input v-model.number="memoryMb" type="number" min="1024" step="256" class="mt-2" />
-              </div>
-            </div>
-            <Button :disabled="working || !profile" @click="launchMinecraft">Launch Minecraft</Button>
-            <div v-if="profile" class="text-sm text-muted-foreground">
-              Signed in as <span class="font-semibold text-foreground">{{ profile.name }}</span>
+            <div class="text-xs text-muted-foreground">
+              Files are stored in your app data folder and updated automatically.
             </div>
           </CardContent>
           <CardFooter>

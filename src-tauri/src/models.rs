@@ -22,13 +22,23 @@ pub struct Profile {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuthSession {
   pub access_token: String,
-  pub profile: Profile
+  pub profile: Profile,
+  #[serde(default)]
+  pub refresh_token: Option<String>,
+  #[serde(default)]
+  pub access_token_expires_at: u64,
+  #[serde(default)]
+  pub client_id: String
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct LaunchOptions {
+  #[serde(default)]
   pub game_dir: String,
+  #[serde(default)]
   pub java_path: String,
+  #[serde(default)]
   pub memory_mb: u32,
   #[serde(default)]
   pub version: Option<String>
