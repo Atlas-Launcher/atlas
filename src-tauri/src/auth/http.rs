@@ -51,16 +51,20 @@ impl HttpClient for ReqwestHttpClient {
             .await
             .map_err(|err| format!("Request failed: {err}"))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
+        let status = response.status();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|err| format!("Failed to read response: {err}"))?;
+        if !status.is_success() {
+            let text = String::from_utf8_lossy(&body);
             return Err(format!("Request failed ({status}): {text}"));
         }
 
-        response
-            .json::<T>()
-            .await
-            .map_err(|err| format!("Failed to parse response: {err}"))
+        serde_json::from_slice::<T>(&body).map_err(|err| {
+            let text = String::from_utf8_lossy(&body);
+            format!("Failed to parse response: {err}. Body: {text}")
+        })
     }
 
     async fn post_json<T: DeserializeOwned, B: Serialize + Send + Sync>(
@@ -76,16 +80,20 @@ impl HttpClient for ReqwestHttpClient {
             .await
             .map_err(|err| format!("Request failed: {err}"))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
+        let status = response.status();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|err| format!("Failed to read response: {err}"))?;
+        if !status.is_success() {
+            let text = String::from_utf8_lossy(&body);
             return Err(format!("Request failed ({status}): {text}"));
         }
 
-        response
-            .json::<T>()
-            .await
-            .map_err(|err| format!("Failed to parse response: {err}"))
+        serde_json::from_slice::<T>(&body).map_err(|err| {
+            let text = String::from_utf8_lossy(&body);
+            format!("Failed to parse response: {err}. Body: {text}")
+        })
     }
 
     async fn get_json<T: DeserializeOwned>(
@@ -103,15 +111,19 @@ impl HttpClient for ReqwestHttpClient {
             .await
             .map_err(|err| format!("Request failed: {err}"))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
+        let status = response.status();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|err| format!("Failed to read response: {err}"))?;
+        if !status.is_success() {
+            let text = String::from_utf8_lossy(&body);
             return Err(format!("Request failed ({status}): {text}"));
         }
 
-        response
-            .json::<T>()
-            .await
-            .map_err(|err| format!("Failed to parse response: {err}"))
+        serde_json::from_slice::<T>(&body).map_err(|err| {
+            let text = String::from_utf8_lossy(&body);
+            format!("Failed to parse response: {err}. Body: {text}")
+        })
     }
 }

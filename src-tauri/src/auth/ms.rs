@@ -5,6 +5,7 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::Deserialize;
 use serde_json;
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use url::Url;
@@ -189,26 +190,34 @@ pub(crate) fn parse_auth_callback(
 }
 
 fn parse_auth_callback_url(url: &Url, expected_state: &str) -> Result<String, String> {
-    let mut code: Option<String> = None;
-    let mut state: Option<String> = None;
-    let mut error: Option<String> = None;
-
-    for (key, value) in url.query_pairs() {
-        match key.as_ref() {
-            "code" => code = Some(value.to_string()),
-            "state" => state = Some(value.to_string()),
-            "error" => error = Some(value.to_string()),
-            _ => {}
-        }
+    let mut params = HashMap::new();
+    if let Some(query) = url.query() {
+        parse_pairs(query, &mut params);
+    }
+    if let Some(fragment) = url.fragment() {
+        parse_pairs(fragment, &mut params);
     }
 
-    if let Some(error) = error {
-        return Err(format!("Microsoft sign-in failed: {error}"));
+    if let Some(error) = params.get("error") {
+        let description = params
+            .get("error_description")
+            .map(|value| format!(" ({value})"))
+            .unwrap_or_default();
+        return Err(format!("Microsoft sign-in failed: {error}{description}"));
     }
 
-    if state.as_deref() != Some(expected_state) {
+    if params.get("state").map(String::as_str) != Some(expected_state) {
         return Err("Sign-in state did not match. Please try again.".to_string());
     }
 
-    code.ok_or_else(|| "Missing authorization code in redirect.".to_string())
+    params
+        .get("code")
+        .cloned()
+        .ok_or_else(|| "Missing authorization code in redirect.".to_string())
+}
+
+fn parse_pairs(raw: &str, params: &mut HashMap<String, String>) {
+    for (key, value) in url::form_urlencoded::parse(raw.as_bytes()) {
+        params.entry(key.into()).or_insert(value.into());
+    }
 }
