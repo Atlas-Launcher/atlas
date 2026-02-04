@@ -1,5 +1,5 @@
 mod flow;
-mod http;
+mod error;
 mod minecraft;
 mod ms;
 mod pending;
@@ -7,12 +7,13 @@ mod session;
 mod xbox;
 
 use crate::models::{AuthSession, DeviceCodeResponse};
-use http::ReqwestHttpClient;
+use crate::net::http::ReqwestHttpClient;
 
+pub use error::AuthError;
 pub use pending::{clear_pending_auth, load_pending_auth, save_pending_auth, PendingAuth};
 pub use session::{clear_session, ensure_fresh_session, load_session, save_session};
 
-pub async fn start_device_code(client_id: &str) -> Result<DeviceCodeResponse, String> {
+pub async fn start_device_code(client_id: &str) -> Result<DeviceCodeResponse, AuthError> {
     let http = ReqwestHttpClient::new();
     ms::start_device_code(&http, client_id).await
 }
@@ -20,7 +21,7 @@ pub async fn start_device_code(client_id: &str) -> Result<DeviceCodeResponse, St
 pub async fn complete_device_code(
     client_id: &str,
     device_code: &str,
-) -> Result<AuthSession, String> {
+) -> Result<AuthSession, AuthError> {
     let http = ReqwestHttpClient::new();
     let token = ms::poll_device_token(&http, client_id, device_code).await?;
     let refresh_token = token.refresh_token.clone();
@@ -30,7 +31,7 @@ pub async fn complete_device_code(
 pub fn begin_deeplink_login(
     client_id: &str,
     redirect_uri: &str,
-) -> Result<(PendingAuth, String), String> {
+) -> Result<(PendingAuth, String), AuthError> {
     let request = ms::build_auth_request(client_id, redirect_uri)?;
     let pending = PendingAuth {
         client_id: client_id.to_string(),
@@ -44,7 +45,7 @@ pub fn begin_deeplink_login(
 pub async fn complete_deeplink_login(
     callback_url: &str,
     pending: PendingAuth,
-) -> Result<AuthSession, String> {
+) -> Result<AuthSession, AuthError> {
     let http = ReqwestHttpClient::new();
     let code = ms::parse_auth_callback(callback_url, &pending.state)?;
     let token = ms::exchange_auth_code(

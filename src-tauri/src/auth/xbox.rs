@@ -1,7 +1,8 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use super::http::HttpClient;
+use crate::net::http::HttpClient;
+use super::error::AuthError;
 
 const XBL_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XSTS_AUTH_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
@@ -27,7 +28,7 @@ pub struct XboxUserClaim {
 pub async fn authenticate<H: HttpClient + ?Sized>(
     http: &H,
     ms_access_token: &str,
-) -> Result<XboxAuthResponse, String> {
+) -> Result<XboxAuthResponse, AuthError> {
     let body = json!({
       "Properties": {
         "AuthMethod": "RPS",
@@ -38,13 +39,13 @@ pub async fn authenticate<H: HttpClient + ?Sized>(
       "TokenType": "JWT"
     });
 
-    http.post_json(XBL_AUTH_URL, &body).await
+    Ok(http.post_json(XBL_AUTH_URL, &body).await?)
 }
 
 pub async fn xsts<H: HttpClient + ?Sized>(
     http: &H,
     xbl_token: &str,
-) -> Result<XboxAuthResponse, String> {
+) -> Result<XboxAuthResponse, AuthError> {
     let body = json!({
       "Properties": {
         "SandboxId": "RETAIL",
@@ -54,5 +55,5 @@ pub async fn xsts<H: HttpClient + ?Sized>(
       "TokenType": "JWT"
     });
 
-    http.post_json(XSTS_AUTH_URL, &body).await
+    Ok(http.post_json(XSTS_AUTH_URL, &body).await?)
 }

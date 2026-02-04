@@ -2,7 +2,6 @@ use crate::paths::{ensure_dir, file_exists};
 use futures::StreamExt;
 use reqwest::header::RANGE;
 use reqwest::{Client, StatusCode};
-use serde::de::DeserializeOwned;
 use sha1::{Digest, Sha1};
 use std::path::Path;
 use tokio::fs as async_fs;
@@ -11,25 +10,6 @@ use tokio::io::AsyncWriteExt;
 use super::manifest::Download;
 
 pub const DOWNLOAD_CONCURRENCY: usize = 12;
-
-pub async fn fetch_json<T: DeserializeOwned>(client: &Client, url: &str) -> Result<T, String> {
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|err| format!("Request failed: {err}"))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        return Err(format!("Request failed ({status}): {text}"));
-    }
-
-    response
-        .json::<T>()
-        .await
-        .map_err(|err| format!("Failed to parse JSON: {err}"))
-}
 
 pub async fn download_if_needed(
     client: &Client,

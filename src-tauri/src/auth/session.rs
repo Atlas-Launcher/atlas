@@ -5,8 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::flow;
 use super::ms;
+use super::error::AuthError;
 
-pub fn load_session() -> Result<Option<AuthSession>, String> {
+pub fn load_session() -> Result<Option<AuthSession>, AuthError> {
     let path = auth_store_path()?;
     if !file_exists(&path) {
         return Ok(None);
@@ -17,7 +18,7 @@ pub fn load_session() -> Result<Option<AuthSession>, String> {
     Ok(Some(session))
 }
 
-pub fn save_session(session: &AuthSession) -> Result<(), String> {
+pub fn save_session(session: &AuthSession) -> Result<(), AuthError> {
     let path = auth_store_path()?;
     if let Some(parent) = path.parent() {
         ensure_dir(parent)?;
@@ -28,7 +29,7 @@ pub fn save_session(session: &AuthSession) -> Result<(), String> {
     Ok(())
 }
 
-pub fn clear_session() -> Result<(), String> {
+pub fn clear_session() -> Result<(), AuthError> {
     let path = auth_store_path()?;
     if file_exists(&path) {
         fs::remove_file(&path).map_err(|err| format!("Failed to remove auth session: {err}"))?;
@@ -36,7 +37,7 @@ pub fn clear_session() -> Result<(), String> {
     Ok(())
 }
 
-pub async fn ensure_fresh_session(session: AuthSession) -> Result<AuthSession, String> {
+pub async fn ensure_fresh_session(session: AuthSession) -> Result<AuthSession, AuthError> {
     if !needs_refresh(&session) {
         return Ok(session);
     }
@@ -51,8 +52,8 @@ fn needs_refresh(session: &AuthSession) -> bool {
     now + 300 >= session.access_token_expires_at
 }
 
-async fn refresh_session(session: &AuthSession) -> Result<AuthSession, String> {
-    let http = super::http::ReqwestHttpClient::new();
+async fn refresh_session(session: &AuthSession) -> Result<AuthSession, AuthError> {
+    let http = crate::net::http::ReqwestHttpClient::new();
     let refresh_token = session
         .refresh_token
         .clone()

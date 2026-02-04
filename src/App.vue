@@ -50,10 +50,12 @@ const {
   latestRelease,
   installedVersions,
   fabricLoaderVersions,
+  neoforgeLoaderVersions,
   mods,
   loadAvailableVersions,
   loadInstalledVersions,
   loadFabricLoaderVersions,
+  loadNeoForgeLoaderVersions,
   loadMods,
   toggleMod,
   deleteMod
@@ -88,6 +90,7 @@ async function refreshVersions() {
   await loadAvailableVersions();
   await loadInstalledVersions();
   await loadFabricLoaderVersions();
+  await loadNeoForgeLoaderVersions();
 }
 
 async function openModsFolder() {
@@ -112,6 +115,7 @@ onMounted(async () => {
   await loadAvailableVersions();
   await loadInstalledVersions();
   await loadFabricLoaderVersions();
+  await loadNeoForgeLoaderVersions();
   await loadMods();
 });
 
@@ -120,6 +124,7 @@ watch(
   async () => {
     await loadInstalledVersions();
     await loadFabricLoaderVersions();
+    await loadNeoForgeLoaderVersions();
     await loadMods();
   }
 );
@@ -138,7 +143,12 @@ watch(
       await loadFabricLoaderVersions();
       return;
     }
+    if (kind === "neoforge") {
+      await loadNeoForgeLoaderVersions();
+      return;
+    }
     fabricLoaderVersions.value = [];
+    neoforgeLoaderVersions.value = [];
   }
 );
 </script>
@@ -194,6 +204,7 @@ watch(
                 :latest-release="latestRelease"
                 :installed-versions="installedVersions"
                 :fabric-loader-versions="fabricLoaderVersions"
+                :neoforge-loader-versions="neoforgeLoaderVersions"
                 :working="working"
                 @update="({ id, patch }) => updateInstance(id, patch)"
                 @install="installSelectedVersion"

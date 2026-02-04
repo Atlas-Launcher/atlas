@@ -9,7 +9,7 @@ import CardContent from "./ui/card/CardContent.vue";
 import CardFooter from "./ui/card/CardFooter.vue";
 import Input from "./ui/input/Input.vue";
 import type { InstanceConfig, ModLoaderKind } from "@/types/settings";
-import type { FabricLoaderVersion, VersionSummary } from "@/types/library";
+import type { FabricLoaderVersion, NeoForgeLoaderVersion, VersionSummary } from "@/types/library";
 
 const props = defineProps<{
   instance: InstanceConfig | null;
@@ -17,6 +17,7 @@ const props = defineProps<{
   latestRelease: string;
   installedVersions: string[];
   fabricLoaderVersions: FabricLoaderVersion[];
+  neoforgeLoaderVersions: NeoForgeLoaderVersion[];
   working: boolean;
 }>();
 
@@ -192,16 +193,22 @@ function updateNeoForgeVersion(value: string | number) {
 
         <div v-if="props.instance.loader.kind === 'neoforge'" class="space-y-2">
           <label class="text-xs uppercase tracking-widest text-muted-foreground">
-            NeoForge profile id
+            NeoForge loader version
           </label>
           <Input
             :model-value="props.instance.loader.loaderVersion ?? ''"
-            placeholder="Example: 20.4.205 (expects neoforge-20.4.205 profile)"
+            list="neoforge-versions"
+            placeholder="Pick a NeoForge version"
             @update:modelValue="updateNeoForgeVersion"
           />
+          <datalist id="neoforge-versions">
+            <option v-for="version in props.neoforgeLoaderVersions" :key="version" :value="version">
+              {{ version }}
+            </option>
+          </datalist>
           <p class="text-xs text-muted-foreground">
-            NeoForge must be installed into this instance before launch. Atlas looks for a matching
-            profile in the versions folder.
+            Pick from the list or type a custom version. Atlas will install the matching profile as
+            needed (neoforge-{{ props.instance.loader.loaderVersion || "x.y.z" }}).
           </p>
         </div>
 
