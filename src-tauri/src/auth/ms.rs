@@ -114,7 +114,8 @@ pub(crate) async fn refresh_token<H: HttpClient + ?Sized>(
 
 fn random_url_safe(len: usize) -> String {
     let mut bytes = vec![0u8; len];
-    OsRng.fill_bytes(&mut bytes);
+    let mut rng = OsRng;
+    rng.fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(&bytes)
 }
 

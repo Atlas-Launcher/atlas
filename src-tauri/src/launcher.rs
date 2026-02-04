@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use tauri::Window;
+use tauri::{Emitter, Window};
 
 struct PreparedMinecraft {
     game_dir: PathBuf,
