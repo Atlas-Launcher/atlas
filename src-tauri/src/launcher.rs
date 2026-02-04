@@ -258,3 +258,6 @@ pub(crate) fn emit(
     )
     .map_err(|err| format!("Emit failed: {err}"))
 }
+
+#[cfg(test)]
+mod tests;

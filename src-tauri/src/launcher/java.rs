@@ -14,26 +14,26 @@ const JAVA_RUNTIME_MANIFEST_URL: &str =
   "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
 
 #[derive(Debug, Deserialize)]
-struct JavaRuntimeFiles {
-  files: HashMap<String, JavaRuntimeFile>
+pub(crate) struct JavaRuntimeFiles {
+  pub files: HashMap<String, JavaRuntimeFile>
 }
 
 #[derive(Debug, Deserialize)]
-struct JavaRuntimeFile {
+pub(crate) struct JavaRuntimeFile {
   #[serde(rename = "type")]
-  kind: String,
+  pub kind: String,
   #[serde(default)]
-  executable: bool,
+  pub executable: bool,
   #[serde(default)]
-  downloads: Option<JavaRuntimeDownloads>,
+  pub downloads: Option<JavaRuntimeDownloads>,
   #[serde(default)]
-  target: Option<String>
+  pub target: Option<String>
 }
 
 #[derive(Debug, Deserialize)]
-struct JavaRuntimeDownloads {
+pub(crate) struct JavaRuntimeDownloads {
   #[serde(default)]
-  raw: Option<super::manifest::Download>
+  pub raw: Option<super::manifest::Download>
 }
 
 pub async fn resolve_java_path(
@@ -214,7 +214,7 @@ fn runtime_os_key() -> Result<&'static str, String> {
   Err("Unsupported OS for Java runtime downloads.".to_string())
 }
 
-fn select_java_component(
+pub(crate) fn select_java_component(
   platform: &serde_json::Map<String, serde_json::Value>,
   desired: &str
 ) -> String {
@@ -253,7 +253,7 @@ fn select_java_component(
   platform.keys().next().cloned().unwrap_or_else(|| desired.to_string())
 }
 
-fn locate_java_binary(runtime_home: &Path, manifest: &JavaRuntimeFiles) -> PathBuf {
+pub(crate) fn locate_java_binary(runtime_home: &Path, manifest: &JavaRuntimeFiles) -> PathBuf {
   if cfg!(target_os = "windows") {
     let javaw = runtime_home.join("bin").join("javaw.exe");
     if javaw.exists() {

@@ -3,8 +3,8 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use rand::rngs::OsRng;
 use rand::RngCore;
-use reqwest::Client;
 use serde::Deserialize;
+use serde_json;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -12,6 +12,7 @@ use tokio::net::TcpListener;
 use tokio::time::sleep;
 use url::Url;
 
+use super::http::HttpClient;
 const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
 const AUTHORIZE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
@@ -35,33 +36,20 @@ struct DeviceTokenError {
   error_description: Option<String>
 }
 
-pub async fn start_device_code(client_id: &str) -> Result<DeviceCodeResponse, String> {
-  let client = Client::new();
+pub async fn start_device_code<H: HttpClient + ?Sized>(
+  http: &H,
+  client_id: &str
+) -> Result<DeviceCodeResponse, String> {
   let params = [
     ("client_id", client_id),
     ("scope", "XboxLive.signin offline_access")
   ];
 
-  let response = client
-    .post(DEVICE_CODE_URL)
-    .form(&params)
-    .send()
-    .await
-    .map_err(|err| format!("Device code request failed: {err}"))?;
-
-  if !response.status().is_success() {
-    let status = response.status();
-    let text = response.text().await.unwrap_or_default();
-    return Err(format!("Device code request failed ({status}): {text}"));
-  }
-
-  response
-    .json::<DeviceCodeResponse>()
-    .await
-    .map_err(|err| format!("Failed to parse device code response: {err}"))
+  http.post_form(DEVICE_CODE_URL, &params).await
 }
 
-pub async fn login_with_redirect_token<F>(
+pub async fn login_with_redirect_token<H: HttpClient + ?Sized, F>(
+  http: &H,
   client_id: &str,
   open_url: F
 ) -> Result<DeviceTokenResponse, String>
@@ -73,14 +61,14 @@ where
   open_url(auth_url)?;
 
   let code = wait_for_auth_code(listener, &state).await?;
-  exchange_auth_code(client_id, &code, &redirect_uri, &code_verifier).await
+  exchange_auth_code(http, client_id, &code, &redirect_uri, &code_verifier).await
 }
 
-pub(crate) async fn poll_device_token(
+pub(crate) async fn poll_device_token<H: HttpClient + ?Sized>(
+  http: &H,
   client_id: &str,
   device_code: &str
 ) -> Result<DeviceTokenResponse, String> {
-  let client = Client::new();
   let mut interval = Duration::from_secs(5);
   let start = Instant::now();
   let timeout = Duration::from_secs(900);
@@ -96,27 +84,18 @@ pub(crate) async fn poll_device_token(
       ("device_code", device_code)
     ];
 
-    let response = client
-      .post(TOKEN_URL)
-      .form(&params)
-      .send()
-      .await
-      .map_err(|err| format!("Token polling failed: {err}"))?;
+    let response = http
+      .post_form::<serde_json::Value>(TOKEN_URL, &params)
+      .await?;
 
-    if response.status().is_success() {
-      return response
-        .json::<DeviceTokenResponse>()
-        .await
-        .map_err(|err| format!("Failed to parse token response: {err}"));
+    if let Ok(token) = serde_json::from_value::<DeviceTokenResponse>(response.clone()) {
+      return Ok(token);
     }
 
-    let error = response
-      .json::<DeviceTokenError>()
-      .await
-      .unwrap_or(DeviceTokenError {
-        error: "unknown".into(),
-        error_description: None
-      });
+    let error = serde_json::from_value::<DeviceTokenError>(response).unwrap_or(DeviceTokenError {
+      error: "unknown".into(),
+      error_description: None
+    });
 
     match error.error.as_str() {
       "authorization_pending" => {
@@ -137,34 +116,18 @@ pub(crate) async fn poll_device_token(
   }
 }
 
-pub(crate) async fn refresh_token(
+pub(crate) async fn refresh_token<H: HttpClient + ?Sized>(
+  http: &H,
   client_id: &str,
   refresh_token: &str
 ) -> Result<DeviceTokenResponse, String> {
-  let client = Client::new();
   let params = [
     ("client_id", client_id),
     ("grant_type", "refresh_token"),
     ("refresh_token", refresh_token)
   ];
 
-  let response = client
-    .post(TOKEN_URL)
-    .form(&params)
-    .send()
-    .await
-    .map_err(|err| format!("Refresh token request failed: {err}"))?;
-
-  if !response.status().is_success() {
-    let status = response.status();
-    let text = response.text().await.unwrap_or_default();
-    return Err(format!("Refresh token request failed ({status}): {text}"));
-  }
-
-  response
-    .json::<DeviceTokenResponse>()
-    .await
-    .map_err(|err| format!("Failed to parse refresh response: {err}"))
+  http.post_form(TOKEN_URL, &params).await
 }
 
 async fn prepare_redirect_login(
@@ -290,13 +253,13 @@ async fn respond_to_browser(
   Ok(())
 }
 
-async fn exchange_auth_code(
+async fn exchange_auth_code<H: HttpClient + ?Sized>(
+  http: &H,
   client_id: &str,
   code: &str,
   redirect_uri: &str,
   code_verifier: &str
 ) -> Result<DeviceTokenResponse, String> {
-  let client = Client::new();
   let params = [
     ("client_id", client_id),
     ("grant_type", "authorization_code"),
@@ -305,21 +268,5 @@ async fn exchange_auth_code(
     ("code_verifier", code_verifier)
   ];
 
-  let response = client
-    .post(TOKEN_URL)
-    .form(&params)
-    .send()
-    .await
-    .map_err(|err| format!("Authorization code exchange failed: {err}"))?;
-
-  if !response.status().is_success() {
-    let status = response.status();
-    let text = response.text().await.unwrap_or_default();
-    return Err(format!("Authorization code exchange failed ({status}): {text}"));
-  }
-
-  response
-    .json::<DeviceTokenResponse>()
-    .await
-    .map_err(|err| format!("Failed to parse authorization response: {err}"))
+  http.post_form(TOKEN_URL, &params).await
 }

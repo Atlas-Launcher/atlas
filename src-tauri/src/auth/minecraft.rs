@@ -1,9 +1,8 @@
 use crate::models::Profile;
-use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
 
-use super::http::post_json;
+use super::http::HttpClient;
 
 const MC_LOGIN_URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const MC_ENTITLEMENTS_URL: &str = "https://api.minecraftservices.com/entitlements/mcstore";
@@ -20,55 +19,31 @@ struct EntitlementsResponse {
   items: Vec<serde_json::Value>
 }
 
-pub async fn login(xsts_token: &str, uhs: &str) -> Result<MinecraftLoginResponse, String> {
-  let client = Client::new();
+pub async fn login<H: HttpClient + ?Sized>(
+  http: &H,
+  xsts_token: &str,
+  uhs: &str
+) -> Result<MinecraftLoginResponse, String> {
   let body = json!({
     "identityToken": format!("XBL3.0 x={};{}", uhs, xsts_token)
   });
 
-  post_json(&client, MC_LOGIN_URL, &body).await
+  http.post_json(MC_LOGIN_URL, &body).await
 }
 
-pub async fn profile(access_token: &str) -> Result<Profile, String> {
-  let client = Client::new();
-  let response = client
-    .get(MC_PROFILE_URL)
-    .bearer_auth(access_token)
-    .send()
-    .await
-    .map_err(|err| format!("Profile request failed: {err}"))?;
-
-  if !response.status().is_success() {
-    let status = response.status();
-    let text = response.text().await.unwrap_or_default();
-    return Err(format!("Profile request failed ({status}): {text}"));
-  }
-
-  response
-    .json::<Profile>()
-    .await
-    .map_err(|err| format!("Failed to parse profile response: {err}"))
+pub async fn profile<H: HttpClient + ?Sized>(
+  http: &H,
+  access_token: &str
+) -> Result<Profile, String> {
+  http.get_json(MC_PROFILE_URL, Some(access_token)).await
 }
 
-pub async fn verify_entitlements(access_token: &str) -> Result<(), String> {
-  let client = Client::new();
-  let response = client
-    .get(MC_ENTITLEMENTS_URL)
-    .bearer_auth(access_token)
-    .send()
-    .await
-    .map_err(|err| format!("Entitlements request failed: {err}"))?;
-
-  if !response.status().is_success() {
-    let status = response.status();
-    let text = response.text().await.unwrap_or_default();
-    return Err(format!("Entitlements request failed ({status}): {text}"));
-  }
-
-  let entitlements = response
-    .json::<EntitlementsResponse>()
-    .await
-    .map_err(|err| format!("Failed to parse entitlements: {err}"))?;
+pub async fn verify_entitlements<H: HttpClient + ?Sized>(
+  http: &H,
+  access_token: &str
+) -> Result<(), String> {
+  let entitlements: EntitlementsResponse =
+    http.get_json(MC_ENTITLEMENTS_URL, Some(access_token)).await?;
 
   if entitlements.items.is_empty() {
     return Err("Minecraft entitlement not found for this account.".into());

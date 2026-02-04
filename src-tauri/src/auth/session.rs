@@ -52,13 +52,14 @@ fn needs_refresh(session: &AuthSession) -> bool {
 }
 
 async fn refresh_session(session: &AuthSession) -> Result<AuthSession, String> {
+  let http = super::http::ReqwestHttpClient::new();
   let refresh_token = session
     .refresh_token
     .clone()
     .ok_or_else(|| "Missing refresh token; please sign in again.".to_string())?;
-  let refreshed = ms::refresh_token(&session.client_id, &refresh_token).await?;
+  let refreshed = ms::refresh_token(&http, &session.client_id, &refresh_token).await?;
   let fallback_refresh = refreshed.refresh_token.clone().or(Some(refresh_token));
-  flow::session_from_refresh(&session.client_id, refreshed, fallback_refresh).await
+  flow::session_from_refresh(&http, &session.client_id, refreshed, fallback_refresh).await
 }
 
 fn unix_timestamp() -> u64 {
