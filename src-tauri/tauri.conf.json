@@ -1,0 +1,38 @@
+{
+  "build": {
+    "beforeBuildCommand": "pnpm build",
+    "beforeDevCommand": "pnpm dev",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "MC Launchpad",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "shell": {
+        "open": true
+      },
+      "path": {
+        "all": true
+      },
+      "fs": {
+        "all": true
+      }
+    },
+    "windows": [
+      {
+        "title": "MC Launchpad",
+        "width": 1040,
+        "height": 720,
+        "minWidth": 900,
+        "minHeight": 640,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}
