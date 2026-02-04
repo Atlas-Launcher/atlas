@@ -1,5 +1,5 @@
 {
-  "name": "mc-launcher",
+  "name": "atlas",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -8,17 +8,20 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
+    "tauri:dev:device-code": "VITE_AUTH_FLOW=device_code tauri dev",
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^1.5.4",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-deep-link": "^2.0.0",
+    "@tauri-apps/plugin-opener": "^2.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.5.4",
     "vue": "^3.4.38"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^1.5.14",
+    "@tauri-apps/cli": "^2.0.0",
     "@vitejs/plugin-vue": "^5.1.2",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.45",

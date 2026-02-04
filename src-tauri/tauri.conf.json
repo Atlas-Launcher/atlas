@@ -1,29 +1,18 @@
 {
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Atlas Launcher",
+  "version": "0.1.0",
+  "identifier": "com.atlas.launcher",
   "build": {
     "beforeBuildCommand": "pnpm build",
     "beforeDevCommand": "pnpm dev",
-    "devPath": "http://localhost:1420",
-    "distDir": "../dist"
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
   },
-  "package": {
-    "productName": "MC Launchpad",
-    "version": "0.1.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "shell": {
-        "open": true
-      },
-      "path": {
-        "all": true
-      },
-      "fs": {
-        "all": true
-      }
-    },
+  "app": {
     "windows": [
       {
-        "title": "MC Launchpad",
+        "title": "Atlas Launcher",
         "width": 1040,
         "height": 720,
         "minWidth": 900,
@@ -33,6 +22,17 @@
     ],
     "security": {
       "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["atlas"]
+      }
     }
   }
 }

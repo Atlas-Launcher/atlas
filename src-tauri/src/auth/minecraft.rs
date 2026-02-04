@@ -10,44 +10,45 @@ const MC_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profil
 
 #[derive(Debug, Deserialize)]
 pub struct MinecraftLoginResponse {
-  pub access_token: String,
-  pub expires_in: u64
+    pub access_token: String,
+    pub expires_in: u64,
 }
 
 #[derive(Debug, Deserialize)]
 struct EntitlementsResponse {
-  items: Vec<serde_json::Value>
+    items: Vec<serde_json::Value>,
 }
 
 pub async fn login<H: HttpClient + ?Sized>(
-  http: &H,
-  xsts_token: &str,
-  uhs: &str
+    http: &H,
+    xsts_token: &str,
+    uhs: &str,
 ) -> Result<MinecraftLoginResponse, String> {
-  let body = json!({
-    "identityToken": format!("XBL3.0 x={};{}", uhs, xsts_token)
-  });
+    let body = json!({
+      "identityToken": format!("XBL3.0 x={};{}", uhs, xsts_token)
+    });
 
-  http.post_json(MC_LOGIN_URL, &body).await
+    http.post_json(MC_LOGIN_URL, &body).await
 }
 
 pub async fn profile<H: HttpClient + ?Sized>(
-  http: &H,
-  access_token: &str
+    http: &H,
+    access_token: &str,
 ) -> Result<Profile, String> {
-  http.get_json(MC_PROFILE_URL, Some(access_token)).await
+    http.get_json(MC_PROFILE_URL, Some(access_token)).await
 }
 
 pub async fn verify_entitlements<H: HttpClient + ?Sized>(
-  http: &H,
-  access_token: &str
+    http: &H,
+    access_token: &str,
 ) -> Result<(), String> {
-  let entitlements: EntitlementsResponse =
-    http.get_json(MC_ENTITLEMENTS_URL, Some(access_token)).await?;
+    let entitlements: EntitlementsResponse = http
+        .get_json(MC_ENTITLEMENTS_URL, Some(access_token))
+        .await?;
 
-  if entitlements.items.is_empty() {
-    return Err("Minecraft entitlement not found for this account.".into());
-  }
+    if entitlements.items.is_empty() {
+        return Err("Minecraft entitlement not found for this account.".into());
+    }
 
-  Ok(())
+    Ok(())
 }
