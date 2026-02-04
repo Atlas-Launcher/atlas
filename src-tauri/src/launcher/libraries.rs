@@ -6,6 +6,7 @@ use zip::ZipArchive;
 use super::args::rules_allow;
 use super::download::{download_if_needed, DOWNLOAD_CONCURRENCY};
 use super::emit;
+use super::error::LauncherError;
 use super::manifest::Library;
 use futures::stream::{self, StreamExt};
 use reqwest::Client;
@@ -15,7 +16,7 @@ pub async fn sync_libraries(
     libraries_dir: &Path,
     libraries: &[Library],
     window: &tauri::Window,
-) -> Result<(Vec<PathBuf>, Vec<PathBuf>), String> {
+) -> Result<(Vec<PathBuf>, Vec<PathBuf>), LauncherError> {
     let mut library_paths = Vec::new();
     let mut native_paths = Vec::new();
     let mut downloads: Vec<(super::manifest::Download, PathBuf)> = Vec::new();
@@ -130,7 +131,7 @@ pub fn extract_natives(
     path: &Path,
     natives_dir: &Path,
     libraries: &[Library],
-) -> Result<(), String> {
+) -> Result<(), LauncherError> {
     let file = File::open(path).map_err(|err| format!("Failed to open native jar: {err}"))?;
     let mut archive =
         ZipArchive::new(file).map_err(|err| format!("Failed to read native jar: {err}"))?;

@@ -4,6 +4,7 @@ import type { Ref } from "vue";
 import type { InstanceConfig } from "@/types/settings";
 import type {
   FabricLoaderVersion,
+  NeoForgeLoaderVersion,
   ModEntry,
   VersionManifestSummary,
   VersionSummary
@@ -21,6 +22,7 @@ export function useLibrary({ activeInstance, setStatus, pushLog, run }: LibraryD
   const latestRelease = ref("");
   const installedVersions = ref<string[]>([]);
   const fabricLoaderVersions = ref<FabricLoaderVersion[]>([]);
+  const neoforgeLoaderVersions = ref<NeoForgeLoaderVersion[]>([]);
   const mods = ref<ModEntry[]>([]);
 
   async function loadAvailableVersions() {
@@ -68,6 +70,21 @@ export function useLibrary({ activeInstance, setStatus, pushLog, run }: LibraryD
       );
     } catch (err) {
       pushLog(`Failed to fetch Fabric loaders: ${String(err)}`);
+    }
+  }
+
+  async function loadNeoForgeLoaderVersions() {
+    const instance = activeInstance.value;
+    if (!instance || instance.loader.kind !== "neoforge") {
+      neoforgeLoaderVersions.value = [];
+      return;
+    }
+    try {
+      neoforgeLoaderVersions.value = await invoke<NeoForgeLoaderVersion[]>(
+        "get_neoforge_loader_versions"
+      );
+    } catch (err) {
+      pushLog(`Failed to fetch NeoForge loaders: ${String(err)}`);
     }
   }
 
@@ -130,10 +147,12 @@ export function useLibrary({ activeInstance, setStatus, pushLog, run }: LibraryD
     latestRelease,
     installedVersions,
     fabricLoaderVersions,
+    neoforgeLoaderVersions,
     mods,
     loadAvailableVersions,
     loadInstalledVersions,
     loadFabricLoaderVersions,
+    loadNeoForgeLoaderVersions,
     loadMods,
     toggleMod,
     deleteMod

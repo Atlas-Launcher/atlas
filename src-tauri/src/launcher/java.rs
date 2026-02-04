@@ -1,11 +1,13 @@
+use crate::net::http::shared_client;
 use crate::paths::ensure_dir;
 use futures::stream::{self, StreamExt};
-use reqwest::Client;
+use crate::launcher::error::LauncherError;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use super::download::{download_if_needed, fetch_json, DOWNLOAD_CONCURRENCY};
+use super::download::{download_if_needed, DOWNLOAD_CONCURRENCY};
+use crate::net::http::fetch_json;
 use super::emit;
 use super::libraries::current_arch;
 use super::manifest::VersionData;
@@ -41,7 +43,7 @@ pub async fn resolve_java_path(
     game_dir: &Path,
     version_data: &VersionData,
     java_path_override: &str,
-) -> Result<String, String> {
+) -> Result<String, LauncherError> {
     if !java_path_override.trim().is_empty() && java_path_override.trim() != "java" {
         return Ok(java_path_override.trim().to_string());
     }
@@ -58,8 +60,8 @@ async fn ensure_java_runtime(
     window: &tauri::Window,
     game_dir: &Path,
     component: &str,
-) -> Result<String, String> {
-    let client = Client::new();
+) -> Result<String, LauncherError> {
+    let client = shared_client().clone();
     let os_key = runtime_os_key()?;
 
     emit(
@@ -181,7 +183,7 @@ async fn ensure_java_runtime(
 
     let java_path = locate_java_binary(&runtime_home, &runtime_manifest);
     if !java_path.exists() {
-        return Err("Java runtime download completed but java binary was not found.".to_string());
+        return Err("Java runtime download completed but java binary was not found.".to_string().into());
     }
 
     Ok(java_path.to_string_lossy().to_string())

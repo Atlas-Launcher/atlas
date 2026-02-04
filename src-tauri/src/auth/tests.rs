@@ -1,4 +1,4 @@
-use super::http::HttpClient;
+use crate::net::http::{HttpClient, HttpError};
 use super::ms;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
@@ -25,7 +25,7 @@ impl HttpClient for MockHttp {
         &self,
         url: &str,
         params: &[(&str, &str)],
-    ) -> Result<T, String> {
+    ) -> Result<T, HttpError> {
         self.form_calls.lock().unwrap().push((
             url.to_string(),
             params
@@ -34,23 +34,32 @@ impl HttpClient for MockHttp {
                 .collect(),
         ));
         let value = self.responses.lock().unwrap().remove(0);
-        serde_json::from_value(value).map_err(|err| err.to_string())
+        serde_json::from_value(value).map_err(|err| HttpError::Parse {
+            source: err,
+            body: "<mock>".to_string(),
+        })
     }
 
     async fn post_json<T: DeserializeOwned, B: serde::Serialize + Send + Sync>(
         &self,
         _url: &str,
         _body: &B,
-    ) -> Result<T, String> {
-        Err("post_json not implemented in mock".to_string())
+    ) -> Result<T, HttpError> {
+        Err(HttpError::Status {
+            status: reqwest::StatusCode::NOT_IMPLEMENTED,
+            body: "post_json not implemented in mock".to_string(),
+        })
     }
 
     async fn get_json<T: DeserializeOwned>(
         &self,
         _url: &str,
         _bearer: Option<&str>,
-    ) -> Result<T, String> {
-        Err("get_json not implemented in mock".to_string())
+    ) -> Result<T, HttpError> {
+        Err(HttpError::Status {
+            status: reqwest::StatusCode::NOT_IMPLEMENTED,
+            body: "get_json not implemented in mock".to_string(),
+        })
     }
 }
 
@@ -110,12 +119,12 @@ fn parse_auth_callback_accepts_valid_response() {
 fn parse_auth_callback_rejects_error() {
     let url = "atlas://auth?error=access_denied&state=state1";
     let err = ms::parse_auth_callback(url, "state1").unwrap_err();
-    assert!(err.contains("Microsoft sign-in failed"));
+    assert!(err.to_string().contains("Microsoft sign-in failed"));
 }
 
 #[test]
 fn parse_auth_callback_rejects_state_mismatch() {
     let url = "atlas://auth?code=abc123&state=wrong";
     let err = ms::parse_auth_callback(url, "state1").unwrap_err();
-    assert!(err.contains("state did not match"));
+    assert!(err.to_string().contains("state did not match"));
 }

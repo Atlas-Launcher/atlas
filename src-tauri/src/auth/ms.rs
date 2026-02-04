@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use url::Url;
 
-use super::http::HttpClient;
+use crate::net::http::HttpClient;
+use super::error::AuthError;
 const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
 const AUTHORIZE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
@@ -37,27 +38,29 @@ struct DeviceTokenError {
 pub async fn start_device_code<H: HttpClient + ?Sized>(
     http: &H,
     client_id: &str,
-) -> Result<DeviceCodeResponse, String> {
+) -> Result<DeviceCodeResponse, AuthError> {
     let params = [
         ("client_id", client_id),
         ("scope", "XboxLive.signin offline_access"),
     ];
 
-    http.post_form(DEVICE_CODE_URL, &params).await
+    Ok(http.post_form(DEVICE_CODE_URL, &params).await?)
 }
 
 pub(crate) async fn poll_device_token<H: HttpClient + ?Sized>(
     http: &H,
     client_id: &str,
     device_code: &str,
-) -> Result<DeviceTokenResponse, String> {
+) -> Result<DeviceTokenResponse, AuthError> {
     let mut interval = Duration::from_secs(5);
     let start = Instant::now();
     let timeout = Duration::from_secs(900);
 
     loop {
         if start.elapsed() > timeout {
-            return Err("Device code expired. Start login again.".into());
+            return Err("Device code expired. Start login again."
+                .to_string()
+                .into());
         }
 
         let params = [
@@ -88,12 +91,17 @@ pub(crate) async fn poll_device_token<H: HttpClient + ?Sized>(
                 interval += Duration::from_secs(5);
                 sleep(interval).await;
             }
-            "expired_token" => return Err("Device code expired. Start login again.".into()),
+            "expired_token" => {
+                return Err("Device code expired. Start login again."
+                    .to_string()
+                    .into())
+            }
             _ => {
                 return Err(format!(
                     "Device code login failed: {}",
                     error.error_description.unwrap_or(error.error)
-                ));
+                )
+                .into());
             }
         }
     }
@@ -103,14 +111,14 @@ pub(crate) async fn refresh_token<H: HttpClient + ?Sized>(
     http: &H,
     client_id: &str,
     refresh_token: &str,
-) -> Result<DeviceTokenResponse, String> {
+) -> Result<DeviceTokenResponse, AuthError> {
     let params = [
         ("client_id", client_id),
         ("grant_type", "refresh_token"),
         ("refresh_token", refresh_token),
     ];
 
-    http.post_form(TOKEN_URL, &params).await
+    Ok(http.post_form(TOKEN_URL, &params).await?)
 }
 
 fn random_url_safe(len: usize) -> String {
@@ -134,7 +142,7 @@ pub(crate) async fn exchange_auth_code<H: HttpClient + ?Sized>(
     code: &str,
     redirect_uri: &str,
     code_verifier: &str,
-) -> Result<DeviceTokenResponse, String> {
+) -> Result<DeviceTokenResponse, AuthError> {
     let params = [
         ("client_id", client_id),
         ("grant_type", "authorization_code"),
@@ -143,7 +151,7 @@ pub(crate) async fn exchange_auth_code<H: HttpClient + ?Sized>(
         ("code_verifier", code_verifier),
     ];
 
-    http.post_form(TOKEN_URL, &params).await
+    Ok(http.post_form(TOKEN_URL, &params).await?)
 }
 
 pub(crate) struct AuthRequest {
@@ -155,7 +163,7 @@ pub(crate) struct AuthRequest {
 pub(crate) fn build_auth_request(
     client_id: &str,
     redirect_uri: &str,
-) -> Result<AuthRequest, String> {
+) -> Result<AuthRequest, AuthError> {
     let state = random_url_safe(16);
     let code_verifier = random_url_safe(64);
     let code_challenge = code_challenge_s256(&code_verifier);
@@ -183,13 +191,13 @@ pub(crate) fn build_auth_request(
 pub(crate) fn parse_auth_callback(
     callback_url: &str,
     expected_state: &str,
-) -> Result<String, String> {
+) -> Result<String, AuthError> {
     let url =
         Url::parse(callback_url).map_err(|err| format!("Invalid auth callback URL: {err}"))?;
     parse_auth_callback_url(&url, expected_state)
 }
 
-fn parse_auth_callback_url(url: &Url, expected_state: &str) -> Result<String, String> {
+fn parse_auth_callback_url(url: &Url, expected_state: &str) -> Result<String, AuthError> {
     let mut params = HashMap::new();
     if let Some(query) = url.query() {
         parse_pairs(query, &mut params);
@@ -203,17 +211,19 @@ fn parse_auth_callback_url(url: &Url, expected_state: &str) -> Result<String, St
             .get("error_description")
             .map(|value| format!(" ({value})"))
             .unwrap_or_default();
-        return Err(format!("Microsoft sign-in failed: {error}{description}"));
+        return Err(format!("Microsoft sign-in failed: {error}{description}").into());
     }
 
     if params.get("state").map(String::as_str) != Some(expected_state) {
-        return Err("Sign-in state did not match. Please try again.".to_string());
+        return Err("Sign-in state did not match. Please try again."
+            .to_string()
+            .into());
     }
 
-    params
+    Ok(params
         .get("code")
         .cloned()
-        .ok_or_else(|| "Missing authorization code in redirect.".to_string())
+        .ok_or_else(|| "Missing authorization code in redirect.".to_string())?)
 }
 
 fn parse_pairs(raw: &str, params: &mut HashMap<String, String>) {

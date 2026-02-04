@@ -1,7 +1,8 @@
 use crate::models::AuthSession;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::http::HttpClient;
+use crate::net::http::HttpClient;
+use super::error::AuthError;
 use super::minecraft;
 use super::ms::DeviceTokenResponse;
 use super::xbox;
@@ -12,7 +13,7 @@ pub(crate) async fn session_from_ms_token<H: HttpClient + ?Sized>(
     ms_access_token: &str,
     refresh_token: Option<String>,
     fallback_refresh_token: Option<String>,
-) -> Result<AuthSession, String> {
+) -> Result<AuthSession, AuthError> {
     let xbl = xbox::authenticate(http, ms_access_token).await?;
     let xsts = xbox::xsts(http, &xbl.token).await?;
     let uhs = xsts
@@ -43,7 +44,7 @@ pub(crate) async fn session_from_refresh<H: HttpClient + ?Sized>(
     client_id: &str,
     refreshed: DeviceTokenResponse,
     fallback_refresh: Option<String>,
-) -> Result<AuthSession, String> {
+) -> Result<AuthSession, AuthError> {
     session_from_ms_token(
         http,
         client_id,

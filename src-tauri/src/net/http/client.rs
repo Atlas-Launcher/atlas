@@ -2,6 +2,15 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::sync::OnceLock;
+
+use super::errors::HttpError;
+
+static CLIENT: OnceLock<Client> = OnceLock::new();
+
+pub fn shared_client() -> &'static Client {
+    CLIENT.get_or_init(|| Client::new())
+}
 
 #[async_trait]
 pub trait HttpClient: Send + Sync {
@@ -9,19 +18,19 @@ pub trait HttpClient: Send + Sync {
         &self,
         url: &str,
         params: &[(&str, &str)],
-    ) -> Result<T, String>;
+    ) -> Result<T, HttpError>;
 
     async fn post_json<T: DeserializeOwned, B: Serialize + Send + Sync>(
         &self,
         url: &str,
         body: &B,
-    ) -> Result<T, String>;
+    ) -> Result<T, HttpError>;
 
     async fn get_json<T: DeserializeOwned>(
         &self,
         url: &str,
         bearer: Option<&str>,
-    ) -> Result<T, String>;
+    ) -> Result<T, HttpError>;
 }
 
 pub struct ReqwestHttpClient {
@@ -31,7 +40,7 @@ pub struct ReqwestHttpClient {
 impl ReqwestHttpClient {
     pub fn new() -> Self {
         Self {
-            client: Client::new(),
+            client: shared_client().clone(),
         }
     }
 }
@@ -42,28 +51,31 @@ impl HttpClient for ReqwestHttpClient {
         &self,
         url: &str,
         params: &[(&str, &str)],
-    ) -> Result<T, String> {
+    ) -> Result<T, HttpError> {
         let response = self
             .client
             .post(url)
             .form(&params)
             .send()
             .await
-            .map_err(|err| format!("Request failed: {err}"))?;
+            .map_err(HttpError::Request)?;
 
         let status = response.status();
         let body = response
             .bytes()
             .await
-            .map_err(|err| format!("Failed to read response: {err}"))?;
+            .map_err(HttpError::Request)?;
         if !status.is_success() {
             let text = String::from_utf8_lossy(&body);
-            return Err(format!("Request failed ({status}): {text}"));
+            return Err(HttpError::Status {
+                status,
+                body: text.to_string(),
+            });
         }
 
-        serde_json::from_slice::<T>(&body).map_err(|err| {
-            let text = String::from_utf8_lossy(&body);
-            format!("Failed to parse response: {err}. Body: {text}")
+        serde_json::from_slice::<T>(&body).map_err(|err| HttpError::Parse {
+            source: err,
+            body: String::from_utf8_lossy(&body).to_string(),
         })
     }
 
@@ -71,28 +83,31 @@ impl HttpClient for ReqwestHttpClient {
         &self,
         url: &str,
         body: &B,
-    ) -> Result<T, String> {
+    ) -> Result<T, HttpError> {
         let response = self
             .client
             .post(url)
             .json(body)
             .send()
             .await
-            .map_err(|err| format!("Request failed: {err}"))?;
+            .map_err(HttpError::Request)?;
 
         let status = response.status();
         let body = response
             .bytes()
             .await
-            .map_err(|err| format!("Failed to read response: {err}"))?;
+            .map_err(HttpError::Request)?;
         if !status.is_success() {
             let text = String::from_utf8_lossy(&body);
-            return Err(format!("Request failed ({status}): {text}"));
+            return Err(HttpError::Status {
+                status,
+                body: text.to_string(),
+            });
         }
 
-        serde_json::from_slice::<T>(&body).map_err(|err| {
-            let text = String::from_utf8_lossy(&body);
-            format!("Failed to parse response: {err}. Body: {text}")
+        serde_json::from_slice::<T>(&body).map_err(|err| HttpError::Parse {
+            source: err,
+            body: String::from_utf8_lossy(&body).to_string(),
         })
     }
 
@@ -100,7 +115,7 @@ impl HttpClient for ReqwestHttpClient {
         &self,
         url: &str,
         bearer: Option<&str>,
-    ) -> Result<T, String> {
+    ) -> Result<T, HttpError> {
         let mut request = self.client.get(url);
         if let Some(token) = bearer {
             request = request.bearer_auth(token);
@@ -109,21 +124,24 @@ impl HttpClient for ReqwestHttpClient {
         let response = request
             .send()
             .await
-            .map_err(|err| format!("Request failed: {err}"))?;
+            .map_err(HttpError::Request)?;
 
         let status = response.status();
         let body = response
             .bytes()
             .await
-            .map_err(|err| format!("Failed to read response: {err}"))?;
+            .map_err(HttpError::Request)?;
         if !status.is_success() {
             let text = String::from_utf8_lossy(&body);
-            return Err(format!("Request failed ({status}): {text}"));
+            return Err(HttpError::Status {
+                status,
+                body: text.to_string(),
+            });
         }
 
-        serde_json::from_slice::<T>(&body).map_err(|err| {
-            let text = String::from_utf8_lossy(&body);
-            format!("Failed to parse response: {err}. Body: {text}")
+        serde_json::from_slice::<T>(&body).map_err(|err| HttpError::Parse {
+            source: err,
+            body: String::from_utf8_lossy(&body).to_string(),
         })
     }
 }

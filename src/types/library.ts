@@ -13,6 +13,8 @@ export interface FabricLoaderVersion {
   stable: boolean;
 }
 
+export type NeoForgeLoaderVersion = string;
+
 export interface ModEntry {
   fileName: string;
   displayName: string;
