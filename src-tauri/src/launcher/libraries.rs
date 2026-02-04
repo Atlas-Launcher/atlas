@@ -59,6 +59,43 @@ pub async fn sync_libraries(
                     }
                 }
             }
+        } else if let Some(base_url) = &library.url {
+            let mut base = base_url.trim().to_string();
+            if !base.ends_with('/') {
+                base.push('/');
+            }
+            let artifact_rel = library_path_from_name(&library.name);
+            let artifact_url = format!("{base}{artifact_rel}");
+            let artifact_path = libraries_dir.join(&artifact_rel);
+            library_paths.push(artifact_path.clone());
+            downloads.push((
+                super::manifest::Download {
+                    path: Some(artifact_rel.clone()),
+                    url: artifact_url,
+                    sha1: None,
+                    size: None,
+                },
+                artifact_path,
+            ));
+
+            if let Some(natives) = &library.natives {
+                if let Some(classifier) = natives.get(os_key) {
+                    let classifier = classifier.replace("${arch}", arch);
+                    let native_rel = library_path_from_parts(&library.name, Some(&classifier));
+                    let native_url = format!("{base}{native_rel}");
+                    let native_path = libraries_dir.join(&native_rel);
+                    native_paths.push(native_path.clone());
+                    downloads.push((
+                        super::manifest::Download {
+                            path: Some(native_rel.clone()),
+                            url: native_url,
+                            sha1: None,
+                            size: None,
+                        },
+                        native_path,
+                    ));
+                }
+            }
         }
     }
 
@@ -148,6 +185,10 @@ pub fn build_classpath(libraries: &[PathBuf], client_jar: &Path) -> String {
 }
 
 pub(crate) fn library_path_from_name(name: &str) -> String {
+    library_path_from_parts(name, None)
+}
+
+pub(crate) fn library_path_from_parts(name: &str, classifier: Option<&str>) -> String {
     let parts: Vec<&str> = name.split(':').collect();
     if parts.len() < 3 {
         return name.replace(':', "/");
@@ -155,7 +196,7 @@ pub(crate) fn library_path_from_name(name: &str) -> String {
     let group = parts[0].replace('.', "/");
     let artifact = parts[1];
     let version = parts[2];
-    let classifier = parts.get(3).copied();
+    let classifier = classifier.or_else(|| parts.get(3).copied());
 
     let filename = if let Some(classifier) = classifier {
         format!("{}-{}-{}.jar", artifact, version, classifier)
