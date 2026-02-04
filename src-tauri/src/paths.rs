@@ -1,23 +1,15 @@
 use std::path::{Path, PathBuf};
 
 pub fn default_game_dir() -> PathBuf {
-  if cfg!(target_os = "windows") {
-    if let Ok(appdata) = std::env::var("APPDATA") {
-      return PathBuf::from(appdata).join(".minecraft");
-    }
-  }
-
-  if cfg!(target_os = "macos") {
-    if let Some(home) = dirs::home_dir() {
-      return home.join("Library").join("Application Support").join("minecraft");
-    }
+  if let Some(data) = dirs::data_dir() {
+    return data.join("mc-launcher").join("game");
   }
 
   if let Some(home) = dirs::home_dir() {
-    return home.join(".minecraft");
+    return home.join(".mc-launcher").join("game");
   }
 
-  PathBuf::from(".minecraft")
+  PathBuf::from("mc-launcher-game")
 }
 
 pub fn ensure_dir(path: &Path) -> Result<(), String> {
@@ -33,4 +25,18 @@ pub fn normalize_path(path: &str) -> PathBuf {
     return default_game_dir();
   }
   PathBuf::from(path)
+}
+
+pub fn auth_store_dir() -> Result<PathBuf, String> {
+  if let Some(base) = dirs::data_dir() {
+    return Ok(base.join("mc-launcher"));
+  }
+  if let Some(home) = dirs::home_dir() {
+    return Ok(home.join(".mc-launcher"));
+  }
+  Err("Unable to resolve a writable data directory".to_string())
+}
+
+pub fn auth_store_path() -> Result<PathBuf, String> {
+  Ok(auth_store_dir()?.join("auth.json"))
 }

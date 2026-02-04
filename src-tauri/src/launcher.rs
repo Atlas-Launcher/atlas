@@ -13,6 +13,8 @@ use tauri::Window;
 use zip::ZipArchive;
 
 const VERSION_MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/version_manifest.json";
+const JAVA_RUNTIME_MANIFEST_URL: &str =
+  "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
 
 #[derive(Debug, Deserialize, Serialize)]
 struct VersionManifest {
@@ -40,14 +42,18 @@ struct VersionData {
   id: String,
   #[serde(rename = "type")]
   kind: String,
-  mainClass: String,
+  #[serde(rename = "mainClass")]
+  main_class: String,
   #[serde(default)]
   arguments: Option<Arguments>,
-  #[serde(default)]
-  minecraftArguments: Option<String>,
-  assetIndex: AssetIndex,
+  #[serde(default, rename = "minecraftArguments")]
+  minecraft_arguments: Option<String>,
+  #[serde(rename = "assetIndex")]
+  asset_index: AssetIndex,
   downloads: VersionDownloads,
-  libraries: Vec<Library>
+  libraries: Vec<Library>,
+  #[serde(default, rename = "javaVersion")]
+  java_version: Option<JavaVersion>
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -74,6 +80,13 @@ struct AssetIndex {
   sha1: Option<String>,
   #[serde(default)]
   size: Option<u64>
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct JavaVersion {
+  component: String,
+  #[serde(rename = "majorVersion")]
+  major_version: u32
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -150,11 +163,54 @@ struct RuleOs {
   name: Option<String>
 }
 
-pub async fn launch_minecraft(
+#[derive(Debug, Deserialize)]
+struct JavaRuntimeManifest {
+  #[serde(flatten)]
+  platforms: HashMap<String, HashMap<String, JavaRuntimeEntry>>
+}
+
+#[derive(Debug, Deserialize)]
+struct JavaRuntimeEntry {
+  manifest: Download
+}
+
+#[derive(Debug, Deserialize)]
+struct JavaRuntimeFiles {
+  files: HashMap<String, JavaRuntimeFile>
+}
+
+#[derive(Debug, Deserialize)]
+struct JavaRuntimeFile {
+  #[serde(rename = "type")]
+  kind: String,
+  #[serde(default)]
+  executable: bool,
+  #[serde(default)]
+  downloads: Option<JavaRuntimeDownloads>,
+  #[serde(default)]
+  target: Option<String>
+}
+
+#[derive(Debug, Deserialize)]
+struct JavaRuntimeDownloads {
+  #[serde(default)]
+  raw: Option<Download>
+}
+
+struct PreparedMinecraft {
+  game_dir: PathBuf,
+  assets_dir: PathBuf,
+  version_data: VersionData,
+  client_jar_path: PathBuf,
+  library_paths: Vec<PathBuf>,
+  natives_dir: PathBuf,
+  java_path: String
+}
+
+async fn prepare_minecraft(
   window: &Window,
-  options: &LaunchOptions,
-  session: &AuthSession
-) -> Result<(), String> {
+  options: &LaunchOptions
+) -> Result<PreparedMinecraft, String> {
   let client = Client::new();
   let game_dir = normalize_path(&options.game_dir);
   let versions_dir = game_dir.join("versions");
@@ -216,12 +272,12 @@ pub async fn launch_minecraft(
   emit(window, "assets", "Syncing assets", None, None)?;
   let assets_index_path = assets_dir
     .join("indexes")
-    .join(format!("{}.json", version_data.assetIndex.id));
+    .join(format!("{}.json", version_data.asset_index.id));
   download_if_needed(&client, &Download {
     path: None,
-    url: version_data.assetIndex.url.clone(),
-    sha1: version_data.assetIndex.sha1.clone(),
-    size: version_data.assetIndex.size
+    url: version_data.asset_index.url.clone(),
+    sha1: version_data.asset_index.sha1.clone(),
+    size: version_data.asset_index.size
   }, &assets_index_path).await?;
 
   let assets_index_data: AssetIndexData = serde_json::from_slice(
@@ -252,6 +308,34 @@ pub async fn launch_minecraft(
     }
   }
 
+  let java_path =
+    resolve_java_path(window, &game_dir, &version_data, &options.java_path).await?;
+
+  Ok(PreparedMinecraft {
+    game_dir,
+    assets_dir,
+    version_data,
+    client_jar_path,
+    library_paths,
+    natives_dir,
+    java_path
+  })
+}
+
+pub async fn launch_minecraft(
+  window: &Window,
+  options: &LaunchOptions,
+  session: &AuthSession
+) -> Result<(), String> {
+  let prepared = prepare_minecraft(window, options).await?;
+  let game_dir = prepared.game_dir;
+  let assets_dir = prepared.assets_dir;
+  let version_data = prepared.version_data;
+  let client_jar_path = prepared.client_jar_path;
+  let library_paths = prepared.library_paths;
+  let natives_dir = prepared.natives_dir;
+  let java_path = prepared.java_path;
+
   emit(window, "launch", "Preparing JVM arguments", None, None)?;
   let classpath = build_classpath(&library_paths, &client_jar_path);
 
@@ -260,7 +344,7 @@ pub async fn launch_minecraft(
   replace_map.insert("version_name", version_data.id.clone());
   replace_map.insert("game_directory", game_dir.to_string_lossy().to_string());
   replace_map.insert("assets_root", assets_dir.to_string_lossy().to_string());
-  replace_map.insert("assets_index_name", version_data.assetIndex.id.clone());
+  replace_map.insert("assets_index_name", version_data.asset_index.id.clone());
   replace_map.insert("auth_uuid", session.profile.id.clone());
   replace_map.insert("auth_access_token", session.access_token.clone());
   replace_map.insert("user_type", "msa".to_string());
@@ -270,7 +354,7 @@ pub async fn launch_minecraft(
   replace_map.insert("launcher_name", "mc-launcher".to_string());
   replace_map.insert("launcher_version", env!("CARGO_PKG_VERSION").to_string());
 
-  let (mut jvm_args, mut game_args) = build_arguments(&version_data, &replace_map)?;
+  let (mut jvm_args, game_args) = build_arguments(&version_data, &replace_map)?;
 
   let memory = options.memory_mb.max(1024);
   let mem_arg = format!("-Xmx{}M", memory);
@@ -282,17 +366,11 @@ pub async fn launch_minecraft(
   }
 
   emit(window, "launch", "Spawning Minecraft", None, None)?;
-  let java_path = if options.java_path.trim().is_empty() {
-    "java".to_string()
-  } else {
-    options.java_path.clone()
-  };
-
   let mut command = Command::new(java_path);
   command
     .current_dir(&game_dir)
     .args(&jvm_args)
-    .arg(&version_data.mainClass)
+    .arg(&version_data.main_class)
     .args(&game_args);
 
   command
@@ -300,6 +378,15 @@ pub async fn launch_minecraft(
     .map_err(|err| format!("Failed to launch Minecraft: {err}"))?;
 
   emit(window, "launch", "Minecraft process started", None, None)?;
+  Ok(())
+}
+
+pub async fn download_minecraft_files(
+  window: &Window,
+  options: &LaunchOptions
+) -> Result<(), String> {
+  prepare_minecraft(window, options).await?;
+  emit(window, "download", "Minecraft files are ready", None, None)?;
   Ok(())
 }
 
@@ -522,7 +609,7 @@ fn build_arguments(
   }
 
   let raw = version
-    .minecraftArguments
+    .minecraft_arguments
     .clone()
     .ok_or_else(|| "Missing arguments in version metadata".to_string())?;
   let game = raw
@@ -623,4 +710,215 @@ fn current_arch() -> &'static str {
   } else {
     "64"
   }
+}
+
+fn runtime_os_key() -> Result<&'static str, String> {
+  if cfg!(target_os = "windows") {
+    return Ok(match current_arch() {
+      "64" => "windows-x64",
+      "32" => "windows-x86",
+      "arm64" => "windows-arm64",
+      _ => "windows-x64"
+    });
+  }
+  if cfg!(target_os = "macos") {
+    return Ok(match current_arch() {
+      "arm64" => "mac-os-arm64",
+      _ => "mac-os"
+    });
+  }
+  if cfg!(target_os = "linux") {
+    return Ok(match current_arch() {
+      "32" => "linux-i386",
+      "arm64" => "linux-arm64",
+      _ => "linux"
+    });
+  }
+  Err("Unsupported OS for Java runtime downloads.".to_string())
+}
+
+async fn resolve_java_path(
+  window: &Window,
+  game_dir: &Path,
+  version_data: &VersionData,
+  java_path_override: &str
+) -> Result<String, String> {
+  if !java_path_override.trim().is_empty() && java_path_override.trim() != "java" {
+    return Ok(java_path_override.trim().to_string());
+  }
+  let component = version_data
+    .java_version
+    .as_ref()
+    .map(|java| java.component.clone())
+    .unwrap_or_else(|| "jre-legacy".to_string());
+
+  ensure_java_runtime(window, game_dir, &component).await
+}
+
+async fn ensure_java_runtime(
+  window: &Window,
+  game_dir: &Path,
+  component: &str
+) -> Result<String, String> {
+  let client = Client::new();
+  let os_key = runtime_os_key()?;
+
+  emit(
+    window,
+    "java",
+    format!("Checking Java runtime ({component})"),
+    None,
+    None
+  )?;
+
+  let manifest: JavaRuntimeManifest = fetch_json(&client, JAVA_RUNTIME_MANIFEST_URL).await?;
+  let platform = manifest
+    .platforms
+    .get(os_key)
+    .ok_or_else(|| format!("Java runtime platform {os_key} not found"))?;
+  let entry = platform
+    .get(component)
+    .ok_or_else(|| format!("Java runtime component {component} not found"))?;
+
+  emit(
+    window,
+    "java",
+    format!("Downloading Java runtime ({component})"),
+    None,
+    None
+  )?;
+
+  let runtime_manifest: JavaRuntimeFiles = fetch_json(&client, &entry.manifest.url).await?;
+  let runtime_base = game_dir.join("runtime").join(component).join(os_key);
+  let runtime_home = runtime_base.join(component);
+  ensure_dir(&runtime_home)?;
+
+  let total = runtime_manifest.files.len() as u64;
+  let mut index = 0u64;
+
+  for (relative_path, file) in runtime_manifest.files.iter() {
+    index += 1;
+    let out_path = runtime_home.join(relative_path);
+
+    match file.kind.as_str() {
+      "directory" => {
+        ensure_dir(&out_path)?;
+      }
+      "file" => {
+        let download = file
+          .downloads
+          .as_ref()
+          .and_then(|d| d.raw.as_ref())
+          .ok_or_else(|| {
+            format!("Missing raw download for Java runtime file {relative_path}")
+          })?;
+        download_if_needed(&client, download, &out_path).await?;
+        if file.executable {
+          set_executable(&out_path)?;
+        }
+      }
+      "link" => {
+        if let Some(target) = &file.target {
+          let target_path = runtime_home.join(target);
+          create_runtime_link(&target_path, &out_path)?;
+        }
+      }
+      _ => {}
+    }
+
+    if index % 200 == 0 || index == total {
+      emit(
+        window,
+        "java",
+        format!("Java runtime files {index}/{total}"),
+        Some(index),
+        Some(total)
+      )?;
+    }
+  }
+
+  let java_path = java_binary_path(&runtime_home);
+  if !java_path.exists() {
+    return Err("Java runtime download completed but java binary was not found.".to_string());
+  }
+
+  Ok(java_path.to_string_lossy().to_string())
+}
+
+fn java_binary_path(runtime_home: &Path) -> PathBuf {
+  let bin_dir = runtime_home.join("bin");
+  if cfg!(target_os = "windows") {
+    let javaw = bin_dir.join("javaw.exe");
+    if javaw.exists() {
+      return javaw;
+    }
+    return bin_dir.join("java.exe");
+  }
+  bin_dir.join("java")
+}
+
+fn set_executable(path: &Path) -> Result<(), String> {
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = fs::metadata(path)
+      .map_err(|err| format!("Failed to read permissions: {err}"))?
+      .permissions();
+    perms.set_mode(perms.mode() | 0o111);
+    fs::set_permissions(path, perms)
+      .map_err(|err| format!("Failed to set executable permission: {err}"))?;
+  }
+  Ok(())
+}
+
+fn create_runtime_link(target: &Path, link: &Path) -> Result<(), String> {
+  if link.exists() {
+    return Ok(());
+  }
+  if let Some(parent) = link.parent() {
+    ensure_dir(parent)?;
+  }
+  if !target.exists() {
+    return Err(format!(
+      "Java runtime link target missing: {}",
+      target.display()
+    ));
+  }
+
+  if try_create_symlink(target, link).is_ok() {
+    return Ok(());
+  }
+
+  if target.is_file() {
+    fs::copy(target, link)
+      .map_err(|err| format!("Failed to copy Java runtime link: {err}"))?;
+    return Ok(());
+  }
+
+  if target.is_dir() {
+    ensure_dir(link)?;
+  }
+  Ok(())
+}
+
+fn try_create_symlink(target: &Path, link: &Path) -> Result<(), String> {
+  #[cfg(unix)]
+  {
+    std::os::unix::fs::symlink(target, link)
+      .map_err(|err| format!("Failed to create symlink: {err}"))?;
+    return Ok(());
+  }
+  #[cfg(windows)]
+  {
+    if target.is_dir() {
+      std::os::windows::fs::symlink_dir(target, link)
+        .map_err(|err| format!("Failed to create symlink: {err}"))?;
+    } else {
+      std::os::windows::fs::symlink_file(target, link)
+        .map_err(|err| format!("Failed to create symlink: {err}"))?;
+    }
+    return Ok(());
+  }
+  #[allow(unreachable_code)]
+  Err("Symlinks are not supported on this platform.".to_string())
 }

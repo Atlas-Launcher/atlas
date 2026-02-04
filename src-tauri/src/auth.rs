@@ -1,9 +1,11 @@
 use crate::models::{AuthSession, DeviceCodeResponse, Profile};
+use crate::paths::{auth_store_path, ensure_dir, file_exists};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::time::{Duration, Instant};
+use std::fs;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::time::sleep;
 
 const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
@@ -17,7 +19,6 @@ const MC_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profil
 #[derive(Debug, Deserialize)]
 struct DeviceTokenResponse {
   access_token: String,
-  #[allow(dead_code)]
   refresh_token: Option<String>,
   #[allow(dead_code)]
   expires_in: u64,
@@ -53,7 +54,6 @@ struct XboxUserClaim {
 #[derive(Debug, Deserialize)]
 struct MinecraftLoginResponse {
   access_token: String,
-  #[allow(dead_code)]
   expires_in: u64
 }
 
@@ -90,23 +90,45 @@ pub async fn start_device_code(client_id: &str) -> Result<DeviceCodeResponse, St
 
 pub async fn complete_device_code(client_id: &str, device_code: &str) -> Result<AuthSession, String> {
   let token = poll_device_token(client_id, device_code).await?;
-  let xbl = xbox_authenticate(&token.access_token).await?;
-  let xsts = xbox_xsts(&xbl.Token).await?;
-  let uhs = xsts
-    .DisplayClaims
-    .xui
-    .get(0)
-    .map(|claim| claim.uhs.clone())
-    .ok_or_else(|| "Missing Xbox user hash".to_string())?;
-  let mc = minecraft_login(&xsts.Token, &uhs).await?;
+  let refresh_token = token.refresh_token.clone();
+  session_from_ms_token(client_id, &token.access_token, refresh_token, None).await
+}
 
-  let profile = minecraft_profile(&mc.access_token).await?;
-  verify_entitlements(&mc.access_token).await?;
+pub fn load_session() -> Result<Option<AuthSession>, String> {
+  let path = auth_store_path()?;
+  if !file_exists(&path) {
+    return Ok(None);
+  }
+  let bytes = fs::read(&path).map_err(|err| format!("Failed to read auth session: {err}"))?;
+  let session = serde_json::from_slice::<AuthSession>(&bytes)
+    .map_err(|err| format!("Failed to parse auth session: {err}"))?;
+  Ok(Some(session))
+}
 
-  Ok(AuthSession {
-    access_token: mc.access_token,
-    profile
-  })
+pub fn save_session(session: &AuthSession) -> Result<(), String> {
+  let path = auth_store_path()?;
+  if let Some(parent) = path.parent() {
+    ensure_dir(parent)?;
+  }
+  let payload =
+    serde_json::to_vec_pretty(session).map_err(|err| format!("Failed to serialize auth: {err}"))?;
+  fs::write(&path, payload).map_err(|err| format!("Failed to write auth session: {err}"))?;
+  Ok(())
+}
+
+pub fn clear_session() -> Result<(), String> {
+  let path = auth_store_path()?;
+  if file_exists(&path) {
+    fs::remove_file(&path).map_err(|err| format!("Failed to remove auth session: {err}"))?;
+  }
+  Ok(())
+}
+
+pub async fn ensure_fresh_session(session: AuthSession) -> Result<AuthSession, String> {
+  if !needs_refresh(&session) {
+    return Ok(session);
+  }
+  refresh_session(&session).await
 }
 
 async fn poll_device_token(client_id: &str, device_code: &str) -> Result<DeviceTokenResponse, String> {
@@ -165,6 +187,95 @@ async fn poll_device_token(client_id: &str, device_code: &str) -> Result<DeviceT
       }
     }
   }
+}
+
+fn unix_timestamp() -> u64 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_secs()
+}
+
+fn needs_refresh(session: &AuthSession) -> bool {
+  let now = unix_timestamp();
+  if session.access_token_expires_at == 0 {
+    return true;
+  }
+  now + 300 >= session.access_token_expires_at
+}
+
+async fn refresh_session(session: &AuthSession) -> Result<AuthSession, String> {
+  let refresh_token = session
+    .refresh_token
+    .clone()
+    .ok_or_else(|| "Missing refresh token; please sign in again.".to_string())?;
+  let refreshed = refresh_ms_token(&session.client_id, &refresh_token).await?;
+  let fallback_refresh = refreshed.refresh_token.clone().or(Some(refresh_token));
+  session_from_ms_token(
+    &session.client_id,
+    &refreshed.access_token,
+    refreshed.refresh_token,
+    fallback_refresh
+  )
+  .await
+}
+
+async fn refresh_ms_token(client_id: &str, refresh_token: &str) -> Result<DeviceTokenResponse, String> {
+  let client = Client::new();
+  let params = [
+    ("client_id", client_id),
+    ("grant_type", "refresh_token"),
+    ("refresh_token", refresh_token)
+  ];
+
+  let response = client
+    .post(TOKEN_URL)
+    .form(&params)
+    .send()
+    .await
+    .map_err(|err| format!("Refresh token request failed: {err}"))?;
+
+  if !response.status().is_success() {
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    return Err(format!("Refresh token request failed ({status}): {text}"));
+  }
+
+  response
+    .json::<DeviceTokenResponse>()
+    .await
+    .map_err(|err| format!("Failed to parse refresh response: {err}"))
+}
+
+async fn session_from_ms_token(
+  client_id: &str,
+  ms_access_token: &str,
+  refresh_token: Option<String>,
+  fallback_refresh_token: Option<String>
+) -> Result<AuthSession, String> {
+  let xbl = xbox_authenticate(ms_access_token).await?;
+  let xsts = xbox_xsts(&xbl.Token).await?;
+  let uhs = xsts
+    .DisplayClaims
+    .xui
+    .get(0)
+    .map(|claim| claim.uhs.clone())
+    .ok_or_else(|| "Missing Xbox user hash".to_string())?;
+  let mc = minecraft_login(&xsts.Token, &uhs).await?;
+
+  let profile = minecraft_profile(&mc.access_token).await?;
+  verify_entitlements(&mc.access_token).await?;
+  let refresh_token = refresh_token
+    .or(fallback_refresh_token)
+    .ok_or_else(|| "Missing refresh token from Microsoft login.".to_string())?;
+
+  Ok(AuthSession {
+    access_token: mc.access_token,
+    access_token_expires_at: unix_timestamp().saturating_add(mc.expires_in),
+    refresh_token: Some(refresh_token),
+    client_id: client_id.to_string(),
+    profile
+  })
 }
 
 async fn xbox_authenticate(ms_access_token: &str) -> Result<XboxAuthResponse, String> {
