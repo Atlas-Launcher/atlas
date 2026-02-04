@@ -3,6 +3,10 @@ pnpm-lock.yaml
 .DS_Store
 dist
 src-tauri/target
+/target
 # optional local overrides
 .env
 .env.local
+/.turbo/
+/Cargo.lock
+/crates/protocol/Cargo.lock

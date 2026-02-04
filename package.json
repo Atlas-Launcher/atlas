@@ -1,38 +1,15 @@
 {
-  "name": "atlas",
+  "name": "atlas-monorepo",
   "private": true,
-  "version": "0.1.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tauri:dev": "tauri dev",
-    "tauri:dev:device-code": "VITE_AUTH_FLOW=device_code tauri dev",
-    "tauri:build": "tauri build"
-  },
-  "dependencies": {
-    "@tanstack/vue-table": "^8.21.3",
-    "@tauri-apps/api": "^2.0.0",
-    "@tauri-apps/plugin-deep-link": "^2.0.0",
-    "@tauri-apps/plugin-opener": "^2.0.0",
-    "@vueuse/core": "^14.2.0",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "^2.1.0",
-    "lucide-vue-next": "^0.563.0",
-    "reka-ui": "^2.8.0",
-    "tailwind-merge": "^2.5.4",
-    "vue": "^3.4.38"
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "tauri:build": "turbo run tauri:build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0",
-    "@types/node": "^25.2.0",
-    "@vitejs/plugin-vue": "^5.1.2",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.45",
-    "tailwindcss": "^3.4.10",
-    "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.6.2",
-    "vite": "^5.4.1"
-  }
+    "turbo": "^2.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
 }
