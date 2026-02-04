@@ -14,14 +14,14 @@ pub(crate) async fn session_from_ms_token<H: HttpClient + ?Sized>(
     fallback_refresh_token: Option<String>,
 ) -> Result<AuthSession, String> {
     let xbl = xbox::authenticate(http, ms_access_token).await?;
-    let xsts = xbox::xsts(http, &xbl.Token).await?;
+    let xsts = xbox::xsts(http, &xbl.token).await?;
     let uhs = xsts
-        .DisplayClaims
+        .display_claims
         .xui
         .get(0)
         .map(|claim| claim.uhs.clone())
         .ok_or_else(|| "Missing Xbox user hash".to_string())?;
-    let mc = minecraft::login(http, &xsts.Token, &uhs).await?;
+    let mc = minecraft::login(http, &xsts.token, &uhs).await?;
 
     let profile = minecraft::profile(http, &mc.access_token).await?;
     minecraft::verify_entitlements(http, &mc.access_token).await?;
