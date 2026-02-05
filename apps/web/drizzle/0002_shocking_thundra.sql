@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS "oauthConsent" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "oauth_application_client_id_unique" ON "oauthApplication" USING btree ("client_id");--> statement-breakpoint
 DO $$ BEGIN
  ALTER TABLE "oauthAccessToken" ADD CONSTRAINT "oauthAccessToken_client_id_oauthApplication_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauthApplication"("client_id") ON DELETE cascade ON UPDATE no action;
 EXCEPTION
@@ -78,7 +79,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS "oauth_access_token_access_token_unique" ON "o
 CREATE UNIQUE INDEX IF NOT EXISTS "oauth_access_token_refresh_token_unique" ON "oauthAccessToken" USING btree ("refresh_token");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "oauth_access_token_client_id_idx" ON "oauthAccessToken" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "oauth_access_token_user_id_idx" ON "oauthAccessToken" USING btree ("user_id");--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "oauth_application_client_id_unique" ON "oauthApplication" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "oauth_application_user_id_idx" ON "oauthApplication" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "oauth_consent_client_id_idx" ON "oauthConsent" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "oauth_consent_user_id_idx" ON "oauthConsent" USING btree ("user_id");
