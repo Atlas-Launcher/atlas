@@ -1,10 +1,13 @@
 mod error;
 
 use crate::launcher::manifest::VersionManifest;
-use crate::models::{FabricLoaderVersion, ModEntry, VersionManifestSummary, VersionSummary};
-use crate::net::http::{fetch_json_shared, shared_client};
+use crate::models::{
+    AtlasRemotePack, FabricLoaderVersion, ModEntry, VersionManifestSummary, VersionSummary,
+};
+use crate::net::http::{fetch_json_shared, shared_client, HttpClient, ReqwestHttpClient};
 use crate::paths;
 use error::LibraryError;
+use serde::Deserialize;
 use std::fs;
 use std::path::Component;
 
@@ -35,6 +38,27 @@ pub async fn fetch_fabric_loader_versions(
 pub async fn fetch_neoforge_loader_versions() -> Result<Vec<String>, LibraryError> {
     let client = shared_client();
     Ok(crate::launcher::loaders::neoforge::fetch_loader_versions(client).await?)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AtlasRemotePackResponse {
+    packs: Vec<AtlasRemotePack>,
+}
+
+pub async fn fetch_atlas_remote_packs(
+    atlas_hub_url: &str,
+    access_token: &str,
+) -> Result<Vec<AtlasRemotePack>, LibraryError> {
+    let endpoint = format!(
+        "{}/api/launcher/packs",
+        atlas_hub_url.trim_end_matches('/')
+    );
+    let http = ReqwestHttpClient::new();
+    let response = http
+        .get_json::<AtlasRemotePackResponse>(&endpoint, Some(access_token))
+        .await?;
+    Ok(response.packs)
 }
 
 pub fn list_installed_versions(game_dir: &str) -> Result<Vec<String>, LibraryError> {
@@ -150,6 +174,41 @@ pub fn delete_mod(game_dir: &str, file_name: &str) -> Result<(), LibraryError> {
         return Ok(());
     }
     fs::remove_file(&path).map_err(|err| format!("Failed to delete mod: {err}"))?;
+    Ok(())
+}
+
+pub fn uninstall_instance_data(game_dir: &str) -> Result<(), LibraryError> {
+    let trimmed = game_dir.trim();
+    if trimmed.is_empty() {
+        return Err("Game directory is required.".to_string().into());
+    }
+
+    let base_dir = paths::normalize_path(trimmed);
+    if !base_dir.exists() {
+        return Ok(());
+    }
+
+    let segments: Vec<String> = base_dir
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(value) => Some(value.to_string_lossy().to_string().to_lowercase()),
+            _ => None,
+        })
+        .collect();
+
+    let in_instances_dir = segments
+        .iter()
+        .rposition(|segment| segment == "instances")
+        .is_some_and(|index| index + 1 < segments.len());
+    if !in_instances_dir {
+        return Err(
+            "Refusing to uninstall outside the launcher instances directory."
+                .to_string()
+                .into(),
+        );
+    }
+
+    fs::remove_dir_all(&base_dir).map_err(|err| format!("Failed to remove instance data: {err}"))?;
     Ok(())
 }
 

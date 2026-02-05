@@ -20,6 +20,15 @@ pub struct Profile {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AtlasProfile {
+    pub id: String,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuthSession {
     pub access_token: String,
     pub profile: Profile,
@@ -29,4 +38,17 @@ pub struct AuthSession {
     pub access_token_expires_at: u64,
     #[serde(default)]
     pub client_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AtlasSession {
+    pub access_token: String,
+    pub profile: AtlasProfile,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+    #[serde(default)]
+    pub access_token_expires_at: u64,
+    #[serde(default)]
+    pub client_id: String,
+    pub auth_base_url: String,
 }

@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "select", id: string): void;
   (event: "create"): void;
+  (event: "refresh-packs"): void;
 }>();
 </script>
 
@@ -21,5 +22,6 @@ const emit = defineEmits<{
     :working="props.working"
     @select="emit('select', $event)"
     @create="emit('create')"
+    @refresh-packs="emit('refresh-packs')"
   />
 </template>

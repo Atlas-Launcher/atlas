@@ -1,18 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
 import type { Profile } from "@/types/auth";
-import type { InstanceConfig } from "@/types/settings";
+import type { AppSettings, InstanceConfig } from "@/types/settings";
 import type { LaunchOptions } from "@/types/launch";
 
 interface LauncherDeps {
   profile: Ref<Profile | null>;
   instance: Ref<InstanceConfig | null>;
+  settings: Ref<AppSettings>;
   setStatus: (message: string) => void;
   setProgress: (value: number) => void;
   run: <T>(task: () => Promise<T>) => Promise<T | undefined>;
 }
 
-export function useLauncher({ profile, instance, setStatus, setProgress, run }: LauncherDeps) {
+export function useLauncher({ profile, instance, settings, setStatus, setProgress, run }: LauncherDeps) {
   function buildOptions(): LaunchOptions | null {
     const active = instance.value;
     if (!active) {
@@ -28,10 +29,18 @@ export function useLauncher({ profile, instance, setStatus, setProgress, run }: 
       setStatus("Set a NeoForge loader version before launching.");
       return null;
     }
+    const defaultMemory = Math.max(1024, settings.value.defaultMemoryMb ?? 4096);
+    const memoryMb =
+      typeof active.memoryMb === "number" && Number.isFinite(active.memoryMb)
+        ? Math.max(1024, Math.round(active.memoryMb))
+        : defaultMemory;
+    const jvmArgs = (active.jvmArgs ?? "").trim() || (settings.value.defaultJvmArgs ?? "");
+
     return {
       gameDir: active.gameDir ?? "",
       javaPath: active.javaPath ?? "",
-      memoryMb: active.memoryMb ?? 4096,
+      memoryMb,
+      jvmArgs,
       version: active.version ?? null,
       loader
     };

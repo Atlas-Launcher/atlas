@@ -24,6 +24,14 @@ pub fn build_arguments(
     Ok((Vec::new(), game))
 }
 
+pub fn split_jvm_args(raw: &str) -> Vec<String> {
+    raw.split_whitespace()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
+
 fn expand_args(args: &[Argument], replacements: &HashMap<&str, String>) -> Vec<String> {
     let mut expanded = Vec::new();
     for arg in args {

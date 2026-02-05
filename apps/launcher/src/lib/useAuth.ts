@@ -2,7 +2,7 @@ import { ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { AuthFlow, DeviceCodeResponse, Profile } from "@/types/auth";
+import type { AtlasProfile, AuthFlow, DeviceCodeResponse, Profile } from "@/types/auth";
 
 interface AuthDeps {
   setStatus: (message: string) => void;
@@ -14,12 +14,33 @@ function resolveAuthFlow(value: string): AuthFlow {
   return value === "device_code" ? "device_code" : "deeplink";
 }
 
+function resolveDeepLinkTarget(url: string): "microsoft" | "atlas" | null {
+  try {
+    const parsed = new URL(url);
+    const target = `${parsed.hostname}${parsed.pathname}`.toLowerCase();
+    if (target.includes("signin")) {
+      return "atlas";
+    }
+    if (target.includes("auth")) {
+      return "microsoft";
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function atlasIdentity(profile: AtlasProfile): string {
+  return profile.name?.trim() || profile.email?.trim() || profile.id;
+}
+
 export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   const authFlow = resolveAuthFlow((import.meta.env.VITE_AUTH_FLOW ?? "deeplink").toLowerCase());
   const deviceCode = ref<DeviceCodeResponse | null>(null);
   const pendingDeeplink = ref<string | null>(null);
-  const manualCallbackUrl = ref("");
   const profile = ref<Profile | null>(null);
+  const atlasProfile = ref<AtlasProfile | null>(null);
+  const atlasPendingDeeplink = ref<string | null>(null);
 
   async function restoreSession() {
     try {
@@ -33,28 +54,72 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
     }
   }
 
-  async function initDeepLink() {
-    if (authFlow === "device_code") {
-      return;
-    }
+  async function restoreAtlasSession() {
     try {
-      const current = await getCurrent();
-      if (current && current.length > 0) {
-        pendingDeeplink.value = current[0];
-        await finishDeeplinkLogin(current[0]);
+      const restored = await invoke<AtlasProfile | null>("restore_atlas_session");
+      if (restored) {
+        atlasProfile.value = restored;
+        setStatus(`Signed in to Atlas Hub as ${atlasIdentity(restored)}.`);
       }
     } catch (err) {
+      pushLog(`Failed to restore Atlas session: ${String(err)}`);
+    }
+  }
+
+  async function restoreSessions() {
+    await restoreSession();
+    await restoreAtlasSession();
+  }
+
+  async function currentDeepLinkFor(
+    target: "microsoft" | "atlas"
+  ): Promise<string | null> {
+    try {
+      const current = await getCurrent();
+      if (!current || current.length === 0) {
+        return null;
+      }
+      return current.find((entry) => resolveDeepLinkTarget(entry) === target) ?? null;
+    } catch (err) {
       pushLog(`Failed to read auth redirect: ${String(err)}`);
+      return null;
+    }
+  }
+
+  function handleDeepLink(url: string) {
+    const target = resolveDeepLinkTarget(url);
+    if (target === "atlas") {
+      atlasPendingDeeplink.value = url;
+      pushLog(`Atlas auth redirect received: ${url}`);
+      void finishAtlasLogin(url);
+      return;
+    }
+    if (target === "microsoft" && authFlow !== "device_code") {
+      pendingDeeplink.value = url;
+      pushLog(`Microsoft auth redirect received: ${url}`);
+      void finishDeeplinkLogin(url);
+    }
+  }
+
+  async function initDeepLink() {
+    const currentMicrosoft = await currentDeepLinkFor("microsoft");
+    if (currentMicrosoft && authFlow !== "device_code") {
+      pendingDeeplink.value = currentMicrosoft;
+      await finishDeeplinkLogin(currentMicrosoft);
+    }
+    const currentAtlas = await currentDeepLinkFor("atlas");
+    if (currentAtlas) {
+      atlasPendingDeeplink.value = currentAtlas;
+      await finishAtlasLogin(currentAtlas);
     }
 
     await onOpenUrl((urls) => {
       if (!urls || urls.length === 0) {
         return;
       }
-      const url = urls[0];
-      pendingDeeplink.value = url;
-      pushLog(`Auth redirect received: ${url}`);
-      void finishDeeplinkLogin(url);
+      for (const url of urls) {
+        handleDeepLink(url);
+      }
     });
   }
 
@@ -116,17 +181,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   async function finishDeeplinkLogin(callbackUrl?: string) {
     let url = callbackUrl ?? pendingDeeplink.value;
     if (!url) {
-      try {
-        const current = await getCurrent();
-        if (current && current.length > 0) {
-          url = current[0];
-        }
-      } catch (err) {
-        pushLog(`Failed to read auth redirect: ${String(err)}`);
-      }
-    }
-    if (!url && manualCallbackUrl.value.trim()) {
-      url = manualCallbackUrl.value.trim();
+      url = await currentDeepLinkFor("microsoft");
     }
     if (!url) {
       setStatus("Missing auth redirect URL. Open the atlas://auth link to continue.");
@@ -141,9 +196,45 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         profile.value = result;
         setStatus(`Signed in as ${result.name}.`);
         pendingDeeplink.value = null;
-        manualCallbackUrl.value = "";
       } catch (err) {
         setStatus(`Login failed: ${String(err)}`);
+      }
+    });
+  }
+
+  async function startAtlasLogin() {
+    await run(async () => {
+      try {
+        atlasPendingDeeplink.value = null;
+        const authUrl = await invoke<string>("begin_atlas_login");
+        await openUrl(authUrl);
+        setStatus("Finish Atlas sign-in in your browser.");
+      } catch (err) {
+        setStatus(`Atlas login start failed: ${String(err)}`);
+      }
+    });
+  }
+
+  async function finishAtlasLogin(callbackUrl?: string) {
+    let url = callbackUrl ?? atlasPendingDeeplink.value;
+    if (!url) {
+      url = await currentDeepLinkFor("atlas");
+    }
+    if (!url) {
+      setStatus("Missing Atlas callback URL. Open the atlas://signin link to continue.");
+      return;
+    }
+
+    await run(async () => {
+      try {
+        const result = await invoke<AtlasProfile>("complete_atlas_login", {
+          callbackUrl: url
+        });
+        atlasProfile.value = result;
+        setStatus(`Signed in to Atlas Hub as ${atlasIdentity(result)}.`);
+        atlasPendingDeeplink.value = null;
+      } catch (err) {
+        setStatus(`Atlas login failed: ${String(err)}`);
       }
     });
   }
@@ -162,17 +253,36 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
     });
   }
 
+  async function signOutAtlas() {
+    await run(async () => {
+      try {
+        await invoke("atlas_sign_out");
+        atlasProfile.value = null;
+        atlasPendingDeeplink.value = null;
+        setStatus("Signed out of Atlas Hub.");
+      } catch (err) {
+        setStatus(`Atlas sign out failed: ${String(err)}`);
+      }
+    });
+  }
+
   return {
     authFlow,
     profile,
+    atlasProfile,
     deviceCode,
     pendingDeeplink,
-    manualCallbackUrl,
+    atlasPendingDeeplink,
     restoreSession,
+    restoreAtlasSession,
+    restoreSessions,
     initDeepLink,
     startLogin,
+    startAtlasLogin,
     completeDeviceLogin,
     finishDeeplinkLogin,
-    signOut
+    finishAtlasLogin,
+    signOut,
+    signOutAtlas
   };
 }

@@ -22,3 +22,16 @@ export interface ModEntry {
   size: number;
   modified: number;
 }
+
+export type AtlasChannel = "dev" | "beta" | "production";
+
+export interface AtlasRemotePack {
+  packId: string;
+  packName: string;
+  packSlug: string;
+  accessLevel: AtlasChannel;
+  channel: AtlasChannel;
+  buildId?: string | null;
+  buildVersion?: string | null;
+  artifactKey?: string | null;
+}

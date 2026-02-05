@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
-import AccountCard from "./components/AccountCard.vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import ActivityCard from "./components/ActivityCard.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
 import HeaderBar from "./components/HeaderBar.vue";
@@ -15,6 +15,7 @@ import { useLauncher } from "./lib/useLauncher";
 import { useSettings } from "./lib/useSettings";
 import { useStatus } from "./lib/useStatus";
 import { useWorking } from "./lib/useWorking";
+import type { AtlasRemotePack } from "@/types/library";
 
 const {
   status,
@@ -29,20 +30,21 @@ const {
 } = useStatus();
 const { working, run } = useWorking();
 const {
-  authFlow,
   profile,
-  deviceCode,
-  pendingDeeplink,
-  manualCallbackUrl,
-  restoreSession,
+  atlasProfile,
+  restoreSessions,
   initDeepLink,
   startLogin,
-  completeDeviceLogin,
-  finishDeeplinkLogin,
-  signOut
+  startAtlasLogin,
+  signOut,
+  signOutAtlas
 } = useAuth({ setStatus, pushLog, run });
 const {
+  settings,
   settingsClientId,
+  settingsAtlasHubUrl,
+  settingsDefaultMemoryMb,
+  settingsDefaultJvmArgs,
   loadSettings,
   loadDefaultGameDir,
   saveSettings,
@@ -53,7 +55,8 @@ const {
   addInstance,
   duplicateInstance,
   updateInstance,
-  removeInstance
+  removeInstance,
+  syncAtlasRemotePacks
 } = useSettings({ setStatus, pushLog, run });
 const {
   availableVersions,
@@ -73,6 +76,7 @@ const {
 const { launchMinecraft, downloadMinecraftFiles } = useLauncher({
   profile,
   instance: activeInstance,
+  settings,
   setStatus,
   setProgress,
   run
@@ -80,7 +84,7 @@ const { launchMinecraft, downloadMinecraftFiles } = useLauncher({
 
 const activeTab = ref<"library" | "settings">("library");
 const libraryView = ref<"grid" | "detail">("grid");
-const accountSection = ref<HTMLElement | null>(null);
+const syncingRemotePacks = ref(false);
 
 const modsDir = computed(() => {
   const instance = activeInstance.value;
@@ -103,23 +107,16 @@ function backToLibrary() {
   libraryView.value = "grid";
 }
 
-async function goToAuth() {
-  activeTab.value = "settings";
-  await nextTick();
-  accountSection.value?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-async function startSignIn() {
+async function startMicrosoftSignIn() {
   await startLogin();
-  await goToAuth();
 }
 
-async function goToAccountSettings() {
-  await goToAuth();
-}
-
-async function signOutFromMenu() {
+async function signOutMicrosoft() {
   await signOut();
+}
+
+async function signOutAtlasFromMenu() {
+  await signOutAtlas();
 }
 
 async function installSelectedVersion() {
@@ -155,9 +152,55 @@ async function openModsFolder() {
   }
 }
 
+async function uninstallInstanceData() {
+  const instance = activeInstance.value;
+  if (!instance) {
+    return;
+  }
+  await runTask("Uninstalling profile files", async () => {
+    try {
+      await invoke("uninstall_instance_data", {
+        gameDir: instance.gameDir ?? ""
+      });
+      await loadInstalledVersions();
+      await loadMods();
+      setStatus("Profile files removed.");
+    } catch (err) {
+      setStatus(`Failed to uninstall profile data: ${String(err)}`);
+    }
+  });
+}
+
+async function syncAtlasPacks() {
+  if (syncingRemotePacks.value) {
+    return;
+  }
+  syncingRemotePacks.value = true;
+  try {
+    if (!atlasProfile.value) {
+      return;
+    }
+    const remotePacks = await invoke<AtlasRemotePack[]>("list_atlas_remote_packs");
+    await syncAtlasRemotePacks(remotePacks);
+    setStatus(`Atlas packs synced (${remotePacks.length}).`);
+  } catch (err) {
+    setStatus(`Failed to sync Atlas packs: ${String(err)}`);
+  } finally {
+    syncingRemotePacks.value = false;
+  }
+}
+
+async function refreshAtlasPacksFromLibrary() {
+  if (!atlasProfile.value) {
+    setStatus("Sign in to Atlas Hub to refresh remote packs.");
+    return;
+  }
+  await syncAtlasPacks();
+}
+
 onMounted(async () => {
   await initLaunchEvents({ status, progress, pushLog, upsertTaskFromEvent });
-  await restoreSession();
+  await restoreSessions();
   await loadDefaultGameDir();
   await loadSettings();
   await initDeepLink();
@@ -166,6 +209,7 @@ onMounted(async () => {
   await loadFabricLoaderVersions();
   await loadNeoForgeLoaderVersions();
   await loadMods();
+  await syncAtlasPacks();
 });
 
 watch(
@@ -204,30 +248,43 @@ watch(
     neoforgeLoaderVersions.value = [];
   }
 );
+
+watch(
+  () => atlasProfile.value?.id,
+  async () => {
+    await syncAtlasPacks();
+  }
+);
 </script>
 
 <template>
-  <div class="h-screen overflow-y-auto">
-    <div class="m-4 grid h-full min-h-0 max-w-6xl gap-6 md:grid-cols-[72px_1fr] items-start">
-      <SidebarNav class="max-h-screen sticky top-4 self-start" :active-tab="activeTab" @select="activeTab = $event" />
+  <div class="h-screen overflow-hidden p-4">
+    <div class="mx-auto grid h-full min-h-0 max-w-6xl gap-6 md:grid-cols-[72px_1fr] items-start">
+      <SidebarNav
+        class="max-h-full sticky top-0 self-start"
+        :active-tab="activeTab"
+        @select="activeTab = $event"
+      />
 
       <div class="flex h-full min-h-0 flex-col gap-6">
         <HeaderBar
           :active-tab="activeTab"
           :profile="profile"
-          @sign-in="startSignIn"
-          @account-settings="goToAccountSettings"
-          @sign-out="signOutFromMenu"
+          :atlas-profile="atlasProfile"
+          @sign-in-microsoft="startMicrosoftSignIn"
+          @sign-out-microsoft="signOutMicrosoft"
+          @sign-in-atlas="startAtlasLogin"
+          @sign-out-atlas="signOutAtlasFromMenu"
         />
 
-        <main class="flex-1 min-h-0 flex flex-col overflow-y-auto gap-6 pb-24">
+        <main class="flex-1 min-h-0 flex flex-col overflow-hidden gap-6">
           <section
             v-if="activeTab === 'library'"
             class="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden"
           >
             <div
               v-if="libraryView === 'grid'"
-              class="flex-1 min-h-0 overflow-auto"
+              class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1"
             >
               <LibraryView
                 :instances="instances"
@@ -235,6 +292,7 @@ watch(
                 :working="working"
                 @select="openInstance"
                 @create="addInstance"
+                @refresh-packs="refreshAtlasPacksFromLibrary"
               />
             </div>
 
@@ -244,7 +302,6 @@ watch(
               :instance="activeInstance"
               :profile="profile"
               :working="working"
-              :progress="progress"
               :mods="mods"
               :mods-dir="modsDir"
               :available-versions="availableVersions"
@@ -253,10 +310,12 @@ watch(
               :fabric-loader-versions="fabricLoaderVersions"
               :neoforge-loader-versions="neoforgeLoaderVersions"
               :instances-count="instances.length"
+              :default-memory-mb="settingsDefaultMemoryMb"
+              :default-jvm-args="settingsDefaultJvmArgs"
               @back="backToLibrary"
               @launch="launchMinecraft"
               @update-files="downloadMinecraftFiles"
-              @go-to-settings="goToAuth"
+              @go-to-settings="startMicrosoftSignIn"
               @toggle-mod="toggleMod"
               @delete-mod="deleteMod"
               @refresh-mods="refreshMods"
@@ -266,31 +325,19 @@ watch(
               @refresh-versions="refreshVersions"
               @duplicate-instance="duplicateInstance"
               @remove-instance="removeInstance"
+              @uninstall-instance="uninstallInstanceData"
             />
           </section>
 
-          <section v-else class="flex-1 min-h-0 overflow-auto space-y-6">
-            <div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <div ref="accountSection">
-                <AccountCard
-                  :profile="profile"
-                  :working="working"
-                  :auth-flow="authFlow"
-                  :device-code="deviceCode"
-                  :pending-deeplink="pendingDeeplink"
-                  v-model:manualCallbackUrl="manualCallbackUrl"
-                  @start-login="startLogin"
-                  @complete-device-login="completeDeviceLogin"
-                  @finish-deeplink-login="finishDeeplinkLogin"
-                  @sign-out="signOut"
-                />
-              </div>
-              <SettingsCard
-                v-model:settingsClientId="settingsClientId"
-                :working="working"
-                @save-settings="saveSettings"
-              />
-            </div>
+          <section v-else class="flex-1 min-h-0 overflow-auto space-y-6 pr-1">
+            <SettingsCard
+              v-model:settingsClientId="settingsClientId"
+              v-model:settingsAtlasHubUrl="settingsAtlasHubUrl"
+              v-model:settingsDefaultMemoryMb="settingsDefaultMemoryMb"
+              v-model:settingsDefaultJvmArgs="settingsDefaultJvmArgs"
+              :working="working"
+              @save-settings="saveSettings"
+            />
             <ActivityCard
               title="Recent activity"
               description="Helpful signals while tuning Atlas."

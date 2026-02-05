@@ -79,6 +79,7 @@ pub async fn launch_minecraft(
     let mem_arg = format!("-Xmx{}M", memory);
     jvm_args.insert(0, mem_arg);
     jvm_args.insert(1, "-Xms512M".into());
+    jvm_args.extend(args::split_jvm_args(&options.jvm_args));
 
     if !jvm_args
         .iter()

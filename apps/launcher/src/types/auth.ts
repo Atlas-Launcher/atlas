@@ -3,6 +3,12 @@ export interface Profile {
   name: string;
 }
 
+export interface AtlasProfile {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+}
+
 export interface DeviceCodeResponse {
   device_code: string;
   user_code: string;
