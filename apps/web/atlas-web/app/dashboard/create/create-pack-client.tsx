@@ -126,9 +126,6 @@ export default function CreatePackClient() {
       name: "",
       description: "",
       visibility: "private",
-      includeReadme: true,
-      licenseTemplate: "",
-      gitignoreTemplate: "",
     },
     onSubmit: async ({ value }) => {
       setLoading(true);
@@ -142,9 +139,6 @@ export default function CreatePackClient() {
           name: value.name,
           description: value.description || undefined,
           visibility: value.visibility,
-          includeReadme: value.includeReadme,
-          licenseTemplate: value.licenseTemplate || undefined,
-          gitignoreTemplate: value.gitignoreTemplate || undefined,
         }),
       });
       const data = await response.json();
@@ -472,69 +466,6 @@ export default function CreatePackClient() {
                             <option value="private">Private</option>
                             <option value="public">Public</option>
                           </select>
-                        </FormControl>
-                      </FormItem>
-                    </FormField>
-                  )}
-                </newRepoForm.Field>
-
-                <newRepoForm.Field name="includeReadme">
-                  {(field) => (
-                    <FormField field={field}>
-                      <FormItem className="flex items-center gap-3">
-                        <FormControl>
-                          <input
-                            type="checkbox"
-                            checked={field.state.value}
-                            onChange={(event) => field.handleChange(event.target.checked)}
-                            onBlur={field.handleBlur}
-                            disabled={loading}
-                            className="border-input focus-visible:ring-ring/50 focus-visible:ring-[3px] h-4 w-4 rounded border bg-transparent text-[var(--atlas-ink)]"
-                          />
-                        </FormControl>
-                        <div>
-                          <FormLabel className="text-sm">Initialize with README</FormLabel>
-                          <FormDescription>
-                            Creates a default `README.md` so the repo isn&apos;t empty.
-                          </FormDescription>
-                        </div>
-                      </FormItem>
-                    </FormField>
-                  )}
-                </newRepoForm.Field>
-
-                <newRepoForm.Field name="licenseTemplate">
-                  {(field) => (
-                    <FormField field={field}>
-                      <FormItem>
-                        <FormLabel>License template (optional)</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="mit"
-                            value={field.state.value ?? ""}
-                            onChange={(event) => field.handleChange(event.target.value)}
-                            onBlur={field.handleBlur}
-                            disabled={loading}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    </FormField>
-                  )}
-                </newRepoForm.Field>
-
-                <newRepoForm.Field name="gitignoreTemplate">
-                  {(field) => (
-                    <FormField field={field}>
-                      <FormItem>
-                        <FormLabel>.gitignore template (optional)</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Node"
-                            value={field.state.value ?? ""}
-                            onChange={(event) => field.handleChange(event.target.value)}
-                            onBlur={field.handleBlur}
-                            disabled={loading}
-                          />
                         </FormControl>
                       </FormItem>
                     </FormField>
