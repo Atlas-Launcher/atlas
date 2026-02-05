@@ -217,7 +217,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
           {isAdmin ? (
             <TabsContent value="system">
-              <SystemTab currentUserId={session.user.id} />
+              <SystemTab />
             </TabsContent>
           ) : null}
         </Tabs>
