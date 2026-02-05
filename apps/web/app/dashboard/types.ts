@@ -49,3 +49,29 @@ export interface ApiKey {
     type?: string | null;
   } | null;
 }
+
+export interface UserSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  createdAt?: string;
+}
+
+export interface PackMember {
+  userId: string;
+  name: string;
+  email: string;
+  role: Role;
+  accessLevel: "dev" | "beta" | "production";
+  joinedAt?: string;
+}
+
+export interface UserMembership {
+  packId: string;
+  packName: string;
+  packSlug: string;
+  role: Role;
+  accessLevel: "dev" | "beta" | "production";
+  joinedAt?: string;
+}
