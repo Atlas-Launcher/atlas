@@ -21,7 +21,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tag: string; asset: string }> },
 ) {
-  const { tag, asset } = await params;
+  const { tag, asset: assetParam } = await params;
   const limiter = rateLimit({
     id: `download-cli:${getClientIp(request)}`,
     limit: 120,
@@ -39,7 +39,7 @@ export async function GET(
     return NextResponse.json({ error: "Release not found." }, { status: 404 });
   }
 
-  const assetName = asset;
+  const assetName = assetParam;
   const asset =
     release.assets.find((item) => item.name === assetName) ??
     release.assets.find((item) => item.name === decodeURIComponent(assetName));
