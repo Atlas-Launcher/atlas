@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
@@ -14,6 +14,34 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+
+function isPasskeyAbortError(error: unknown) {
+  if (!error) {
+    return false;
+  }
+
+  if (typeof error === "string") {
+    return /abort|cancelled|canceled|notallowed/i.test(error);
+  }
+
+  if (error instanceof Error) {
+    return (
+      error.name === "AbortError" ||
+      /abort|cancelled|canceled|notallowed/i.test(error.message)
+    );
+  }
+
+  if (typeof error === "object") {
+    const candidate = error as { name?: unknown; message?: unknown };
+    const name = typeof candidate.name === "string" ? candidate.name : "";
+    const message = typeof candidate.message === "string" ? candidate.message : "";
+    return (
+      name === "AbortError" || /abort|cancelled|canceled|notallowed/i.test(message)
+    );
+  }
+
+  return false;
+}
 
 export default function SignInClient() {
   const router = useRouter();
@@ -34,22 +62,37 @@ export default function SignInClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [passkeyAvailable, setPasskeyAvailable] = useState(false);
+  const passkeyCeremonyInFlight = useRef(false);
 
   useEffect(() => {
     const autoFill = async () => {
       if (
         typeof window !== "undefined" &&
         window.PublicKeyCredential &&
-        PublicKeyCredential.isConditionalMediationAvailable
+        PublicKeyCredential.isConditionalMediationAvailable &&
+        !passkeyCeremonyInFlight.current
       ) {
         const available = await PublicKeyCredential.isConditionalMediationAvailable();
         if (available) {
-          await authClient.signIn.passkey({ autoFill: true });
+          passkeyCeremonyInFlight.current = true;
+          try {
+            const result = await authClient.signIn.passkey({ autoFill: true });
+            if (result?.error && !isPasskeyAbortError(result.error)) {
+              setError(result.error.message ?? "Passkey sign-in failed.");
+            }
+          } finally {
+            passkeyCeremonyInFlight.current = false;
+          }
         }
       }
     };
 
-    autoFill().catch(() => null);
+    autoFill().catch((autoFillError) => {
+      if (!isPasskeyAbortError(autoFillError)) {
+        setError("Passkey sign-in failed.");
+      }
+      passkeyCeremonyInFlight.current = false;
+    });
   }, []);
 
   useEffect(() => {
@@ -82,23 +125,38 @@ export default function SignInClient() {
   };
 
   const handlePasskey = async () => {
+    if (passkeyCeremonyInFlight.current) {
+      return;
+    }
+
     setError(null);
     setLoading(true);
+    passkeyCeremonyInFlight.current = true;
 
-    const result = await authClient.signIn.passkey();
-    setLoading(false);
+    try {
+      const result = await authClient.signIn.passkey();
 
-    if (result?.error) {
-      setError(result.error.message ?? "Passkey sign-in failed.");
-      return;
+      if (result?.error) {
+        if (!isPasskeyAbortError(result.error)) {
+          setError(result.error.message ?? "Passkey sign-in failed.");
+        }
+        return;
+      }
+
+      if (shouldResumeOidcAuthorization && oidcQuery) {
+        window.location.href = `/api/auth/oauth2/authorize?${oidcQuery}`;
+        return;
+      }
+
+      router.push(redirectTo);
+    } catch (passkeyError) {
+      if (!isPasskeyAbortError(passkeyError)) {
+        setError("Passkey sign-in failed.");
+      }
+    } finally {
+      setLoading(false);
+      passkeyCeremonyInFlight.current = false;
     }
-
-    if (shouldResumeOidcAuthorization && oidcQuery) {
-      window.location.href = `/api/auth/oauth2/authorize?${oidcQuery}`;
-      return;
-    }
-
-    router.push(redirectTo);
   };
 
   return (
