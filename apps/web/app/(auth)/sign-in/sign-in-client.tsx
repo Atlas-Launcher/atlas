@@ -19,6 +19,16 @@ export default function SignInClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") ?? "/dashboard";
+  const oidcQuery = searchParams.toString();
+  const shouldResumeOidcAuthorization = Boolean(
+    searchParams.get("response_type") &&
+      searchParams.get("client_id") &&
+      searchParams.get("redirect_uri")
+  );
+  const signUpHref =
+    shouldResumeOidcAuthorization && oidcQuery
+      ? `/sign-up?${oidcQuery}`
+      : `/sign-up?redirect=${encodeURIComponent(redirectTo)}`;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +73,11 @@ export default function SignInClient() {
       return;
     }
 
+    if (shouldResumeOidcAuthorization && oidcQuery) {
+      window.location.href = `/api/auth/oauth2/authorize?${oidcQuery}`;
+      return;
+    }
+
     router.push(redirectTo);
   };
 
@@ -75,6 +90,11 @@ export default function SignInClient() {
 
     if (result?.error) {
       setError(result.error.message ?? "Passkey sign-in failed.");
+      return;
+    }
+
+    if (shouldResumeOidcAuthorization && oidcQuery) {
+      window.location.href = `/api/auth/oauth2/authorize?${oidcQuery}`;
       return;
     }
 
@@ -141,7 +161,7 @@ export default function SignInClient() {
               </Button>
               <a
                 className="block text-center text-xs text-[var(--atlas-ink-muted)] underline"
-                href={`/sign-up?redirect=${encodeURIComponent(redirectTo)}`}
+                href={signUpHref}
               >
                 Need an account? Create one
               </a>

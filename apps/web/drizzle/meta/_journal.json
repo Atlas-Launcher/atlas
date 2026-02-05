@@ -15,6 +15,13 @@
       "when": 1770254557981,
       "tag": "0001_sloppy_pride",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770320522662,
+      "tag": "0002_shocking_thundra",
+      "breakpoints": true
     }
   ]
 }

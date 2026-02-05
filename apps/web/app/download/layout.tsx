@@ -1,12 +1,6 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 
-const navLinks = [
-  { href: "/", label: "Overview" },
-  { href: "/download", label: "Downloads" },
-  { href: "/download/app", label: "Launcher" },
-  { href: "/download/cli", label: "CLI" },
-];
+import PublicNavbar from "@/components/public-navbar";
 
 export default function DownloadLayout({ children }: { children: ReactNode }) {
   return (
@@ -24,40 +18,7 @@ export default function DownloadLayout({ children }: { children: ReactNode }) {
         aria-hidden="true"
       />
 
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--atlas-ink)] text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)]">
-            A
-          </div>
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[var(--atlas-ink-muted)]">
-              Atlas Hub
-            </p>
-            <p className="text-xs text-[var(--atlas-ink-muted)]">Downloads & updates</p>
-          </div>
-        </Link>
-        <nav className="hidden items-center gap-6 text-sm font-medium text-[var(--atlas-ink-muted)] md:flex">
-          {navLinks.map((link) => (
-            <Link key={link.href} href={link.href} className="transition hover:text-[var(--atlas-ink)]">
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/download/app"
-            className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
-          >
-            Get Launcher
-          </Link>
-          <Link
-            href="/download/cli"
-            className="rounded-full bg-[var(--atlas-accent)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] shadow-[0_10px_30px_rgba(60,132,109,0.25)] transition hover:-translate-y-0.5"
-          >
-            Get CLI
-          </Link>
-        </div>
-      </header>
+      <PublicNavbar />
 
       <main className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-24">{children}</main>
 

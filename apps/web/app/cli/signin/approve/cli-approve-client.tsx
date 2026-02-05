@@ -5,16 +5,10 @@ import { useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-export default function DeviceApproveClient() {
+export default function CliApproveClient() {
   const searchParams = useSearchParams();
   const userCode = useMemo(() => {
     const code = searchParams.get("user_code");
@@ -26,10 +20,6 @@ export default function DeviceApproveClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const deeplink = userCode
-    ? `atlas://login?user_code=${encodeURIComponent(userCode)}`
-    : "atlas://login";
-
   const handleApprove = async () => {
     setLoading(true);
     setError(null);
@@ -37,7 +27,7 @@ export default function DeviceApproveClient() {
     setLoading(false);
 
     if (result?.error) {
-      setError(result.error.error_description ?? "Unable to approve device.");
+      setError(result.error.error_description ?? "Unable to approve CLI sign-in.");
       return;
     }
 
@@ -51,7 +41,7 @@ export default function DeviceApproveClient() {
     setLoading(false);
 
     if (result?.error) {
-      setError(result.error.error_description ?? "Unable to deny device.");
+      setError(result.error.error_description ?? "Unable to deny CLI sign-in.");
       return;
     }
 
@@ -64,35 +54,35 @@ export default function DeviceApproveClient() {
         <Card>
           <CardHeader>
             <Badge variant="secondary">Atlas Hub</Badge>
-            <CardTitle>Approve Device</CardTitle>
+            <CardTitle>Approve CLI Sign-in</CardTitle>
             <CardDescription>
-              Confirm access for the launcher using code {userCode || "-"}.
+              Confirm access for the CLI using code {userCode || "-"}.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!userCode ? (
               <p className="text-sm text-[var(--atlas-ink-muted)]">
-                Missing device code. Return to the previous page and enter your code again.
+                Missing device code. Return to the CLI and request a new one.
               </p>
             ) : !session ? (
               <div className="space-y-3">
                 <p className="text-sm text-[var(--atlas-ink-muted)]">
-                  Sign in to approve this device authorization.
+                  Sign in to approve this CLI authorization.
                 </p>
                 <Button asChild>
-                  <a href={`/sign-in?redirect=/device/approve?user_code=${userCode}`}>Sign in</a>
+                  <a href={`/sign-in?redirect=/cli/signin/approve?user_code=${userCode}`}>Sign in</a>
                 </Button>
               </div>
             ) : (
               <div className="space-y-3">
                 {status === "approved" ? (
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-                    Device approved. Return to your launcher to finish login.
+                    CLI approved. Return to your terminal to finish sign-in.
                   </div>
                 ) : null}
                 {status === "denied" ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                    Device denied. You can restart the flow in the launcher.
+                    CLI denied. You can restart the flow in the CLI.
                   </div>
                 ) : null}
                 {error ? (
@@ -113,12 +103,6 @@ export default function DeviceApproveClient() {
                     Deny
                   </Button>
                 </div>
-
-                {status === "approved" ? (
-                  <Button variant="outline" asChild>
-                    <a href={deeplink}>Open Atlas Launcher</a>
-                  </Button>
-                ) : null}
               </div>
             )}
           </CardContent>

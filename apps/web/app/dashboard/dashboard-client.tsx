@@ -112,10 +112,6 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     }
   };
 
-  const handleOpenDeviceFlow = () => {
-    window.location.href = "/device";
-  };
-
   const handleLinkGithub = async () => {
     setGithubError(null);
     setGithubLoading(true);
@@ -204,7 +200,6 @@ export default function DashboardClient({ session }: DashboardClientProps) {
           <TabsContent value="account">
             <AccountTab
               onAddPasskey={handleAddPasskey}
-              onOpenDeviceFlow={handleOpenDeviceFlow}
               githubLinked={githubLinked}
               githubLoading={githubLoading}
               githubError={githubError}

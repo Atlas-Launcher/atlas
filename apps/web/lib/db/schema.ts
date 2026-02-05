@@ -97,6 +97,89 @@ export const deviceCodes = pgTable("deviceCode", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const oauthApplications = pgTable(
+  "oauthApplication",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("client_id").notNull(),
+    clientSecret: text("client_secret"),
+    type: text("type").notNull(),
+    name: text("name").notNull(),
+    icon: text("icon"),
+    metadata: text("metadata"),
+    disabled: boolean("disabled").notNull().default(false),
+    redirectUrls: text("redirect_urls").notNull(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    clientIdUnique: uniqueIndex("oauth_application_client_id_unique").on(table.clientId),
+    userIdx: index("oauth_application_user_id_idx").on(table.userId),
+  })
+);
+
+export const oauthAccessTokens = pgTable(
+  "oauthAccessToken",
+  {
+    id: text("id").primaryKey(),
+    accessToken: text("access_token").notNull(),
+    refreshToken: text("refresh_token").notNull(),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+      withTimezone: true,
+    }).notNull(),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+      withTimezone: true,
+    }).notNull(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthApplications.clientId, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    scopes: text("scopes").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    accessTokenUnique: uniqueIndex("oauth_access_token_access_token_unique").on(
+      table.accessToken
+    ),
+    refreshTokenUnique: uniqueIndex("oauth_access_token_refresh_token_unique").on(
+      table.refreshToken
+    ),
+    clientIdx: index("oauth_access_token_client_id_idx").on(table.clientId),
+    userIdx: index("oauth_access_token_user_id_idx").on(table.userId),
+  })
+);
+
+export const oauthConsents = pgTable(
+  "oauthConsent",
+  {
+    id: text("id").primaryKey(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthApplications.clientId, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    scopes: text("scopes").notNull(),
+    consentGiven: boolean("consent_given").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    clientIdx: index("oauth_consent_client_id_idx").on(table.clientId),
+    userIdx: index("oauth_consent_user_id_idx").on(table.userId),
+  })
+);
+
+export const jwks = pgTable("jwks", {
+  id: text("id").primaryKey(),
+  publicKey: text("public_key").notNull(),
+  privateKey: text("private_key").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+});
+
 export const packs = pgTable("packs", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),

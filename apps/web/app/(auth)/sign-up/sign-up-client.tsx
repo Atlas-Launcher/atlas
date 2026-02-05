@@ -19,6 +19,16 @@ export default function SignUpClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") ?? "/dashboard";
+  const oidcQuery = searchParams.toString();
+  const shouldResumeOidcAuthorization = Boolean(
+    searchParams.get("response_type") &&
+      searchParams.get("client_id") &&
+      searchParams.get("redirect_uri")
+  );
+  const signInHref =
+    shouldResumeOidcAuthorization && oidcQuery
+      ? `/sign-in?${oidcQuery}`
+      : `/sign-in?redirect=${encodeURIComponent(redirectTo)}`;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,6 +52,11 @@ export default function SignUpClient() {
 
     if (result?.error) {
       setError(result.error.message ?? "Unable to create account.");
+      return;
+    }
+
+    if (shouldResumeOidcAuthorization && oidcQuery) {
+      window.location.href = `/api/auth/oauth2/authorize?${oidcQuery}`;
       return;
     }
 
@@ -107,7 +122,7 @@ export default function SignUpClient() {
 
             <a
               className="block text-center text-xs text-[var(--atlas-ink-muted)] underline"
-              href={`/sign-in?redirect=${encodeURIComponent(redirectTo)}`}
+              href={signInHref}
             >
               Already have an account? Sign in
             </a>

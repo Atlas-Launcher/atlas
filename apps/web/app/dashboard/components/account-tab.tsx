@@ -11,7 +11,6 @@ import {
 
 interface AccountTabProps {
   onAddPasskey: () => void;
-  onOpenDeviceFlow: () => void;
   githubLinked: boolean;
   githubLoading: boolean;
   githubError: string | null;
@@ -23,7 +22,6 @@ interface AccountTabProps {
 
 export default function AccountTab({
   onAddPasskey,
-  onOpenDeviceFlow,
   githubLinked,
   githubLoading,
   githubError,
@@ -42,72 +40,58 @@ export default function AccountTab({
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Passkeys</CardTitle>
-          <CardDescription>
-            Register a hardware-backed passkey for quick sign-in.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={onAddPasskey}>Add Passkey</Button>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Passkeys</CardTitle>
+            <CardDescription>
+              Register a hardware-backed passkey for quick sign-in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={onAddPasskey}>Add Passkey</Button>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Device Login</CardTitle>
-          <CardDescription>
-            Enter a launcher device code to authorize the session.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={onOpenDeviceFlow}>
-            Open Device Flow
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className={focus === "github" ? "ring-2 ring-amber-200" : ""}>
-        <CardHeader>
-          <CardTitle>GitHub</CardTitle>
-          <CardDescription>
-            Link GitHub to create repositories and pull org ownership.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold">
-                {githubLinked ? "Connected" : "Not connected"}
-              </p>
-              <p className="text-xs text-[var(--atlas-ink-muted)]">
-                {githubLinked
-                  ? "GitHub is linked to your account."
-                  : "Link GitHub to continue creating pack repositories."}
-              </p>
+        <Card className={focus === "github" ? "ring-2 ring-amber-200" : ""}>
+          <CardHeader>
+            <CardTitle>GitHub</CardTitle>
+            <CardDescription>
+              Link GitHub to create repositories and pull org ownership.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold">
+                  {githubLinked ? "Connected" : "Not connected"}
+                </p>
+                <p className="text-xs text-[var(--atlas-ink-muted)]">
+                  {githubLinked
+                    ? "GitHub is linked to your account."
+                    : "Link GitHub to continue creating pack repositories."}
+                </p>
+              </div>
+              {githubLinked ? (
+                <Button
+                  variant="outline"
+                  onClick={onUnlinkGithub}
+                  disabled={githubLoading}
+                >
+                  Disconnect
+                </Button>
+              ) : (
+                <Button onClick={onLinkGithub} disabled={githubLoading}>
+                  Connect GitHub
+                </Button>
+              )}
             </div>
-            {githubLinked ? (
-              <Button
-                variant="outline"
-                onClick={onUnlinkGithub}
-                disabled={githubLoading}
-              >
-                Disconnect
-              </Button>
-            ) : (
-              <Button onClick={onLinkGithub} disabled={githubLoading}>
-                Connect GitHub
-              </Button>
-            )}
-          </div>
-          {githubError ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
-              {githubError}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+            {githubError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+                {githubError}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
