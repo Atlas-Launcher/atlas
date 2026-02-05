@@ -5,19 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import UserCard from "@/app/dashboard/components/user-card";
-import type { Role, UserSummary } from "@/app/dashboard/types";
+import type { UserSummary } from "@/app/dashboard/types";
 
-interface SystemTabProps {
-  currentUserId: string;
-}
-
-export default function SystemTab({ currentUserId }: SystemTabProps) {
+export default function SystemTab() {
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editingRoles, setEditingRoles] = useState<Record<string, Role>>({});
-  const [savingUserId, setSavingUserId] = useState<string | null>(null);
 
   const filteredUsers = useMemo(() => {
     const normalized = query.toLowerCase();
@@ -40,42 +34,6 @@ export default function SystemTab({ currentUserId }: SystemTabProps) {
     }
 
     setUsers(data.users ?? []);
-    setEditingRoles(
-      (data.users ?? []).reduce((acc: Record<string, Role>, user: UserSummary) => {
-        acc[user.id] = user.role;
-        return acc;
-      }, {})
-    );
-  };
-
-  const handleRoleChange = (userId: string, role: Role) => {
-    setEditingRoles((prev) => ({ ...prev, [userId]: role }));
-  };
-
-  const handleSaveRole = async (userId: string) => {
-    const role = editingRoles[userId];
-    if (!role) {
-      return;
-    }
-
-    setSavingUserId(userId);
-    setError(null);
-    const response = await fetch(`/api/admin/users/${userId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
-    });
-    const data = await response.json();
-    setSavingUserId(null);
-
-    if (!response.ok) {
-      setError(data?.error ?? "Unable to update role.");
-      return;
-    }
-
-    setUsers((prev) =>
-      prev.map((user) => (user.id === userId ? { ...user, role: data.user.role } : user))
-    );
   };
 
   useEffect(() => {
@@ -118,11 +76,6 @@ export default function SystemTab({ currentUserId }: SystemTabProps) {
             <UserCard
               key={user.id}
               user={user}
-              role={editingRoles[user.id] ?? user.role}
-              onRoleChange={(role) => handleRoleChange(user.id, role)}
-              onSaveRole={() => handleSaveRole(user.id)}
-              saving={savingUserId === user.id}
-              isSelf={user.id === currentUserId}
             />
           ))}
         </div>
@@ -132,11 +85,6 @@ export default function SystemTab({ currentUserId }: SystemTabProps) {
         </div>
       )}
 
-      {currentUserId ? (
-        <p className="text-xs text-[var(--atlas-ink-muted)]">
-          Tip: Your own admin record can’t be demoted here.
-        </p>
-      ) : null}
     </div>
   );
 }
