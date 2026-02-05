@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { deployTokens, packMembers } from "@/lib/db/schema";
+import { packMembers } from "@/lib/db/schema";
 import { hasRole } from "@/lib/auth/roles";
-import { generateDeployToken, hashDeployToken } from "@/lib/auth/deploy-tokens";
 
 interface RouteParams {
   params: Promise<{
     packId: string;
   }>;
+}
+
+function defaultKeyName(packId: string) {
+  return `Pack ${packId.slice(0, 8)} deploy key`;
 }
 
 export async function GET(request: Request, { params }: RouteParams) {
@@ -39,19 +42,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const result = await db
-    .select({
-      id: deployTokens.id,
-      label: deployTokens.label,
-      active: deployTokens.active,
-      createdAt: deployTokens.createdAt,
-      revokedAt: deployTokens.revokedAt,
-    })
-    .from(deployTokens)
-    .where(eq(deployTokens.packId, packId))
-    .orderBy(desc(deployTokens.createdAt));
+  const keys = await auth.api.listApiKeys({ headers: request.headers });
+  const filtered = (keys ?? []).filter((key) => key.metadata?.packId === packId);
 
-  return NextResponse.json({ tokens: result });
+  return NextResponse.json({ keys: filtered });
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -82,24 +76,15 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   const body = await request.json();
   const label = body?.label?.toString().trim();
+  const name = label || defaultKeyName(packId);
 
-  const token = generateDeployToken();
-  const tokenHash = hashDeployToken(token);
+  const created = await auth.api.createApiKey({
+    headers: request.headers,
+    body: {
+      name,
+      metadata: { packId, type: "deploy" },
+    },
+  });
 
-  const [created] = await db
-    .insert(deployTokens)
-    .values({
-      packId,
-      tokenHash,
-      label,
-      active: true,
-    })
-    .returning({
-      id: deployTokens.id,
-      label: deployTokens.label,
-      active: deployTokens.active,
-      createdAt: deployTokens.createdAt,
-    });
-
-  return NextResponse.json({ token, record: created }, { status: 201 });
+  return NextResponse.json({ key: created?.key, record: created }, { status: 201 });
 }

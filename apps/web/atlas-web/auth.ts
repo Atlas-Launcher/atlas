@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { deviceAuthorization } from "better-auth/plugins";
+import { apiKey, deviceAuthorization } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 
 import { db } from "@/lib/db";
@@ -34,6 +34,9 @@ export const auth = betterAuth({
       session: schema.sessions,
       account: schema.accounts,
       verification: schema.verifications,
+      passkey: schema.passkeys,
+      deviceCode: schema.deviceCodes,
+      apikey: schema.apiKeys,
     },
   }),
   emailAndPassword: {
@@ -51,6 +54,14 @@ export const auth = betterAuth({
   },
   trustedOrigins,
   plugins: [
+    apiKey({
+      enableMetadata: true,
+      requireName: true,
+      defaultPrefix: "atlas_",
+      rateLimit: {
+        enabled: false,
+      },
+    }),
     passkey({
       rpID,
       rpName,

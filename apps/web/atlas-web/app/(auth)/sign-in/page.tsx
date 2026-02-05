@@ -141,7 +141,7 @@ export default function SignInPage() {
               </Button>
               <a
                 className="block text-center text-xs text-[var(--atlas-ink-muted)] underline"
-                href="/sign-up"
+                href={`/sign-up?redirect=${encodeURIComponent(redirectTo)}`}
               >
                 Need an account? Create one
               </a>

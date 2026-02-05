@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
+import { nanoid } from "nanoid";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
   const [created] = await db
     .insert(packs)
     .values({
+      id: nanoid(),
       name,
       slug,
       description,

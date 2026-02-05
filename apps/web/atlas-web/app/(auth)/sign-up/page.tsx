@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 
 export default function SignUpPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") ?? "/dashboard";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +45,7 @@ export default function SignUpPage() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(redirectTo);
   };
 
   return (
@@ -105,7 +107,7 @@ export default function SignUpPage() {
 
             <a
               className="block text-center text-xs text-[var(--atlas-ink-muted)] underline"
-              href="/sign-in"
+              href={`/sign-in?redirect=${encodeURIComponent(redirectTo)}`}
             >
               Already have an account? Sign in
             </a>
