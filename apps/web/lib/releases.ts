@@ -30,7 +30,7 @@ export function getReleaseRepo(): string | null {
 
 export function getAuthHeaders(): HeadersInit {
   const token =
-    process.env.ATLAS_GITHUB_TOKEN ?? process.env.atlas_github_token ?? process.env.GITHUB_TOKEN;
+    process.env.ATLAS_GITHUB_TOKEN;
   if (!token) {
     return {};
   }
