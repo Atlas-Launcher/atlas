@@ -1,3 +1,5 @@
+import PublicNavbar from "@/components/public-navbar";
+
 const workflowSteps = [
   {
     step: "01",
@@ -78,38 +80,7 @@ export default function Home() {
         aria-hidden="true"
       />
 
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--atlas-ink)] text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)]">
-            A
-          </div>
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[var(--atlas-ink-muted)]">
-              Atlas Hub
-            </p>
-            <p className="text-xs text-[var(--atlas-ink-muted)]">Modpack releases made simple</p>
-          </div>
-        </div>
-        <nav className="hidden items-center gap-6 text-sm font-medium text-[var(--atlas-ink-muted)] md:flex">
-          <a href="/dashboard">Dashboard</a>
-          <a href="/device">Device Login</a>
-          <a href="/sign-in">Sign In</a>
-        </nav>
-        <div className="flex items-center gap-3">
-          <a
-            href="/sign-up"
-            className="rounded-full border border-[var(--atlas-ink)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5 hover:bg-[var(--atlas-ink)] hover:text-[var(--atlas-cream)]"
-          >
-            Request Invite
-          </a>
-          <a
-            href="/dashboard"
-            className="rounded-full bg-[var(--atlas-accent)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] shadow-[0_10px_30px_rgba(60,132,109,0.25)] transition hover:-translate-y-0.5"
-          >
-            Open Dashboard
-          </a>
-        </div>
-      </header>
+      <PublicNavbar />
 
       <main className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-24">
         <section className="grid gap-12 pb-16 pt-12 lg:grid-cols-[1.2fr_0.8fr]">
@@ -132,10 +103,10 @@ export default function Home() {
                 Create a Pack
               </a>
               <a
-                href="/device"
+                href="/download"
                 className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
               >
-                Device Login
+                View Downloads
               </a>
             </div>
           </div>

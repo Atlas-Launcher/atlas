@@ -3,6 +3,7 @@ import { passkeyClient } from "@better-auth/passkey/client";
 import {
   deviceAuthorizationClient,
   inferAdditionalFields,
+  oidcClient,
 } from "better-auth/client/plugins";
 import { apiKeyClient } from "better-auth/client/plugins";
 
@@ -12,6 +13,7 @@ export const authClient = createAuthClient({
     passkeyClient(),
     deviceAuthorizationClient(),
     apiKeyClient(),
+    oidcClient(),
     inferAdditionalFields({
       user: {
         role: { type: "string" },

@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { apiKey, deviceAuthorization } from "better-auth/plugins";
+import { apiKey, deviceAuthorization, jwt, oidcProvider } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 
 import { db } from "@/lib/db";
@@ -23,6 +23,29 @@ const deviceClientIds = (process.env.ATLAS_DEVICE_CLIENT_ID ?? "atlas-launcher")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
+const launcherClientId = process.env.ATLAS_OIDC_LAUNCHER_CLIENT_ID ?? "atlas-launcher";
+const launcherRedirectUrls = (
+  process.env.ATLAS_OIDC_LAUNCHER_REDIRECT_URIS ?? "atlas://signin"
+)
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const launcherTrustedClients =
+  launcherRedirectUrls.length > 0
+    ? [
+        {
+          clientId: launcherClientId,
+          name: "Atlas Launcher",
+          type: "native" as const,
+          disabled: false,
+          redirectUrls: launcherRedirectUrls,
+          skipConsent: true,
+          metadata: {
+            app: "atlas-launcher",
+          },
+        },
+      ]
+    : [];
 
 export const auth = betterAuth({
   baseURL: baseUrl,
@@ -44,6 +67,10 @@ export const auth = betterAuth({
       passkey: schema.passkeys,
       deviceCode: schema.deviceCodes,
       apikey: schema.apiKeys,
+      oauthApplication: schema.oauthApplications,
+      oauthAccessToken: schema.oauthAccessTokens,
+      oauthConsent: schema.oauthConsents,
+      jwks: schema.jwks,
     },
   }),
   emailAndPassword: {
@@ -81,8 +108,16 @@ export const auth = betterAuth({
       rpName,
       origin: passkeyOrigin,
     }),
+    jwt(),
+    oidcProvider({
+      loginPage: "/sign-in",
+      consentPage: "/consent",
+      requirePKCE: true,
+      useJWTPlugin: true,
+      trustedClients: launcherTrustedClients,
+    }),
     deviceAuthorization({
-      verificationUri: "/device",
+      verificationUri: "/cli/signin",
       expiresIn: "10m",
       validateClient: async (clientId) =>
         deviceClientIds.length === 0 || deviceClientIds.includes(clientId),

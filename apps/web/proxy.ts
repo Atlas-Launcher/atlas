@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic =
     pathname.startsWith("/sign-in") ||
     pathname.startsWith("/sign-up") ||
-    pathname.startsWith("/device") ||
+    pathname.startsWith("/consent") ||
+    pathname.startsWith("/download") ||
+    pathname.startsWith("/cli/signin") ||
+    pathname.startsWith("/.well-known") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
     pathname === "/" ||

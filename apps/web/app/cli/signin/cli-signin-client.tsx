@@ -1,25 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-export default function DeviceAuthorizationPage() {
+export default function CliSigninClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [userCode, setUserCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const code = searchParams.get("user_code");
+    if (code) {
+      setUserCode(code.toUpperCase());
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -40,7 +42,7 @@ export default function DeviceAuthorizationPage() {
         return;
       }
 
-      router.push(`/device/approve?user_code=${formattedCode}`);
+      router.push(`/cli/signin/approve?user_code=${formattedCode}`);
     } catch {
       setLoading(false);
       setError("Invalid or expired code.");
@@ -53,9 +55,9 @@ export default function DeviceAuthorizationPage() {
         <Card>
           <CardHeader>
             <Badge variant="secondary">Atlas Hub</Badge>
-            <CardTitle>Device Authorization</CardTitle>
+            <CardTitle>CLI Authorization</CardTitle>
             <CardDescription>
-              Enter the code from your launcher to approve access.
+              Enter the code from the Atlas CLI to authorize this session.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
