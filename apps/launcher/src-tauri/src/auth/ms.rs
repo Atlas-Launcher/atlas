@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use url::Url;
 
-use crate::net::http::HttpClient;
 use super::error::AuthError;
+use crate::net::http::HttpClient;
 const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
 const AUTHORIZE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
@@ -58,9 +58,7 @@ pub(crate) async fn poll_device_token<H: HttpClient + ?Sized>(
 
     loop {
         if start.elapsed() > timeout {
-            return Err("Device code expired. Start login again."
-                .to_string()
-                .into());
+            return Err("Device code expired. Start login again.".to_string().into());
         }
 
         let params = [
@@ -92,9 +90,7 @@ pub(crate) async fn poll_device_token<H: HttpClient + ?Sized>(
                 sleep(interval).await;
             }
             "expired_token" => {
-                return Err("Device code expired. Start login again."
-                    .to_string()
-                    .into())
+                return Err("Device code expired. Start login again.".to_string().into())
             }
             _ => {
                 return Err(format!(

@@ -1,5 +1,5 @@
-mod flow;
 mod error;
+mod flow;
 mod minecraft;
 mod ms;
 mod pending;

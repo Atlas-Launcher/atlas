@@ -3,9 +3,9 @@ use crate::paths::{auth_store_path, ensure_dir, file_exists};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::error::AuthError;
 use super::flow;
 use super::ms;
-use super::error::AuthError;
 
 pub fn load_session() -> Result<Option<AuthSession>, AuthError> {
     let path = auth_store_path()?;

@@ -1,7 +1,7 @@
-use crate::net::http::fetch_json;
-use crate::models::{LaunchOptions, ModLoaderKind};
-use crate::launcher::{emit, loaders, manifest};
 use crate::launcher::error::LauncherError;
+use crate::launcher::{emit, loaders, manifest};
+use crate::models::{LaunchOptions, ModLoaderKind};
+use crate::net::http::fetch_json;
 use manifest::{VersionData, VersionManifest};
 use reqwest::Client;
 use std::path::PathBuf;
