@@ -1,67 +1,65 @@
 const workflowSteps = [
   {
     step: "01",
-    title: "Import & Secure",
+    title: "Create & Package",
     description:
-      "Creator links a GitHub repo, Hub injects CI workflow and deploy API key secrets.",
+      "Bring your modpack together with the files, settings, and assets you want players to get.",
   },
   {
     step: "02",
-    title: "Compile & Upload",
+    title: "Review & Release",
     description:
-      "GitHub Actions runs the builder CLI, producing a compressed binary blob.",
+      "Preview changes, invite testers, and choose when a build goes live.",
   },
   {
     step: "03",
-    title: "Hydrate & Launch",
+    title: "Players Launch",
     description:
-      "Launcher pulls the active channel, hydrates configs, verifies hashes, and starts the JVM.",
+      "Players install quickly and always land on the right version.",
   },
 ];
 
 const formatHighlights = [
   {
-    title: "Single Binary Artifact",
+    title: "All-in-One Snapshot",
     detail:
-      "Zstd-compressed Bincode blob representing the exact build state for a commit.",
+      "Configs, scripts, and assets stay together so installs are consistent.",
   },
   {
-    title: "Virtual Filesystem Map",
-    detail:
-      "Embedded byte-map ships configs, scripts, and small assets in one payload.",
+    title: "Version Confidence",
+    detail: "Every update is tracked so players get the exact build you approved.",
   },
   {
-    title: "Smart Dependency Manifest",
-    detail:
-      "External jars include URLs, hashes, and platform filters for lean hydration.",
+    title: "Smarter Downloads",
+    detail: "Players only grab what they need for their device and platform.",
   },
 ];
 
 const hubFeatures = [
   {
-    title: "Release Manager",
-    detail: "Move channel pointers across immutable builds instantly.",
+    title: "Release Staging",
+    detail: "Move from testing to live without disrupting current players.",
   },
   {
-    title: "Build Ledger",
-    detail: "Every commit becomes a traceable artifact with timestamps.",
+    title: "Version History",
+    detail: "See what changed, when it shipped, and who has access.",
   },
   {
     title: "Invite Access",
-    detail: "Tiered onboarding for creators and players with channel gating.",
+    detail: "Bring creators, admins, and players in with simple invites.",
   },
   {
-    title: "Asset Storage",
-    detail: "Cloudflare R2 hosts immutable blobs and custom mod jars.",
+    title: "Assets & Add-ons",
+    detail: "Keep custom mods and extras organized alongside your pack.",
   },
 ];
 
-const stackItems = [
-  "Next.js (edge-ready)",
-  "Neon Postgres",
-  "Cloudflare R2 + CDN",
-  "Rust CLI + Launcher",
-  "Zstd + Bincode",
+const reliabilityPills = [
+  "Fast updates",
+  "Consistent installs",
+  "Secure access",
+  "Global delivery",
+  "Built to scale",
 ];
 
 export default function Home() {
@@ -89,7 +87,7 @@ export default function Home() {
             <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[var(--atlas-ink-muted)]">
               Atlas Hub
             </p>
-            <p className="text-xs text-[var(--atlas-ink-muted)]">Source-in-Git, Distribution-in-Binary</p>
+            <p className="text-xs text-[var(--atlas-ink-muted)]">Modpack releases made simple</p>
           </div>
         </div>
         <nav className="hidden items-center gap-6 text-sm font-medium text-[var(--atlas-ink-muted)] md:flex">
@@ -117,14 +115,14 @@ export default function Home() {
         <section className="grid gap-12 pb-16 pt-12 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-[var(--atlas-ink)]/10 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
-              High-performance modpack distribution
+              Creator-friendly modpack delivery
             </div>
             <h1 className="text-4xl font-semibold leading-tight text-[var(--atlas-ink)] md:text-6xl">
-              Build once. Ship a single binary. Hydrate at game speed.
+              Build once. Share everywhere. Play fast.
             </h1>
             <p className="max-w-2xl text-lg text-[var(--atlas-ink-muted)]">
-              Atlas brings your modpacks together with a Git-native workflow, immutable build artifacts, and channel-based
-              releases. The Hub manages access and promotion while the launcher handles zero-waste hydration.
+              Atlas brings your modpacks together with simple releases, reliable installs, and a hub that keeps creators
+              and players in sync.
             </p>
             <div className="flex flex-wrap gap-4">
               <a
@@ -145,11 +143,11 @@ export default function Home() {
           <div className="space-y-6">
             <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-ink-muted)]">
-                Distribution Format
+                Pack Snapshot
               </p>
-              <h3 className="mt-4 text-xl font-semibold text-[var(--atlas-ink)]">Librarian .bin</h3>
+              <h3 className="mt-4 text-xl font-semibold text-[var(--atlas-ink)]">Everything in one place</h3>
               <p className="mt-3 text-sm text-[var(--atlas-ink-muted)]">
-                A compressed, serialized byte-map with embedded configs and dependency manifests.
+                Keep your pack tidy and consistent, from configs to custom assets.
               </p>
               <div className="mt-5 space-y-3">
                 {formatHighlights.map((highlight) => (
@@ -164,9 +162,9 @@ export default function Home() {
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-accent-light)]">
                 Release Manager
               </p>
-              <h2 className="mt-4 text-2xl font-semibold">Channel Pointers</h2>
+              <h2 className="mt-4 text-2xl font-semibold">Release Channels</h2>
               <p className="mt-3 text-sm text-[var(--atlas-cream)]/70">
-                Promote a tested build by moving pointers. Roll back instantly without rebuilding artifacts.
+                Move a tested build live in seconds, or roll back just as fast.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 {["Dev", "Beta", "Production"].map((label) => (
@@ -187,7 +185,7 @@ export default function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-ink-muted)]">
               Hub Capabilities
             </p>
-            <h2 className="mt-3 text-3xl font-semibold">Control plane for creators and players</h2>
+            <h2 className="mt-3 text-3xl font-semibold">A shared space for creators and players</h2>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {hubFeatures.map((feature) => (
@@ -204,9 +202,9 @@ export default function Home() {
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-ink-muted)]">
               Core Workflow
             </p>
-            <h2 className="text-3xl font-semibold">Source-in-Git, Distribution-in-Binary</h2>
+            <h2 className="text-3xl font-semibold">From build to play in three steps</h2>
             <p className="text-sm text-[var(--atlas-ink-muted)]">
-              Every commit becomes a deterministic build. Channels stay mutable while artifacts remain immutable.
+              Keep your team aligned while players always launch the right version.
             </p>
             <div className="space-y-4">
               {workflowSteps.map((step) => (
@@ -225,14 +223,14 @@ export default function Home() {
 
           <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-ink)] p-8 text-[var(--atlas-cream)]">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-accent-light)]">
-              Infrastructure
+              Reliability
             </p>
-            <h3 className="mt-3 text-2xl font-semibold">Built for scale and speed</h3>
+            <h3 className="mt-3 text-2xl font-semibold">Built for stable launches</h3>
             <p className="mt-3 text-sm text-[var(--atlas-cream)]/70">
-              Edge-ready APIs, immutable blobs, and fast Rust tooling keep hydration reliable under load.
+              Keep releases smooth, updates quick, and players confident in every install.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
-              {stackItems.map((item) => (
+              {reliabilityPills.map((item) => (
                 <span
                   key={item}
                   className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]"
@@ -247,8 +245,8 @@ export default function Home() {
 
       <footer className="relative z-10 border-t border-[var(--atlas-ink)]/10 bg-white/60">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-6 px-6 py-8 text-xs text-[var(--atlas-ink-muted)]">
-          <span>Atlas Hub - Pack distribution control plane</span>
-          <span>Immutable builds - Mutable channels - Deterministic hydration</span>
+          <span>Atlas Hub - Modpacks made simple</span>
+          <span>Build with confidence. Share with ease.</span>
         </div>
       </footer>
     </div>
