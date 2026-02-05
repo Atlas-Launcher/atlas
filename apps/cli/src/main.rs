@@ -17,7 +17,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Pack(pack::PackCommand),
+    Pack {
+        #[command(subcommand)]
+        command: pack::PackCommand,
+    },
     Deploy(deploy::DeployArgs),
 }
 
@@ -25,7 +28,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Pack(command) => pack::run(command),
+        Commands::Pack { command } => pack::run(command),
         Commands::Deploy(args) => deploy::run(args),
     }
 }
