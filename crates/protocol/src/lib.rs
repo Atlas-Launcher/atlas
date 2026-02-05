@@ -1,11 +1,15 @@
 mod codec;
+mod config;
 mod error;
+mod pack;
 mod platform;
 mod types;
 mod wire;
 
 pub use crate::codec::{decode_blob, encode_blob, encode_blob_default, DEFAULT_ZSTD_LEVEL};
+pub use crate::config::*;
 pub use crate::error::ProtocolError;
+pub use crate::pack::*;
 pub use crate::platform::{Platform, PlatformFilter};
 pub use crate::types::{
     ByteMap, Dependency, Hash, HashAlgorithm, Loader, Manifest, PackBlob, PackMetadata,
