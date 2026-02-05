@@ -1,1 +1,1 @@
-{"main":{"identifier":"main","description":"Default capabilities for Atlas Launcher","local":true,"windows":["main"],"permissions":["core:event:default","deep-link:default","opener:default"]}}
+{"desktop-capability":{"identifier":"desktop-capability","description":"","local":true,"windows":["main"],"permissions":["updater:default"],"platforms":["macOS","windows","linux"]},"main":{"identifier":"main","description":"Default capabilities for Atlas Launcher","local":true,"windows":["main"],"permissions":["core:event:default","deep-link:default","opener:default"]}}

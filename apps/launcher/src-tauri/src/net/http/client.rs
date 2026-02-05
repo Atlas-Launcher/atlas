@@ -61,10 +61,7 @@ impl HttpClient for ReqwestHttpClient {
             .map_err(HttpError::Request)?;
 
         let status = response.status();
-        let body = response
-            .bytes()
-            .await
-            .map_err(HttpError::Request)?;
+        let body = response.bytes().await.map_err(HttpError::Request)?;
         if !status.is_success() {
             let text = String::from_utf8_lossy(&body);
             return Err(HttpError::Status {
@@ -93,10 +90,7 @@ impl HttpClient for ReqwestHttpClient {
             .map_err(HttpError::Request)?;
 
         let status = response.status();
-        let body = response
-            .bytes()
-            .await
-            .map_err(HttpError::Request)?;
+        let body = response.bytes().await.map_err(HttpError::Request)?;
         if !status.is_success() {
             let text = String::from_utf8_lossy(&body);
             return Err(HttpError::Status {
@@ -121,16 +115,10 @@ impl HttpClient for ReqwestHttpClient {
             request = request.bearer_auth(token);
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(HttpError::Request)?;
+        let response = request.send().await.map_err(HttpError::Request)?;
 
         let status = response.status();
-        let body = response
-            .bytes()
-            .await
-            .map_err(HttpError::Request)?;
+        let body = response.bytes().await.map_err(HttpError::Request)?;
         if !status.is_success() {
             let text = String::from_utf8_lossy(&body);
             return Err(HttpError::Status {

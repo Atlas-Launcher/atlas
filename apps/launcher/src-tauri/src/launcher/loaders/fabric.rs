@@ -1,7 +1,7 @@
-use crate::net::http::{fetch_json, HttpError};
 use crate::launcher::error::LauncherError;
 use crate::launcher::manifest::VersionData;
 use crate::models::FabricLoaderVersion;
+use crate::net::http::{fetch_json, HttpError};
 use reqwest::Client;
 use serde::Deserialize;
 

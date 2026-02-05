@@ -1,16 +1,16 @@
+use crate::launcher::error::LauncherError;
 use crate::net::http::shared_client;
 use crate::paths::ensure_dir;
 use futures::stream::{self, StreamExt};
-use crate::launcher::error::LauncherError;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use super::download::{download_if_needed, DOWNLOAD_CONCURRENCY};
-use crate::net::http::fetch_json;
 use super::emit;
 use super::libraries::current_arch;
 use super::manifest::VersionData;
+use crate::net::http::fetch_json;
 
 const JAVA_RUNTIME_MANIFEST_URL: &str =
   "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
@@ -183,7 +183,11 @@ async fn ensure_java_runtime(
 
     let java_path = locate_java_binary(&runtime_home, &runtime_manifest);
     if !java_path.exists() {
-        return Err("Java runtime download completed but java binary was not found.".to_string().into());
+        return Err(
+            "Java runtime download completed but java binary was not found."
+                .to_string()
+                .into(),
+        );
     }
 
     Ok(java_path.to_string_lossy().to_string())
