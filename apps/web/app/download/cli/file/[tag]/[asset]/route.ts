@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { getAuthHeaders, getReleaseByTag } from "@/lib/releases";
@@ -17,9 +18,10 @@ function buildHeaders(contentType: string | null, size?: number, filename?: stri
 }
 
 export async function GET(
-  request: Request,
-  { params }: { params: { tag: string; asset: string } },
+  request: NextRequest,
+  { params }: { params: Promise<{ tag: string; asset: string }> },
 ) {
+  const { tag, asset } = await params;
   const limiter = rateLimit({
     id: `download-cli:${getClientIp(request)}`,
     limit: 120,
@@ -32,12 +34,12 @@ export async function GET(
     return NextResponse.json({ error: "Too many download requests." }, { status: 429, headers });
   }
 
-  const release = await getReleaseByTag(params.tag);
+  const release = await getReleaseByTag(tag);
   if (!release) {
     return NextResponse.json({ error: "Release not found." }, { status: 404 });
   }
 
-  const assetName = params.asset;
+  const assetName = asset;
   const asset =
     release.assets.find((item) => item.name === assetName) ??
     release.assets.find((item) => item.name === decodeURIComponent(assetName));

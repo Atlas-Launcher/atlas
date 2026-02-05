@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { getAuthHeaders, getLatestRelease, type ReleaseAsset } from "@/lib/releases";
@@ -90,9 +91,10 @@ async function fetchSignature(asset: ReleaseAsset) {
 }
 
 export async function GET(
-  request: Request,
-  { params }: { params: { target: string; arch: string; version: string } },
+  request: NextRequest,
+  { params }: { params: Promise<{ target: string; arch: string; version: string }> },
 ) {
+  const { target, arch, version } = await params;
   const limiter = rateLimit({
     id: `updater:${getClientIp(request)}`,
     limit: 60,
@@ -115,17 +117,17 @@ export async function GET(
     return NextResponse.json({ error: "Latest release is missing a version tag." }, { status: 500 });
   }
 
-  const compare = compareSemver(params.version, latestVersion);
+  const compare = compareSemver(version, latestVersion);
   if (compare !== null && compare >= 0) {
     const headers = new Headers();
     applyRateLimitHeaders(headers, limiter);
     return new NextResponse(null, { status: 204, headers });
   }
 
-  const updateAsset = pickUpdateAsset(release.assets ?? [], params.target, params.arch);
+  const updateAsset = pickUpdateAsset(release.assets ?? [], target, arch);
   if (!updateAsset) {
     return NextResponse.json(
-      { error: `No update asset found for target ${params.target}.` },
+      { error: `No update asset found for target ${target}.` },
       { status: 404 },
     );
   }
