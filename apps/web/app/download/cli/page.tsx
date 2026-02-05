@@ -74,6 +74,8 @@ export default async function CliDownloadPage() {
   const release = await getLatestRelease("cli-v");
   const assets = release?.assets ?? [];
   const { grouped, remaining } = groupAssets(assets);
+  const releaseTag = release?.tag_name;
+  const releaseTagParam = releaseTag ? encodeURIComponent(releaseTag) : null;
 
   return (
     <div className="space-y-12 pt-10">
@@ -137,7 +139,11 @@ export default async function CliDownloadPage() {
                 platform.assets.map((asset) => (
                   <a
                     key={asset.name}
-                    href={asset.browser_download_url}
+                    href={
+                      releaseTagParam
+                        ? `/download/cli/file/${releaseTagParam}/${encodeURIComponent(asset.name)}`
+                        : asset.browser_download_url
+                    }
                     className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"
                     rel="noreferrer"
                     target="_blank"
@@ -166,7 +172,11 @@ export default async function CliDownloadPage() {
               remaining.map((asset) => (
                 <a
                   key={asset.name}
-                  href={asset.browser_download_url}
+                  href={
+                    releaseTagParam
+                      ? `/download/cli/file/${releaseTagParam}/${encodeURIComponent(asset.name)}`
+                      : asset.browser_download_url
+                  }
                   className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-sm text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"
                   rel="noreferrer"
                   target="_blank"

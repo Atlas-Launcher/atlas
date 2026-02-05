@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { UserSummary } from "@/app/dashboard/types";
+import type { Role, UserSummary } from "@/app/dashboard/types";
 
 interface UserCardProps {
   user: UserSummary;

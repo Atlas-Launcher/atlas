@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getLatestRelease, type ReleaseAsset } from "@/lib/releases";
+import { getAuthHeaders, getLatestRelease, type ReleaseAsset } from "@/lib/releases";
+import { applyRateLimitHeaders, getClientIp, rateLimit } from "@/lib/rate-limit";
 
 const TARGET_PRIORITIES: Record<string, string[]> = {
   windows: [".msi", ".exe"],
@@ -76,6 +77,7 @@ async function fetchSignature(asset: ReleaseAsset) {
   const response = await fetch(asset.browser_download_url, {
     headers: {
       "User-Agent": "atlas-hub-updater",
+      ...getAuthHeaders(),
     },
     next: { revalidate: 300 },
   });
@@ -88,9 +90,21 @@ async function fetchSignature(asset: ReleaseAsset) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: { target: string; arch: string; version: string } },
 ) {
+  const limiter = rateLimit({
+    id: `updater:${getClientIp(request)}`,
+    limit: 60,
+    windowMs: 300_000,
+  });
+
+  if (!limiter.allowed) {
+    const headers = new Headers();
+    applyRateLimitHeaders(headers, limiter);
+    return NextResponse.json({ error: "Too many update checks." }, { status: 429, headers });
+  }
+
   const release = await getLatestRelease("launcher-v");
   if (!release) {
     return NextResponse.json({ error: "No launcher release found." }, { status: 404 });
@@ -103,7 +117,9 @@ export async function GET(
 
   const compare = compareSemver(params.version, latestVersion);
   if (compare !== null && compare >= 0) {
-    return new NextResponse(null, { status: 204 });
+    const headers = new Headers();
+    applyRateLimitHeaders(headers, limiter);
+    return new NextResponse(null, { status: 204, headers });
   }
 
   const updateAsset = pickUpdateAsset(release.assets ?? [], params.target, params.arch);
@@ -127,17 +143,26 @@ export async function GET(
     return NextResponse.json({ error: "Failed to fetch update signature." }, { status: 502 });
   }
 
+  const origin = new URL(request.url).origin;
+  const tag = release.tag_name ?? "launcher-latest";
+  const encodedTag = encodeURIComponent(tag);
+  const encodedAsset = encodeURIComponent(updateAsset.name);
+  const proxiedUrl = `${origin}/download/app/file/${encodedTag}/${encodedAsset}`;
+
   return NextResponse.json(
     {
       version: latestVersion,
       notes: release.name ?? "Atlas Launcher update",
       pub_date: release.published_at ?? release.created_at ?? new Date().toISOString(),
-      url: updateAsset.browser_download_url,
+      url: proxiedUrl,
       signature,
     },
     {
       headers: {
         "cache-control": "public, max-age=300",
+        "x-ratelimit-limit": `${limiter.limit}`,
+        "x-ratelimit-remaining": `${limiter.remaining}`,
+        "x-ratelimit-reset": `${Math.ceil(limiter.resetAt / 1000)}`,
       },
     },
   );

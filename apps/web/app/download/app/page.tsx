@@ -75,6 +75,8 @@ export default async function LauncherDownloadPage() {
   const assets = release?.assets ?? [];
   const { grouped, remaining } = groupAssets(assets);
   const updaterEndpoint = "/download/app/update/{{target}}/{{arch}}/{{current_version}}";
+  const releaseTag = release?.tag_name;
+  const releaseTagParam = releaseTag ? encodeURIComponent(releaseTag) : null;
 
   return (
     <div className="space-y-12 pt-10">
@@ -140,7 +142,11 @@ export default async function LauncherDownloadPage() {
                 platform.assets.map((asset) => (
                   <a
                     key={asset.name}
-                    href={asset.browser_download_url}
+                    href={
+                      releaseTagParam
+                        ? `/download/app/file/${releaseTagParam}/${encodeURIComponent(asset.name)}`
+                        : asset.browser_download_url
+                    }
                     className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"
                     rel="noreferrer"
                     target="_blank"
@@ -169,7 +175,11 @@ export default async function LauncherDownloadPage() {
               remaining.map((asset) => (
                 <a
                   key={asset.name}
-                  href={asset.browser_download_url}
+                  href={
+                    releaseTagParam
+                      ? `/download/app/file/${releaseTagParam}/${encodeURIComponent(asset.name)}`
+                      : asset.browser_download_url
+                  }
                   className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-sm text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"
                   rel="noreferrer"
                   target="_blank"
