@@ -8,28 +8,37 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "./ui/dropdown-menu";
-import { ChevronDown, LogIn, LogOut, Settings as SettingsIcon, User } from "lucide-vue-next";
-import type { Profile } from "@/types/auth";
+import { ChevronDown, Globe, LogIn, LogOut } from "lucide-vue-next";
+import type { AtlasProfile, Profile } from "@/types/auth";
 
 type TabKey = "library" | "settings";
 
 const props = defineProps<{
   activeTab: TabKey;
   profile: Profile | null;
+  atlasProfile: AtlasProfile | null;
 }>();
 
 const emit = defineEmits<{
-  (event: "sign-in"): void;
-  (event: "account-settings"): void;
-  (event: "sign-out"): void;
+  (event: "sign-in-microsoft"): void;
+  (event: "sign-out-microsoft"): void;
+  (event: "sign-in-atlas"): void;
+  (event: "sign-out-atlas"): void;
 }>();
 
-const title = computed(() => (props.activeTab === "library" ? "Library" : "Settings"));
-const description = computed(() =>
-  props.activeTab === "library"
-    ? "Pick a profile and launch when you are ready."
-    : "Sign in and tweak advanced preferences."
-);
+function atlasIdentity(profile: AtlasProfile): string {
+  return profile.name?.trim() || profile.email?.trim() || profile.id;
+}
+
+const msStatus = computed(() => {
+  return props.profile ? props.profile.name : "Signed out";
+});
+
+const atlasStatus = computed(() => {
+  return props.atlasProfile ? atlasIdentity(props.atlasProfile) : "Signed out";
+});
+
+const anySignedIn = computed(() => Boolean(props.profile || props.atlasProfile));
 </script>
 
 <template>
@@ -38,34 +47,47 @@ const description = computed(() =>
       <p class="text-xs uppercase tracking-[0.35em] text-muted-foreground">Atlas Launcher</p>
     </div>
     <DropdownMenu>
-      <DropdownMenuTrigger class="status-pill">
-        <span class="status-dot" :class="profile ? 'status-dot--online' : 'status-dot--offline'"></span>
-        <span>
-          {{ profile ? `Signed in as ${profile.name}` : "Sign in with Microsoft" }}
+      <DropdownMenuTrigger class="status-pill status-pill--accounts">
+        <span class="status-dot" :class="anySignedIn ? 'status-dot--online' : 'status-dot--offline'"></span>
+        <span class="account-pill-text">
+          <span class="account-pill-row">
+            <span class="account-pill-label">Atlas:</span>
+            <span class="truncate">{{ atlasStatus }}</span>
+          </span>
+          <span class="account-pill-row">
+            <span class="account-pill-label">Mojang:</span>
+            <span class="truncate">{{ msStatus }}</span>
+          </span>
         </span>
-        <ChevronDown class="h-4 w-4 text-muted-foreground" />
+        <ChevronDown class="h-[18px] w-[18px] text-muted-foreground" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent class="w-64 backdrop-blur-3xl" align="end">
-        <DropdownMenuLabel>Microsoft account</DropdownMenuLabel>
-        <div class="px-2 pb-2 text-sm text-muted-foreground">
-          {{ profile ? profile.name : "Not signed in" }}
+      <DropdownMenuContent class="w-[26rem] p-2.5 backdrop-blur-3xl" align="end">
+        <DropdownMenuLabel class="px-3 pt-2 pb-1 text-base font-semibold">Atlas Hub account</DropdownMenuLabel>
+        <div class="px-3 pb-3 text-base text-muted-foreground">
+          {{ props.atlasProfile ? atlasIdentity(props.atlasProfile) : "Not signed in" }}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem v-if="!profile" @select="emit('sign-in')">
-          <LogIn class="h-4 w-4" />
+        <DropdownMenuItem v-if="!props.atlasProfile" class="py-2.5 text-base" @select="emit('sign-in-atlas')">
+          <Globe class="h-4 w-4" />
           Sign in
         </DropdownMenuItem>
-        <DropdownMenuItem v-if="profile" @select="emit('account-settings')">
-          <User class="h-4 w-4" />
-          Account settings
-        </DropdownMenuItem>
-        <DropdownMenuItem v-if="profile" @select="emit('sign-out')">
+        <DropdownMenuItem v-if="props.atlasProfile" class="py-2.5 text-base" @select="emit('sign-out-atlas')">
           <LogOut class="h-4 w-4" />
           Sign out
         </DropdownMenuItem>
-        <DropdownMenuItem v-else @select="emit('account-settings')">
-          <SettingsIcon class="h-4 w-4" />
-          More options
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel class="px-3 pt-2 pb-1 text-base font-semibold">Microsoft account</DropdownMenuLabel>
+        <div class="px-3 pb-3 text-base text-muted-foreground">
+          {{ props.profile ? props.profile.name : "Not signed in" }}
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem v-if="!props.profile" class="py-2.5 text-base" @select="emit('sign-in-microsoft')">
+          <LogIn class="h-4 w-4" />
+          Sign in
+        </DropdownMenuItem>
+        <DropdownMenuItem v-if="props.profile" class="py-2.5 text-base" @select="emit('sign-out-microsoft')">
+          <LogOut class="h-4 w-4" />
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

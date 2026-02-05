@@ -30,3 +30,19 @@ pub struct ModEntry {
     pub size: u64,
     pub modified: u64,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AtlasRemotePack {
+    pub pack_id: String,
+    pub pack_name: String,
+    pub pack_slug: String,
+    pub access_level: String,
+    pub channel: String,
+    #[serde(default)]
+    pub build_id: Option<String>,
+    #[serde(default)]
+    pub build_version: Option<String>,
+    #[serde(default)]
+    pub artifact_key: Option<String>,
+}

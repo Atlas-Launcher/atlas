@@ -27,23 +27,21 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "select", id: string): void;
   (event: "create"): void;
+  (event: "refresh-packs"): void;
 }>();
 
 const search = ref("");
-const filter = ref<"all" | "modded" | "vanilla" | "custom">("all");
+const filter = ref<"all" | "atlas" | "local">("all");
 const sort = ref<"name" | "loader">("name");
 const group = ref<"none" | "loader">("none");
 
 const filteredInstances = computed(() => {
   const query = search.value.trim().toLowerCase();
   let items = props.instances.filter((instance) => {
-    if (filter.value === "modded" && instance.loader?.kind === "vanilla") {
+    if (filter.value === "atlas" && instance.source !== "atlas") {
       return false;
     }
-    if (filter.value === "vanilla" && instance.loader?.kind !== "vanilla") {
-      return false;
-    }
-    if (filter.value === "custom" && !(instance.gameDir ?? "").trim()) {
+    if (filter.value === "local" && instance.source === "atlas") {
       return false;
     }
     if (!query) {
@@ -86,6 +84,25 @@ const groupedInstances = computed(() => {
     items
   }));
 });
+
+function displaySource(instance: InstanceConfig) {
+  return instance.source === "atlas" ? "Atlas" : "Local";
+}
+
+function displayLoader(instance: InstanceConfig) {
+  const kind = instance.loader?.kind ?? "vanilla";
+  if (kind === "neoforge") {
+    return "NeoForge";
+  }
+  if (kind === "fabric") {
+    return "Fabric";
+  }
+  return "Vanilla";
+}
+
+function displayVersion(instance: InstanceConfig) {
+  return instance.version?.trim() ? instance.version : "Latest release";
+}
 </script>
 
 <template>
@@ -94,12 +111,19 @@ const groupedInstances = computed(() => {
       <div class="flex flex-wrap items-center pt-5 gap-3">
         <Tabs v-model="filter">
           <TabsList>
-            <TabsTrigger value="all">All profiles</TabsTrigger>
-            <TabsTrigger value="modded">Modded</TabsTrigger>
-            <TabsTrigger value="vanilla">Vanilla</TabsTrigger>
-            <TabsTrigger value="custom">Custom</TabsTrigger>
+            <TabsTrigger value="all">All Profiles</TabsTrigger>
+            <TabsTrigger value="atlas">Atlas Profiles</TabsTrigger>
+            <TabsTrigger value="local">Local Profiles</TabsTrigger>
           </TabsList>
         </Tabs>
+        <Button
+          :disabled="props.working"
+          size="sm"
+          variant="secondary"
+          @click="emit('refresh-packs')"
+        >
+          Refresh Packs
+        </Button>
         <Button
           class="ml-auto"
           :disabled="props.working"
@@ -107,7 +131,7 @@ const groupedInstances = computed(() => {
           variant="secondary"
           @click="emit('create')"
         >
-          New profile
+          New Local Profile
         </Button>
       </div>
 
@@ -168,9 +192,7 @@ const groupedInstances = computed(() => {
             <div class="flex-1">
               <div class="font-semibold text-foreground">{{ instance.name }}</div>
               <div class="text-xs text-muted-foreground">
-                {{ instance.loader?.kind ?? "vanilla" }}
-                ·
-                {{ instance.version?.trim() ? instance.version : "Latest release" }}
+                {{ displaySource(instance) }} · {{ displayLoader(instance) }} · {{ displayVersion(instance) }}
               </div>
             </div>
           </button>

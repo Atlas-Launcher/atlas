@@ -12,6 +12,7 @@ export interface LaunchOptions {
   gameDir: string;
   javaPath?: string;
   memoryMb?: number;
+  jvmArgs?: string;
   version?: string | null;
   loader?: ModLoaderConfig;
 }

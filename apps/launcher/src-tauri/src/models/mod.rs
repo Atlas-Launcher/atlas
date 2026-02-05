@@ -3,7 +3,9 @@ pub mod launch;
 pub mod library;
 pub mod settings;
 
-pub use auth::{AuthSession, DeviceCodeResponse, Profile};
+pub use auth::{AtlasProfile, AtlasSession, AuthSession, DeviceCodeResponse, Profile};
 pub use launch::{LaunchEvent, LaunchOptions};
-pub use library::{FabricLoaderVersion, ModEntry, VersionManifestSummary, VersionSummary};
+pub use library::{
+    AtlasRemotePack, FabricLoaderVersion, ModEntry, VersionManifestSummary, VersionSummary,
+};
 pub use settings::{AppSettings, ModLoaderKind};

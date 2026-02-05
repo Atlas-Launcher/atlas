@@ -2,21 +2,19 @@
 import { computed, ref } from "vue";
 import InstanceSettingsCard from "./InstanceSettingsCard.vue";
 import ModsCard from "./ModsCard.vue";
+import RemoteManageCard from "./RemoteManageCard.vue";
 import VersionsCard from "./VersionsCard.vue";
 import Button from "./ui/button/Button.vue";
-import Progress from "./ui/progress/Progress.vue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { Box } from "lucide-vue-next";
+import { Box, ChevronLeftIcon } from "lucide-vue-next";
 import type { Profile } from "@/types/auth";
 import type { FabricLoaderVersion, ModEntry, VersionSummary } from "@/types/library";
 import type { InstanceConfig } from "@/types/settings";
-import {ChevronLeftIcon} from "lucide-vue-next";
 
 const props = defineProps<{
   instance: InstanceConfig | null;
   profile: Profile | null;
   working: boolean;
-  progress: number;
   mods: ModEntry[];
   modsDir: string;
   availableVersions: VersionSummary[];
@@ -25,6 +23,8 @@ const props = defineProps<{
   fabricLoaderVersions: FabricLoaderVersion[];
   neoforgeLoaderVersions: string[];
   instancesCount: number;
+  defaultMemoryMb: number;
+  defaultJvmArgs: string;
 }>();
 
 const emit = defineEmits<{
@@ -41,6 +41,7 @@ const emit = defineEmits<{
   (event: "refresh-versions"): void;
   (event: "duplicate-instance", id: string): void;
   (event: "remove-instance", id: string): void;
+  (event: "uninstall-instance"): void;
 }>();
 
 const detailTab = ref<"content" | "setup">("content");
@@ -54,6 +55,11 @@ const activeLoaderLabel = computed(() => {
   const version = instance.version?.trim() || "Latest release";
   return `${loader} · ${version}`;
 });
+
+const isRemoteInstance = computed(() => props.instance?.source === "atlas");
+const contentTabLabel = computed(() =>
+  isRemoteInstance.value ? "Manage" : "Content"
+);
 </script>
 
 <template>
@@ -85,13 +91,6 @@ const activeLoaderLabel = computed(() => {
           <Button variant="ghost" @click="detailTab = 'setup'">Settings</Button>
         </div>
       </div>
-      <div class="mt-4 space-y-2">
-        <div class="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Launch progress</span>
-          <span>{{ props.progress }}%</span>
-        </div>
-        <Progress :model-value="props.progress" />
-      </div>
     </div>
 
     <div
@@ -104,27 +103,38 @@ const activeLoaderLabel = computed(() => {
       </Button>
     </div>
 
-    <!-- Tabs container grows and becomes the inner scroll container -->
-    <Tabs v-model="detailTab" class="flex-1 min-h-0 flex flex-col overflow-hidden space-y-6">
+    <Tabs v-model="detailTab" class="flex-1 min-h-0 flex flex-col overflow-hidden gap-4">
       <TabsList class="flex flex-wrap justify-start gap-2 bg-transparent p-0 shrink-0">
-        <TabsTrigger value="content">Content</TabsTrigger>
+        <TabsTrigger value="content">{{ contentTabLabel }}</TabsTrigger>
         <TabsTrigger value="setup">Setup</TabsTrigger>
         <!-- Logs are available in Settings -->
       </TabsList>
-      <TabsContent value="content" class="space-y-6">
-        <ModsCard
-          :instance="props.instance"
-          :mods="props.mods"
-          :mods-dir="props.modsDir"
-          :working="props.working"
-          @toggle="emit('toggle-mod', $event)"
-          @delete="emit('delete-mod', $event)"
-          @refresh="emit('refresh-mods')"
-          @open-folder="emit('open-mods-folder')"
-        />
+      <TabsContent value="content" class="mt-0 flex-1 min-h-0 overflow-auto pr-1">
+        <div class="space-y-6">
+          <RemoteManageCard
+            v-if="isRemoteInstance"
+            :instance="props.instance"
+            :working="props.working"
+            :installed-versions="props.installedVersions"
+            @install="emit('install-version')"
+            @refresh="emit('refresh-versions')"
+            @uninstall="emit('uninstall-instance')"
+          />
+          <ModsCard
+            v-else
+            :instance="props.instance"
+            :mods="props.mods"
+            :mods-dir="props.modsDir"
+            :working="props.working"
+            @toggle="emit('toggle-mod', $event)"
+            @delete="emit('delete-mod', $event)"
+            @refresh="emit('refresh-mods')"
+            @open-folder="emit('open-mods-folder')"
+          />
+        </div>
       </TabsContent>
-      <TabsContent value="setup" class="flex-1 min-h-0">
-        <div class="flex-1 min-h-0 flex flex-col gap-6 overflow-auto pr-1">
+      <TabsContent value="setup" class="mt-0 flex-1 min-h-0 overflow-auto pr-1">
+        <div class="flex flex-col gap-6">
           <VersionsCard
             :instance="props.instance"
             :available-versions="props.availableVersions"
@@ -133,6 +143,7 @@ const activeLoaderLabel = computed(() => {
             :fabric-loader-versions="props.fabricLoaderVersions"
             :neoforge-loader-versions="props.neoforgeLoaderVersions"
             :working="props.working"
+            :setup-locked="isRemoteInstance"
             @update="emit('update-instance', $event)"
             @install="emit('install-version')"
             @refresh="emit('refresh-versions')"
@@ -140,7 +151,10 @@ const activeLoaderLabel = computed(() => {
           <InstanceSettingsCard
             :instance="props.instance"
             :instances-count="props.instancesCount"
+            :default-memory-mb="props.defaultMemoryMb"
+            :default-jvm-args="props.defaultJvmArgs"
             :working="props.working"
+            :managed-by-atlas="isRemoteInstance"
             @duplicate="emit('duplicate-instance', $event)"
             @remove="emit('remove-instance', $event)"
             @update="emit('update-instance', $event)"

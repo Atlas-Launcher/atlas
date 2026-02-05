@@ -12,6 +12,8 @@ pub struct LaunchOptions {
     #[serde(default = "default_memory_mb")]
     pub memory_mb: u32,
     #[serde(default)]
+    pub jvm_args: String,
+    #[serde(default)]
     pub version: Option<String>,
     #[serde(default)]
     pub loader: ModLoaderConfig,

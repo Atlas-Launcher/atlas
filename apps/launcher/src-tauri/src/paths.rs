@@ -42,6 +42,10 @@ pub fn auth_store_path() -> Result<PathBuf, String> {
     Ok(auth_store_dir()?.join("auth.json"))
 }
 
+pub fn atlas_auth_store_path() -> Result<PathBuf, String> {
+    Ok(auth_store_dir()?.join("atlas_auth.json"))
+}
+
 pub fn settings_store_path() -> Result<PathBuf, String> {
     Ok(auth_store_dir()?.join("settings.json"))
 }

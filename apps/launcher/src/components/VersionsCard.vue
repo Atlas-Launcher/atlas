@@ -28,6 +28,7 @@ const props = defineProps<{
   fabricLoaderVersions: FabricLoaderVersion[];
   neoforgeLoaderVersions: NeoForgeLoaderVersion[];
   working: boolean;
+  setupLocked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -52,7 +53,7 @@ const isInstalled = computed(() => {
 });
 
 function updateLoaderKind(kind: ModLoaderKind) {
-  if (!props.instance) {
+  if (!props.instance || props.setupLocked) {
     return;
   }
   const loader = {
@@ -72,7 +73,7 @@ function updateLoaderKind(kind: ModLoaderKind) {
 }
 
 function updateVersion(version: string) {
-  if (!props.instance) {
+  if (!props.instance || props.setupLocked) {
     return;
   }
   const value = version === "latest" ? null : version;
@@ -80,7 +81,7 @@ function updateVersion(version: string) {
 }
 
 function updateFabricLoaderVersion(version: string) {
-  if (!props.instance) {
+  if (!props.instance || props.setupLocked) {
     return;
   }
   const loader = {
@@ -91,7 +92,7 @@ function updateFabricLoaderVersion(version: string) {
 }
 
 function updateNeoForgeVersion(value: string | number) {
-  if (!props.instance) {
+  if (!props.instance || props.setupLocked) {
     return;
   }
   const loader = {
@@ -106,7 +107,13 @@ function updateNeoForgeVersion(value: string | number) {
   <Card class="glass">
     <CardHeader>
       <CardTitle>Game setup</CardTitle>
-      <CardDescription>Choose a Minecraft version and optional mod loader.</CardDescription>
+      <CardDescription>
+        {{
+          props.setupLocked
+            ? "This setup is managed by Atlas Hub and cannot be edited locally."
+            : "Choose a Minecraft version and optional mod loader."
+        }}
+      </CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <div v-if="!props.instance" class="text-sm text-muted-foreground">
@@ -121,6 +128,7 @@ function updateNeoForgeVersion(value: string | number) {
             </label>
             <div class="grid grid-cols-3 gap-2 text-xs font-semibold">
               <button
+                :disabled="props.setupLocked"
                 class="rounded-xl border px-3 py-2 text-left transition"
                 :class="
                   props.instance.loader.kind === 'vanilla'
@@ -135,6 +143,7 @@ function updateNeoForgeVersion(value: string | number) {
                 </div>
               </button>
               <button
+                :disabled="props.setupLocked"
                 class="rounded-xl border px-3 py-2 text-left transition"
                 :class="
                   props.instance.loader.kind === 'fabric'
@@ -149,6 +158,7 @@ function updateNeoForgeVersion(value: string | number) {
                 </div>
               </button>
               <button
+                :disabled="props.setupLocked"
                 class="rounded-xl border px-3 py-2 text-left transition"
                 :class="
                   props.instance.loader.kind === 'neoforge'
@@ -169,6 +179,7 @@ function updateNeoForgeVersion(value: string | number) {
               Minecraft version
             </label>
             <Select
+              :disabled="props.setupLocked"
               :model-value="props.instance.version ?? 'latest'"
               @update:modelValue="updateVersion"
             >
@@ -209,6 +220,7 @@ function updateNeoForgeVersion(value: string | number) {
             Fabric loader version (optional)
           </label>
           <Select
+            :disabled="props.setupLocked"
             :model-value="props.instance.loader.loaderVersion ?? 'latest'"
             @update:modelValue="updateFabricLoaderVersion"
           >
@@ -233,6 +245,7 @@ function updateNeoForgeVersion(value: string | number) {
             NeoForge loader version
           </label>
           <Input
+            :disabled="props.setupLocked"
             :model-value="props.instance.loader.loaderVersion ?? ''"
             list="neoforge-versions"
             placeholder="Pick a version from the list"
@@ -271,9 +284,17 @@ function updateNeoForgeVersion(value: string | number) {
     </CardContent>
     <CardFooter class="flex items-center justify-between">
       <div class="text-xs text-muted-foreground">
-        Install or update the selected setup.
+        {{
+          props.setupLocked
+            ? "Remote packs are installed and updated from the Manage tab."
+            : "Install or update the selected setup."
+        }}
       </div>
-      <Button :disabled="props.working || !props.instance" variant="secondary" @click="emit('install')">
+      <Button
+        :disabled="props.setupLocked || props.working || !props.instance"
+        variant="secondary"
+        @click="emit('install')"
+      >
         Install
       </Button>
     </CardFooter>
