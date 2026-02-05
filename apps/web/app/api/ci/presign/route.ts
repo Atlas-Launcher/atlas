@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   }
 
   const buildId = crypto.randomUUID();
-  const artifactKey = `packs/${packId}/builds/${buildId}.bin`;
+  const artifactKey = `packs/${packId}/builds/${buildId}.atlas`;
   const uploadUrl = await createPresignedUploadUrl({
     key: artifactKey,
     contentType: "application/octet-stream",

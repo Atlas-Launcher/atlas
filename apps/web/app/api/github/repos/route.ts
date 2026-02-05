@@ -4,6 +4,16 @@ import { and, desc, eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { accounts } from "@/lib/db/schema";
+import { getAtlasPackTemplateFiles } from "@/lib/templates/atlas-pack";
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
 
 async function getGithubToken(userId: string) {
   const [account] = await db
@@ -44,6 +54,54 @@ async function githubRequest<T>(
   return response.json();
 }
 
+function encodePath(pathValue: string) {
+  return pathValue
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function applyTemplateVariables(content: string, values: Record<string, string>) {
+  return Object.entries(values).reduce((acc, [key, value]) => {
+    return acc.replaceAll(`{{${key}}}`, value);
+  }, content);
+}
+
+async function seedRepositoryWithTemplate({
+  token,
+  owner,
+  repo,
+  repoName,
+}: {
+  token: string;
+  owner: string;
+  repo: string;
+  repoName: string;
+}) {
+  const files = await getAtlasPackTemplateFiles();
+  const packName = repoName.replace(/[-_]+/g, " ").trim() || "Atlas Pack";
+  const replacements = {
+    PACK_NAME: packName,
+    PACK_SLUG: slugify(repoName),
+    REPO_NAME: repoName,
+    OWNER: owner,
+    PACK_ID: "",
+  };
+  const commitMessage = "Initialize Atlas pack template";
+
+  for (const file of files) {
+    const content = applyTemplateVariables(file.content, replacements);
+    const encodedPath = encodePath(file.path);
+    await githubRequest(token, `https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        message: commitMessage,
+        content: Buffer.from(content).toString("base64"),
+      }),
+    });
+  }
+}
+
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
 
@@ -65,9 +123,6 @@ export async function POST(request: Request) {
   const name = body?.name?.toString().trim();
   const description = body?.description?.toString().trim();
   const visibility = body?.visibility === "public" ? "public" : "private";
-  const includeReadme = Boolean(body?.includeReadme);
-  const licenseTemplate = body?.licenseTemplate?.toString().trim();
-  const gitignoreTemplate = body?.gitignoreTemplate?.toString().trim();
 
   if (!owner || !name) {
     return NextResponse.json(
@@ -97,16 +152,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const autoInit =
-      includeReadme || Boolean(licenseTemplate) || Boolean(gitignoreTemplate);
-
     const payload = {
       name,
       description: description || undefined,
       private: visibility !== "public",
-      auto_init: autoInit,
-      license_template: licenseTemplate || undefined,
-      gitignore_template: gitignoreTemplate || undefined,
     };
 
     const url = ownerIsUser
@@ -118,6 +167,21 @@ export async function POST(request: Request) {
       body: JSON.stringify(payload),
     });
 
+    let warning: string | null = null;
+    try {
+      await seedRepositoryWithTemplate({
+        token,
+        owner: repo?.owner?.login ?? owner,
+        repo: repo.name,
+        repoName: repo.name,
+      });
+    } catch (error) {
+      warning =
+        error instanceof Error
+          ? error.message
+          : "Repository created, but template seeding failed.";
+    }
+
     return NextResponse.json(
       {
         repo: {
@@ -127,6 +191,7 @@ export async function POST(request: Request) {
           cloneUrl: repo.clone_url,
           owner: repo?.owner?.login,
         },
+        warning,
       },
       { status: 201 }
     );
