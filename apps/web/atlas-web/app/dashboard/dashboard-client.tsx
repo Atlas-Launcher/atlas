@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,10 +24,18 @@ interface DashboardClientProps {
 
 export default function DashboardClient({ session }: DashboardClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") === "account" ? "account" : "overview";
+  const focus = searchParams.get("focus");
+  const nextPath = searchParams.get("next");
   const [packs, setPacks] = useState<Pack[]>([]);
   const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [tabValue, setTabValue] = useState<"overview" | "account">(initialTab);
+  const [githubLinked, setGithubLinked] = useState(false);
+  const [githubLoading, setGithubLoading] = useState(false);
+  const [githubError, setGithubError] = useState<string | null>(null);
 
   const canManage = session.user.role === "admin" || session.user.role === "creator";
   const canCreatePack = canManage;
@@ -57,6 +65,35 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     loadPacks().catch(() => setError("Unable to load packs."));
   }, [selectedPackId]);
 
+  useEffect(() => {
+    setTabValue(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    const loadAccounts = async () => {
+      setGithubLoading(true);
+      setGithubError(null);
+      const response = await fetch("/api/auth/list-accounts");
+      const data = await response.json();
+      setGithubLoading(false);
+
+      if (!response.ok) {
+        setGithubError(data?.error ?? "Unable to load linked accounts.");
+        return;
+      }
+
+      const github = (data ?? []).find(
+        (account: { providerId?: string }) => account.providerId === "github"
+      );
+      setGithubLinked(Boolean(github));
+    };
+
+    loadAccounts().catch(() => {
+      setGithubLoading(false);
+      setGithubError("Unable to load linked accounts.");
+    });
+  }, []);
+
   const handleAddPasskey = async () => {
     const result = await authClient.passkey.addPasskey();
     if (result?.error) {
@@ -69,10 +106,62 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     window.location.href = "/device";
   };
 
+  const handleLinkGithub = async () => {
+    setGithubError(null);
+    setGithubLoading(true);
+    const callbackURL = new URL(
+      nextPath ?? "/dashboard?tab=account",
+      window.location.origin
+    ).toString();
+
+    const response = await fetch("/api/auth/link-social", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "github",
+        callbackURL,
+        scopes: ["repo", "read:org", "user:email"],
+        disableRedirect: true,
+      }),
+    });
+    const data = await response.json();
+    setGithubLoading(false);
+
+    if (!response.ok) {
+      setGithubError(data?.error ?? "Unable to link GitHub.");
+      return;
+    }
+
+    if (data?.url) {
+      window.location.href = data.url;
+    } else {
+      setGithubError("Unable to start GitHub linking.");
+    }
+  };
+
+  const handleUnlinkGithub = async () => {
+    setGithubError(null);
+    setGithubLoading(true);
+    const response = await fetch("/api/auth/unlink-account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providerId: "github" }),
+    });
+    const data = await response.json();
+    setGithubLoading(false);
+
+    if (!response.ok) {
+      setGithubError(data?.error ?? "Unable to unlink GitHub.");
+      return;
+    }
+
+    setGithubLinked(false);
+  };
+
   return (
     <div className="min-h-screen bg-[var(--atlas-cream)] px-6 py-12 text-[var(--atlas-ink)]">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs value={tabValue} onValueChange={(value) => setTabValue(value as typeof tabValue)} className="space-y-6">
           <DashboardHeader
             workspaceName="Atlas Hub"
             email={session.user.email}
@@ -105,6 +194,13 @@ export default function DashboardClient({ session }: DashboardClientProps) {
             <AccountTab
               onAddPasskey={handleAddPasskey}
               onOpenDeviceFlow={handleOpenDeviceFlow}
+              githubLinked={githubLinked}
+              githubLoading={githubLoading}
+              githubError={githubError}
+              onLinkGithub={handleLinkGithub}
+              onUnlinkGithub={handleUnlinkGithub}
+              focus={focus === "github" ? "github" : null}
+              nextPath={nextPath}
             />
           </TabsContent>
         </Tabs>

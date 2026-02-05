@@ -27,6 +27,13 @@ const deviceClientIds = (process.env.ATLAS_DEVICE_CLIENT_ID ?? "atlas-launcher")
 export const auth = betterAuth({
   baseURL: baseUrl,
   secret: process.env.BETTER_AUTH_SECRET ?? process.env.AUTH_SECRET,
+  socialProviders: {
+    github: {
+      clientId: process.env.GITHUB_CLIENT_ID ?? "",
+      clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
+      scope: ["repo", "read:org", "user:email"],
+    },
+  },
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
@@ -41,6 +48,13 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+  },
+  account: {
+    accountLinking: {
+      trustedProviders: ["github"],
+      allowDifferentEmails: true,
+      updateUserInfoOnLink: true,
+    },
   },
   user: {
     additionalFields: {
