@@ -1,6 +1,10 @@
 {
   "name": "atlas-monorepo",
   "private": true,
+  "packageManager": "pnpm@9.15.5",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
@@ -13,6 +17,6 @@
   },
   "packageManager": "pnpm@9.15.5",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   }
 }
