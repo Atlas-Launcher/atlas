@@ -23,6 +23,37 @@ interface DashboardClientProps {
   };
 }
 
+function isPasskeyCancelError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as { code?: unknown; message?: unknown };
+  const code = typeof candidate.code === "string" ? candidate.code : "";
+  const message = typeof candidate.message === "string" ? candidate.message : "";
+
+  return (
+    code === "ERROR_CEREMONY_ABORTED" ||
+    code === "AUTH_CANCELLED" ||
+    /cancelled|canceled|aborted/i.test(message)
+  );
+}
+
+async function parseErrorMessage(response: Response, fallback: string) {
+  try {
+    const data = await response.json();
+    return (
+      data?.error?.message ??
+      data?.error?.error_description ??
+      data?.message ??
+      data?.error ??
+      fallback
+    );
+  } catch {
+    return fallback;
+  }
+}
+
 export default function DashboardClient({ session }: DashboardClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,6 +77,13 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   const [githubLinked, setGithubLinked] = useState(false);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const {
+    data: passkeysData,
+    isPending: passkeysLoading,
+    error: passkeysQueryError,
+    refetch: refetchPasskeys,
+  } = authClient.useListPasskeys();
 
   const canManage = session.user.role === "admin" || session.user.role === "creator";
   const canCreatePack = canManage;
@@ -104,11 +142,82 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     });
   }, []);
 
-  const handleAddPasskey = async () => {
-    const result = await authClient.passkey.addPasskey();
-    if (result?.error) {
-      setError(result.error.message ?? "Unable to add passkey.");
-      return;
+  const handleAddPasskey = async (name?: string) => {
+    if (passkeyLoading) {
+      return false;
+    }
+
+    setError(null);
+    setPasskeyLoading(true);
+    try {
+      const normalizedName = name?.trim() || undefined;
+      const result = await authClient.passkey.addPasskey(
+        normalizedName ? { name: normalizedName } : undefined
+      );
+      if (result?.error) {
+        if (isPasskeyCancelError(result.error)) {
+          return false;
+        }
+        setError(result.error.message ?? "Unable to add passkey.");
+        return false;
+      }
+      await refetchPasskeys();
+      return true;
+    } catch {
+      setError("Unable to add passkey.");
+      return false;
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
+  const handleRenamePasskey = async (id: string, name: string) => {
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      setError("Passkey name cannot be empty.");
+      return false;
+    }
+
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/passkey/update-passkey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, name: normalizedName }),
+      });
+
+      if (!response.ok) {
+        setError(await parseErrorMessage(response, "Unable to rename passkey."));
+        return false;
+      }
+
+      await refetchPasskeys();
+      return true;
+    } catch {
+      setError("Unable to rename passkey.");
+      return false;
+    }
+  };
+
+  const handleDeletePasskey = async (id: string) => {
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/passkey/delete-passkey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!response.ok) {
+        setError(await parseErrorMessage(response, "Unable to delete passkey."));
+        return false;
+      }
+
+      await refetchPasskeys();
+      return true;
+    } catch {
+      setError("Unable to delete passkey.");
+      return false;
     }
   };
 
@@ -200,6 +309,24 @@ export default function DashboardClient({ session }: DashboardClientProps) {
           <TabsContent value="account">
             <AccountTab
               onAddPasskey={handleAddPasskey}
+              onRenamePasskey={handleRenamePasskey}
+              onDeletePasskey={handleDeletePasskey}
+              passkeyLoading={passkeyLoading}
+              passkeys={
+                Array.isArray(passkeysData)
+                  ? passkeysData.map((passkey) => ({
+                      id: passkey.id,
+                      name: passkey.name,
+                      createdAt: passkey.createdAt,
+                      deviceType: passkey.deviceType,
+                      backedUp: passkey.backedUp,
+                    }))
+                  : []
+              }
+              passkeysLoading={passkeysLoading}
+              passkeysError={
+                passkeysQueryError?.message ?? passkeysQueryError?.statusText ?? null
+              }
               githubLinked={githubLinked}
               githubLoading={githubLoading}
               githubError={githubError}
