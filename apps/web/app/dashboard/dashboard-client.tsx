@@ -10,6 +10,7 @@ import SignOutButton from "@/app/dashboard/sign-out-button";
 import DashboardHeader from "@/app/dashboard/components/dashboard-header";
 import PacksTab from "@/app/dashboard/components/packs-tab";
 import AccountTab from "@/app/dashboard/components/account-tab";
+import SystemTab from "@/app/dashboard/components/system-tab";
 import type { Pack, Role } from "@/app/dashboard/types";
 
 interface DashboardClientProps {
@@ -25,14 +26,23 @@ interface DashboardClientProps {
 export default function DashboardClient({ session }: DashboardClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get("tab") === "account" ? "account" : "overview";
+  const isAdmin = session.user.role === "admin";
+  const initialTabParam = searchParams.get("tab");
+  const initialTab =
+    initialTabParam === "account"
+      ? "account"
+      : isAdmin && initialTabParam === "system"
+        ? "system"
+        : "overview";
   const focus = searchParams.get("focus");
   const nextPath = searchParams.get("next");
   const [packs, setPacks] = useState<Pack[]>([]);
   const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tabValue, setTabValue] = useState<"overview" | "account">(initialTab);
+  const [tabValue, setTabValue] = useState<"overview" | "account" | "system">(
+    initialTab
+  );
   const [githubLinked, setGithubLinked] = useState(false);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
@@ -171,6 +181,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
               <TabsList className="w-full justify-start">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="account">Account</TabsTrigger>
+                {isAdmin ? <TabsTrigger value="system">System</TabsTrigger> : null}
               </TabsList>
             }
           />
@@ -203,6 +214,12 @@ export default function DashboardClient({ session }: DashboardClientProps) {
               nextPath={nextPath}
             />
           </TabsContent>
+
+          {isAdmin ? (
+            <TabsContent value="system">
+              <SystemTab currentUserId={session.user.id} />
+            </TabsContent>
+          ) : null}
         </Tabs>
       </div>
     </div>

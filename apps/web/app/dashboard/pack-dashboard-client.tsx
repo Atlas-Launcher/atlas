@@ -7,7 +7,15 @@ import AccessTab from "@/app/dashboard/components/access-tab";
 import PackHeader from "@/app/dashboard/components/pack-header";
 import SignOutButton from "@/app/dashboard/sign-out-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ApiKey, Build, Channel, Invite, Pack, Role } from "@/app/dashboard/types";
+import type {
+  ApiKey,
+  Build,
+  Channel,
+  Invite,
+  Pack,
+  PackMember,
+  Role,
+} from "@/app/dashboard/types";
 
 interface PackDashboardClientProps {
   session: {
@@ -25,6 +33,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const [builds, setBuilds] = useState<Build[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [members, setMembers] = useState<PackMember[]>([]);
   const [apiKeyRecords, setApiKeyRecords] = useState<ApiKey[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +49,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const canManage = session.user.role === "admin" || session.user.role === "creator";
   const canPromoteBuilds = canManage;
   const canManageInvites = canManage;
+  const canManageMembers = canManage;
   const canManageApiKeys = canManage;
 
   const packLabel = useMemo(() => pack?.slug ?? pack?.name ?? packId, [pack, packId]);
@@ -74,6 +84,10 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
         requests.push(fetch(`/api/packs/${packId}/invites`));
       }
 
+      if (canManageMembers) {
+        requests.push(fetch(`/api/packs/${packId}/members`));
+      }
+
       if (canManageApiKeys) {
         requests.push(fetch(`/api/packs/${packId}/api-keys`));
       }
@@ -82,8 +96,11 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
       const buildRes = responses[0];
       const channelRes = responses[1];
       const inviteRes = canManageInvites ? responses[2] : null;
-      const tokenRes = canManageApiKeys
+      const memberRes = canManageMembers
         ? responses[canManageInvites ? 3 : 2]
+        : null;
+      const tokenRes = canManageApiKeys
+        ? responses[canManageMembers ? (canManageInvites ? 4 : 3) : canManageInvites ? 3 : 2]
         : null;
 
       if (buildRes.ok) {
@@ -103,6 +120,13 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
         setInvites([]);
       }
 
+      if (memberRes && memberRes.ok) {
+        const data = await memberRes.json();
+        setMembers(data.members ?? []);
+      } else if (!canManageMembers) {
+        setMembers([]);
+      }
+
       if (tokenRes && tokenRes.ok) {
         const data = await tokenRes.json();
         setApiKeyRecords(data.keys ?? []);
@@ -113,7 +137,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
 
     setNewApiKey(null);
     loadDetails().catch(() => setError("Unable to load pack details."));
-  }, [packId, canManageInvites, canManageApiKeys]);
+  }, [packId, canManageInvites, canManageMembers, canManageApiKeys]);
 
   const handleCreateInvite = async () => {
     setLoading(true);
@@ -190,6 +214,23 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
     setApiKeyRecords((prev) => [data.record, ...prev]);
   };
 
+  const handleRevokeMember = async (userId: string) => {
+    setLoading(true);
+    setError(null);
+    const response = await fetch(`/api/packs/${packId}/members/${userId}`, {
+      method: "DELETE",
+    });
+    const data = await response.json();
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data?.error ?? "Unable to revoke access.");
+      return;
+    }
+
+    setMembers((prev) => prev.filter((member) => member.userId !== userId));
+  };
+
   return (
     <div className="min-h-screen bg-[var(--atlas-cream)] px-6 py-12 text-[var(--atlas-ink)]">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -237,6 +278,8 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
               onInviteRoleChange={setInviteRole}
               onInviteAccessChange={setInviteAccess}
               onCreateInvite={handleCreateInvite}
+              members={members}
+              onRevokeMember={handleRevokeMember}
               canManageApiKeys={canManageApiKeys}
               apiKeyRecords={apiKeyRecords}
               apiKeyLabel={apiKeyLabel}
@@ -245,6 +288,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
               onCreateApiKey={handleCreateApiKey}
               loading={loading}
               selectedPackId={packId}
+              currentUserId={session.user.id}
             />
           </TabsContent>
         </Tabs>

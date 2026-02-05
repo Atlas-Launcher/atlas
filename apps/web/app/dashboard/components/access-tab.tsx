@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import PackAccessDialog from "@/app/dashboard/components/pack-access-dialog";
 import {
   Table,
   TableBody,
@@ -18,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ApiKey, Invite } from "@/app/dashboard/types";
+import type { ApiKey, Invite, PackMember } from "@/app/dashboard/types";
 
 interface AccessTabProps {
   canManageInvites: boolean;
@@ -30,6 +31,8 @@ interface AccessTabProps {
   onInviteRoleChange: (value: string) => void;
   onInviteAccessChange: (value: string) => void;
   onCreateInvite: () => void;
+  members: PackMember[];
+  onRevokeMember: (userId: string) => void;
   canManageApiKeys: boolean;
   apiKeyRecords: ApiKey[];
   apiKeyLabel: string;
@@ -38,6 +41,7 @@ interface AccessTabProps {
   onCreateApiKey: () => void;
   loading: boolean;
   selectedPackId: string;
+  currentUserId: string;
 }
 
 export default function AccessTab({
@@ -50,6 +54,8 @@ export default function AccessTab({
   onInviteRoleChange,
   onInviteAccessChange,
   onCreateInvite,
+  members,
+  onRevokeMember,
   canManageApiKeys,
   apiKeyRecords,
   apiKeyLabel,
@@ -58,6 +64,7 @@ export default function AccessTab({
   onCreateApiKey,
   loading,
   selectedPackId,
+  currentUserId,
 }: AccessTabProps) {
   const inviteLink = `/invite?pack=${selectedPackId}`;
 
@@ -105,44 +112,27 @@ export default function AccessTab({
       {canManageInvites ? (
         <Card>
           <CardHeader>
-            <CardTitle>Create Invite</CardTitle>
-            <CardDescription>Generates a new code instantly.</CardDescription>
+            <CardTitle>Access Controls</CardTitle>
+            <CardDescription>Invite teammates or revoke access.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
               Share this link: <span className="font-semibold text-[var(--atlas-ink)]">{inviteLink}</span>
             </div>
-            <Input
-              placeholder="Email (optional)"
-              value={inviteEmail}
-              onChange={(event) => onInviteEmailChange(event.target.value)}
+            <PackAccessDialog
+              canManage={canManageInvites}
+              inviteEmail={inviteEmail}
+              inviteRole={inviteRole}
+              inviteAccess={inviteAccess}
+              onInviteEmailChange={onInviteEmailChange}
+              onInviteRoleChange={onInviteRoleChange}
+              onInviteAccessChange={onInviteAccessChange}
+              onCreateInvite={onCreateInvite}
+              members={members}
+              onRevokeMember={onRevokeMember}
+              loading={loading}
+              currentUserId={currentUserId}
             />
-            <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
-              Role
-              <select
-                value={inviteRole}
-                onChange={(event) => onInviteRoleChange(event.target.value)}
-                className="mt-2 h-12 w-full rounded-2xl border border-[var(--atlas-ink)]/20 bg-white px-4 text-sm"
-              >
-                <option value="player">Player</option>
-                <option value="creator">Creator</option>
-              </select>
-            </label>
-            <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
-              Access Level
-              <select
-                value={inviteAccess}
-                onChange={(event) => onInviteAccessChange(event.target.value)}
-                className="mt-2 h-12 w-full rounded-2xl border border-[var(--atlas-ink)]/20 bg-white px-4 text-sm"
-              >
-                <option value="production">Production</option>
-                <option value="beta">Beta</option>
-                <option value="dev">Dev</option>
-              </select>
-            </label>
-            <Button onClick={onCreateInvite} disabled={loading || !selectedPackId}>
-              Create Invite
-            </Button>
           </CardContent>
         </Card>
       ) : null}
