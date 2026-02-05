@@ -24,6 +24,11 @@ jobs:
           lfs: true
           fetch-depth: 0
 
+      - name: Pull LFS objects explicitly
+        run: |
+          git lfs pull
+          git lfs checkout
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -66,6 +71,14 @@ jobs:
       - name: Verify pnpm
         run: pnpm --version
 
+      - name: Verify icon assets
+        shell: bash
+        run: |
+          ls -lah apps/launcher/src-tauri/icons
+          test -f apps/launcher/src-tauri/icons/icon.ico
+          test -f apps/launcher/src-tauri/icons/icon.icns
+          test -f apps/launcher/src-tauri/icons/icon.png
+
       - name: Prepare updater signing key
         shell: bash
         run: |
@@ -73,8 +86,21 @@ jobs:
             echo "::error::Missing TAURI_SIGNING_PRIVATE_KEY repository secret."
             exit 1
           fi
+          raw_key_file="$RUNNER_TEMP/tauri-signing.raw"
           key_file="$RUNNER_TEMP/tauri-signing.key"
-          printf '%s' "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" > "$key_file"
+          # Normalize potential CRLF from secret copy/paste so minisign parsing is stable across runners.
+          printf '%s' "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" | tr -d '\r' > "$raw_key_file"
+
+          # Support both:
+          # 1) plain minisign key text (contains "untrusted comment")
+          # 2) base64-encoded minisign key text
+          if grep -q '^untrusted comment:' "$raw_key_file"; then
+            cp "$raw_key_file" "$key_file"
+          elif base64 --decode "$raw_key_file" > "$key_file.decoded" 2>/dev/null && grep -q '^untrusted comment:' "$key_file.decoded"; then
+            mv "$key_file.decoded" "$key_file"
+          else
+            cp "$raw_key_file" "$key_file"
+          fi
           chmod 600 "$key_file"
           echo "TAURI_SIGNING_PRIVATE_KEY=$key_file" >> "$GITHUB_ENV"
 
@@ -85,7 +111,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           projectPath: apps/launcher
-          tauriScript: npx tauri
+          tauriScript: pnpm tauri
           tagName: ${{ github.ref_name }}
           releaseName: Atlas Launcher ${{ github.ref_name }}
           releaseDraft: false
