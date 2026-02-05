@@ -31,6 +31,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Activate pnpm
+        run: corepack prepare pnpm@9.15.9 --activate
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -62,6 +68,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify pnpm
+        run: pnpm --version
 
       - name: Prepare updater signing key
         shell: bash
