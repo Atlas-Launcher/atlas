@@ -2,6 +2,7 @@ mod codec;
 mod error;
 mod platform;
 mod types;
+mod wire;
 
 pub use crate::codec::{decode_blob, encode_blob, encode_blob_default, DEFAULT_ZSTD_LEVEL};
 pub use crate::error::ProtocolError;
@@ -13,14 +14,13 @@ pub use crate::types::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_bytes::ByteBuf;
 
     #[test]
     fn round_trip_blob() {
         let mut files = ByteMap::new();
         files.insert(
             "config/server.properties".to_string(),
-            ByteBuf::from(b"motd=Atlas".to_vec()),
+            b"motd=Atlas".to_vec(),
         );
 
         let blob = PackBlob {

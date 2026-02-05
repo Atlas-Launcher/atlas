@@ -1,6 +1,5 @@
 use crate::platform::PlatformFilter;
 use serde::{Deserialize, Serialize};
-use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,22 +36,24 @@ pub struct Hash {
     pub hex: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ::prost::Enumeration)]
+#[repr(i32)]
 #[serde(rename_all = "snake_case")]
 pub enum HashAlgorithm {
-    Sha1,
-    Sha256,
+    Sha1 = 0,
+    Sha256 = 1,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ::prost::Enumeration)]
+#[repr(i32)]
 #[serde(rename_all = "snake_case")]
 pub enum Loader {
-    Fabric,
-    Forge,
-    Neo,
+    Fabric = 0,
+    Forge = 1,
+    Neo = 2,
 }
 
-pub type ByteMap = BTreeMap<String, ByteBuf>;
+pub type ByteMap = BTreeMap<String, Vec<u8>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackBlob {

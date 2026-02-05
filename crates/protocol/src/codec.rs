@@ -1,11 +1,15 @@
 use crate::error::ProtocolError;
 use crate::types::PackBlob;
+use crate::wire;
+use prost::Message;
 use std::io::Cursor;
 
 pub const DEFAULT_ZSTD_LEVEL: i32 = 19;
 
 pub fn encode_blob(blob: &PackBlob, zstd_level: i32) -> Result<Vec<u8>, ProtocolError> {
-    let encoded = bincode::serialize(blob)?;
+    let wire_blob = wire::PackBlob::try_from(blob)?;
+    let mut encoded = Vec::with_capacity(wire_blob.encoded_len());
+    wire_blob.encode(&mut encoded)?;
     let compressed = zstd::stream::encode_all(Cursor::new(encoded), zstd_level)?;
     Ok(compressed)
 }
@@ -16,6 +20,7 @@ pub fn encode_blob_default(blob: &PackBlob) -> Result<Vec<u8>, ProtocolError> {
 
 pub fn decode_blob(bytes: &[u8]) -> Result<PackBlob, ProtocolError> {
     let decompressed = zstd::stream::decode_all(Cursor::new(bytes))?;
-    let blob = bincode::deserialize(&decompressed)?;
+    let wire_blob = wire::PackBlob::decode(decompressed.as_slice())?;
+    let blob = PackBlob::try_from(wire_blob)?;
     Ok(blob)
 }
