@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "pnpm db:migrate && next build",
+    "build:nomigrate": "next build",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
