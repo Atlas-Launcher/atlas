@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
     "tauri:dev:device-code": "VITE_AUTH_FLOW=device_code tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "release:launcher": "tsc -p tsconfig.release.json && node .release-tools/release-launcher.js"
   },
   "dependencies": {
     "@tanstack/vue-table": "^8.21.3",

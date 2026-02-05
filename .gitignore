@@ -10,3 +10,4 @@ target
 /Cargo.lock
 /crates/protocol/Cargo.lock
 .next
+apps/launcher/.release-tools
