@@ -1,8 +1,8 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::net::http::HttpClient;
 use super::error::AuthError;
+use crate::net::http::HttpClient;
 
 const XBL_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XSTS_AUTH_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";

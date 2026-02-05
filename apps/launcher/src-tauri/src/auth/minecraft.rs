@@ -2,8 +2,8 @@ use crate::models::Profile;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::net::http::HttpClient;
 use super::error::AuthError;
+use crate::net::http::HttpClient;
 
 const MC_LOGIN_URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const MC_ENTITLEMENTS_URL: &str = "https://api.minecraftservices.com/entitlements/mcstore";

@@ -100,8 +100,7 @@ fn installer_url(loader_version: &str) -> String {
 fn extract_version_json(installer_path: &Path) -> Result<Vec<u8>, LauncherError> {
     let file =
         std::fs::File::open(installer_path).map_err(|err| format!("Open installer: {err}"))?;
-    let mut archive =
-        ZipArchive::new(file).map_err(|err| format!("Read installer jar: {err}"))?;
+    let mut archive = ZipArchive::new(file).map_err(|err| format!("Read installer jar: {err}"))?;
 
     if let Ok(mut entry) = archive.by_name("version.json") {
         let mut buffer = Vec::new();

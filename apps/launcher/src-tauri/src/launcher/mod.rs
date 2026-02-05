@@ -1,14 +1,14 @@
 mod args;
 pub(crate) mod download;
 mod error;
-pub(crate) mod manifest;
 mod java;
 mod libraries;
 pub(crate) mod loaders;
+pub(crate) mod manifest;
 mod versions;
 
-use crate::net::http::{fetch_json, shared_client};
 use crate::models::{AuthSession, LaunchEvent, LaunchOptions};
+use crate::net::http::{fetch_json, shared_client};
 use crate::paths::{ensure_dir, file_exists, normalize_path};
 use download::{download_if_needed, download_raw, DOWNLOAD_CONCURRENCY};
 use error::LauncherError;
