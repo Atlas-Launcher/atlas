@@ -15,6 +15,11 @@
     "tauri:build": {
       "dependsOn": ["build"],
       "outputs": ["src-tauri/target/**"]
+    },
+    "release:launcher": {
+      "dependsOn": ["tauri:build"],
+      "cache": false,
+      "outputs": []
     }
   }
 }
