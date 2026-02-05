@@ -1,11 +1,11 @@
 use crate::models::AuthSession;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::net::http::HttpClient;
 use super::error::AuthError;
 use super::minecraft;
 use super::ms::DeviceTokenResponse;
 use super::xbox;
+use crate::net::http::HttpClient;
 
 pub(crate) async fn session_from_ms_token<H: HttpClient + ?Sized>(
     http: &H,

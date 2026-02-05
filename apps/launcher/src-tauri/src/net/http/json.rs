@@ -5,19 +5,12 @@ use super::client::shared_client;
 use super::errors::HttpError;
 
 pub async fn fetch_json<T: DeserializeOwned>(client: &Client, url: &str) -> Result<T, HttpError> {
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(HttpError::Request)?;
+    let response = client.get(url).send().await.map_err(HttpError::Request)?;
 
     if !response.status().is_success() {
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
-        return Err(HttpError::Status {
-            status,
-            body: text,
-        });
+        return Err(HttpError::Status { status, body: text });
     }
 
     let body = response.text().await.map_err(HttpError::Request)?;

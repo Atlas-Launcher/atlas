@@ -1,11 +1,9 @@
 mod error;
 
-use crate::net::http::{fetch_json_shared, shared_client};
-use crate::models::{
-    FabricLoaderVersion, ModEntry, VersionManifestSummary, VersionSummary,
-};
-use crate::paths;
 use crate::launcher::manifest::VersionManifest;
+use crate::models::{FabricLoaderVersion, ModEntry, VersionManifestSummary, VersionSummary};
+use crate::net::http::{fetch_json_shared, shared_client};
+use crate::paths;
 use error::LibraryError;
 use std::fs;
 use std::path::Component;
@@ -31,10 +29,7 @@ pub async fn fetch_fabric_loader_versions(
     minecraft_version: &str,
 ) -> Result<Vec<FabricLoaderVersion>, LibraryError> {
     let client = shared_client();
-    Ok(
-        crate::launcher::loaders::fabric::fetch_loader_versions(client, minecraft_version)
-            .await?,
-    )
+    Ok(crate::launcher::loaders::fabric::fetch_loader_versions(client, minecraft_version).await?)
 }
 
 pub async fn fetch_neoforge_loader_versions() -> Result<Vec<String>, LibraryError> {
@@ -50,8 +45,8 @@ pub fn list_installed_versions(game_dir: &str) -> Result<Vec<String>, LibraryErr
     }
 
     let mut versions = Vec::new();
-    let entries = fs::read_dir(&versions_dir)
-        .map_err(|err| format!("Failed to read versions dir: {err}"))?;
+    let entries =
+        fs::read_dir(&versions_dir).map_err(|err| format!("Failed to read versions dir: {err}"))?;
     for entry in entries {
         let entry = entry.map_err(|err| format!("Failed to read versions dir entry: {err}"))?;
         let path = entry.path();
@@ -104,7 +99,11 @@ pub fn list_mods(game_dir: &str) -> Result<Vec<ModEntry>, LibraryError> {
             modified,
         });
     }
-    mods.sort_by(|a, b| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()));
+    mods.sort_by(|a, b| {
+        a.display_name
+            .to_lowercase()
+            .cmp(&b.display_name.to_lowercase())
+    });
     Ok(mods)
 }
 
@@ -132,10 +131,7 @@ pub fn set_mod_enabled(game_dir: &str, file_name: &str, enabled: bool) -> Result
 
     let target_path = mods_dir.join(&target_name);
     if target_path.exists() {
-        return Err(format!(
-            "Cannot toggle mod. Target file already exists: {target_name}"
-        )
-        .into());
+        return Err(format!("Cannot toggle mod. Target file already exists: {target_name}").into());
     }
 
     fs::rename(&current_path, &target_path)

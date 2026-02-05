@@ -21,9 +21,8 @@ pub async fn begin_deeplink_login(state: tauri::State<'_, AppState>) -> Result<S
         .map_err(|_| "Settings lock poisoned".to_string())?
         .clone();
     let client_id = config::resolve_client_id(&settings);
-    let (pending, auth_url) =
-        auth::begin_deeplink_login(&client_id, config::DEFAULT_REDIRECT_URI)
-            .map_err(|err| err.to_string())?;
+    let (pending, auth_url) = auth::begin_deeplink_login(&client_id, config::DEFAULT_REDIRECT_URI)
+        .map_err(|err| err.to_string())?;
     auth::save_pending_auth(&pending).map_err(|err| err.to_string())?;
     let mut guard = state
         .pending_auth
@@ -46,7 +45,8 @@ pub async fn complete_deeplink_login(
         if let Some(pending) = guard.as_ref() {
             pending.clone()
         } else {
-            auth::load_pending_auth().map_err(|err| err.to_string())?
+            auth::load_pending_auth()
+                .map_err(|err| err.to_string())?
                 .ok_or_else(|| "No pending sign-in found. Start sign-in again.".to_string())?
         }
     };
