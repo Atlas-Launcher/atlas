@@ -28,12 +28,6 @@ struct ModFile {
     hashes: ModHashes,
 }
 
-#[derive(Deserialize)]
-struct ModHashes {
-    sha1: String,
-    sha512: String,
-}
-
 pub fn resolve(
     query: &str,
     loader: &str,
@@ -80,10 +74,9 @@ pub fn resolve(
         versions
             .iter()
             .find(|item| item.version_number == desired || item.name == desired)
-            .cloned()
             .context("Requested version not found")?
     } else {
-        versions.first().cloned().context("No Modrinth versions found")?
+        versions.first().context("No Modrinth versions found")?
     };
 
     let file = version
@@ -103,7 +96,7 @@ pub fn resolve(
         download_url: Some(file.url.clone()),
         hashes: Some(ModHashes {
             sha1: None,
-            sha512: Some(file.hashes.sha512.clone()),
+            sha512: file.hashes.sha512.clone(),
         }),
     })
 }

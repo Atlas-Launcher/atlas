@@ -1,7 +1,7 @@
 mod codec;
-mod config;
+pub mod config;
 mod error;
-mod pack;
+pub mod pack;
 mod platform;
 mod types;
 mod wire;
