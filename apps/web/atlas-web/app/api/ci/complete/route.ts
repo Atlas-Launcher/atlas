@@ -1,37 +1,35 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
-
+import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { builds, channels, deployTokens } from "@/lib/db/schema";
-import { hashDeployToken } from "@/lib/auth/deploy-tokens";
+import { builds, channels } from "@/lib/db/schema";
 
-function getToken(request: Request) {
+function getApiKey(request: Request) {
   const header = request.headers.get("authorization");
   if (header?.toLowerCase().startsWith("bearer ")) {
     return header.slice(7).trim();
   }
-  return request.headers.get("x-deploy-token")?.trim();
+  return request.headers.get("x-api-key")?.trim();
 }
 
 export async function POST(request: Request) {
-  const token = getToken(request);
+  const apiKey = getApiKey(request);
 
-  if (!token) {
-    return NextResponse.json({ error: "Missing deploy token" }, { status: 401 });
+  if (!apiKey) {
+    return NextResponse.json({ error: "Missing API key" }, { status: 401 });
   }
 
-  const tokenHash = hashDeployToken(token);
-  const [deployToken] = await db
-    .select()
-    .from(deployTokens)
-    .where(and(eq(deployTokens.tokenHash, tokenHash), eq(deployTokens.active, true)));
+  const verification = await auth.api.verifyApiKey({
+    body: { key: apiKey },
+  });
 
-  if (!deployToken) {
-    return NextResponse.json({ error: "Invalid deploy token" }, { status: 403 });
+  if (!verification?.valid || !verification.key) {
+    return NextResponse.json({ error: "Invalid API key" }, { status: 403 });
   }
 
-  const body = await request.json();
-  const packId = body?.packId?.toString() ?? deployToken.packId;
+  const body = await request.json().catch(() => ({}));
+  const packIdFromKey = verification.key.metadata?.packId?.toString();
+  const keyType = verification.key.metadata?.type?.toString();
+  const packId = body?.packId?.toString() ?? packIdFromKey;
   const buildId = body?.buildId?.toString();
   const artifactKey = body?.artifactKey?.toString();
   const version = body?.version?.toString();
@@ -39,7 +37,11 @@ export async function POST(request: Request) {
   const artifactSize = body?.artifactSize ? Number(body.artifactSize) : null;
   const channel = (body?.channel?.toString() ?? "dev") as "dev" | "beta" | "production";
 
-  if (!packId || packId !== deployToken.packId) {
+  if (keyType && keyType !== "deploy") {
+    return NextResponse.json({ error: "Invalid API key type" }, { status: 403 });
+  }
+
+  if (!packId || !packIdFromKey || packId !== packIdFromKey) {
     return NextResponse.json({ error: "Pack mismatch" }, { status: 403 });
   }
 

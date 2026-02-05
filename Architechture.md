@@ -36,7 +36,7 @@ The heavy-compute engine offloaded to GitHub’s infrastructure.
 ---
 
 ## 3. The Atlas Distribution Format (.apack)
-To eliminate HTTP overhead, a specific version is represented by a single **Zstd-compressed Bincode** blob.
+To eliminate HTTP overhead, a specific version is represented by a single **Zstd-compressed Protobuf3** blob.
 
 ### 3.1 Metadata & Manifest
 *   **Global Info**: Pack ID, Version String, Minecraft Version, and Loader (Fabric/Forge/Neo).
@@ -91,7 +91,7 @@ To eliminate HTTP overhead, a specific version is represented by a single **Zstd
 ### 6.2 Launcher Hydration
 1.  **Sync**: Launcher requests the active Build for the user's selected channel.
 2.  **Download**: Launcher fetches the single `.bin` blob.
-3.  **Decompression**: Launcher performs in-memory Zstd decompression and Bincode deserialization.
+3.  **Decompression**: Launcher performs in-memory Zstd decompression and Protobuf3 deserialization.
 4.  **Hydration**:
     *   **Text Files**: The Byte-Map is iterated; files are written directly to the game directory.
     *   **Dependencies**: The Manifest is iterated; the Launcher checks the current OS against filters, verifies hashes, and downloads JARs only as needed.
@@ -104,6 +104,6 @@ To eliminate HTTP overhead, a specific version is represented by a single **Zstd
 *   **Backend**: Next.js (Edge-compatible) on Vercel.
 *   **Database**: Managed PostgreSQL (storing users, permissions, pack metadata, and build history).
 *   **Storage**: Cloudflare R2 for blobs and assets.
-*   **Serialization**: Bincode (Rust native, zero-copy overhead).
+*   **Serialization**: Protobuf3 (Rust native, schema-driven, forward-compatible).
 *   **Compression**: Zstd (Level 19+ for distribution blobs).
 *   **CLI/Launcher**: Rust (optimized for low memory usage and high-speed hashing).

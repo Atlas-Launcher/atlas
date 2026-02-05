@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   pgEnum,
   pgTable,
@@ -97,7 +98,7 @@ export const deviceCodes = pgTable("deviceCode", {
 });
 
 export const packs = pgTable("packs", {
-  id: uuid("id").defaultRandom().primaryKey(),
+  id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description"),
@@ -110,7 +111,7 @@ export const packs = pgTable("packs", {
 export const packMembers = pgTable(
   "pack_members",
   {
-    packId: uuid("pack_id")
+    packId: text("pack_id")
       .notNull()
       .references(() => packs.id, { onDelete: "cascade" }),
     userId: text("user_id")
@@ -127,7 +128,7 @@ export const packMembers = pgTable(
 
 export const builds = pgTable("builds", {
   id: uuid("id").defaultRandom().primaryKey(),
-  packId: uuid("pack_id")
+  packId: text("pack_id")
     .notNull()
     .references(() => packs.id, { onDelete: "cascade" }),
   version: text("version").notNull(),
@@ -141,7 +142,7 @@ export const channels = pgTable(
   "channels",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    packId: uuid("pack_id")
+    packId: text("pack_id")
       .notNull()
       .references(() => packs.id, { onDelete: "cascade" }),
     name: channelEnum("name").notNull(),
@@ -156,17 +157,38 @@ export const channels = pgTable(
   })
 );
 
-export const deployTokens = pgTable("deploy_tokens", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  packId: uuid("pack_id")
-    .notNull()
-    .references(() => packs.id, { onDelete: "cascade" }),
-  tokenHash: text("token_hash").notNull(),
-  label: text("label"),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  revokedAt: timestamp("revoked_at", { withTimezone: true }),
-});
+export const apiKeys = pgTable(
+  "apikey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    start: text("start"),
+    prefix: text("prefix"),
+    key: text("key").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    refillInterval: integer("refill_interval"),
+    refillAmount: integer("refill_amount"),
+    lastRefillAt: timestamp("last_refill_at", { withTimezone: true }),
+    enabled: boolean("enabled").notNull().default(true),
+    rateLimitEnabled: boolean("rate_limit_enabled").notNull().default(true),
+    rateLimitTimeWindow: integer("rate_limit_time_window"),
+    rateLimitMax: integer("rate_limit_max"),
+    requestCount: integer("request_count").notNull().default(0),
+    remaining: integer("remaining"),
+    lastRequest: timestamp("last_request", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    permissions: text("permissions"),
+    metadata: text("metadata"),
+  },
+  (table) => ({
+    keyIdx: index("apikey_key_idx").on(table.key),
+    userIdx: index("apikey_user_idx").on(table.userId),
+  })
+);
 
 export const invites = pgTable("invites", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -174,7 +196,7 @@ export const invites = pgTable("invites", {
   code: text("code").notNull().unique(),
   role: roleEnum("role").notNull(),
   accessLevel: accessLevelEnum("access_level").notNull().default("production"),
-  packId: uuid("pack_id").references(() => packs.id, { onDelete: "cascade" }),
+  packId: text("pack_id").references(() => packs.id, { onDelete: "cascade" }),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   usedAt: timestamp("used_at", { withTimezone: true }),
   createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),

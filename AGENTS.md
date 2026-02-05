@@ -24,7 +24,7 @@ Atlas is a platform for managing and distributing Minecraft modpacks using a Sou
   - Asset hosting for custom JARs/assets.
 
 ## Distribution Format (.bin)
-- Zstd-compressed Bincode blob.
+- Zstd-compressed Protobuf3 blob.
 - Metadata and manifest include pack ID, version, Minecraft version, loader, dependency URLs, hashes, and platform filters.
 - Embedded payload is a virtual filesystem map of relative paths to bytes.
 
@@ -48,7 +48,7 @@ Atlas is a platform for managing and distributing Minecraft modpacks using a Sou
 - Launcher hydration
   1. Fetch active build for a channel.
   2. Download the .bin blob.
-  3. Decompress (Zstd) and deserialize (Bincode).
+  3. Decompress (Zstd) and deserialize (Protobuf3).
   4. Write text/config files; download filtered dependencies; verify hashes.
   5. Launch JVM with computed classpath.
 
@@ -56,7 +56,7 @@ Atlas is a platform for managing and distributing Minecraft modpacks using a Sou
 - Backend: Next.js edge-compatible.
 - Database: Managed PostgreSQL.
 - Storage: Cloudflare R2.
-- Serialization: Bincode.
+- Serialization: Protobuf3.
 - Compression: Zstd (level 19+).
 - CLI/Launcher: Rust for low memory usage and fast hashing.
 
@@ -74,3 +74,6 @@ Atlas is a platform for managing and distributing Minecraft modpacks using a Sou
 ## Shadcn/ui
 - Use shadcn/ui components for consistent styling and behavior.
 - You can install them with either `pnpm dlx shadcn-vue@latest add <component>` or `pnpm dlx shadcn@latest add <component>`, if working in react.
+
+## Lucide icons
+- Use Lucide icons for a consistent iconography style, wherever possible.

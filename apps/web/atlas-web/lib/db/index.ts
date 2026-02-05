@@ -1,5 +1,5 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { neonConfig, Pool } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
 
 import * as schema from "./schema";
 
@@ -9,8 +9,12 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is not set");
 }
 
-const sql = neon(databaseUrl);
+if (typeof WebSocket !== "undefined") {
+  neonConfig.webSocketConstructor = WebSocket;
+}
 
-export const db = drizzle(sql, { schema });
+const pool = new Pool({ connectionString: databaseUrl });
+
+export const db = drizzle(pool, { schema });
 
 export type Database = typeof db;

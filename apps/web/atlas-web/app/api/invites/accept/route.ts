@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -14,15 +14,21 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const code = body?.code?.toString().trim();
+  const packId = body?.packId?.toString().trim();
 
-  if (!code) {
-    return NextResponse.json({ error: "Invite code required" }, { status: 400 });
+  if (!code && !packId) {
+    return NextResponse.json({ error: "Invite link required" }, { status: 400 });
   }
 
   const [invite] = await db
     .select()
     .from(invites)
-    .where(and(eq(invites.code, code), isNull(invites.usedAt)));
+    .where(
+      code
+        ? and(eq(invites.code, code), isNull(invites.usedAt))
+        : and(eq(invites.packId, packId!), isNull(invites.usedAt))
+    )
+    .orderBy(desc(invites.createdAt));
 
   if (!invite) {
     return NextResponse.json({ error: "Invite not found" }, { status: 404 });
@@ -46,10 +52,12 @@ export async function POST(request: Request) {
     })
     .onConflictDoNothing();
 
-  await db
-    .update(invites)
-    .set({ usedAt: new Date() })
-    .where(eq(invites.id, invite.id));
+  if (code) {
+    await db
+      .update(invites)
+      .set({ usedAt: new Date() })
+      .where(eq(invites.id, invite.id));
+  }
 
   return NextResponse.json({ success: true });
 }

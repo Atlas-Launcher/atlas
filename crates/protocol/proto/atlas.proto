@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package atlas.protocol;
+
+message PackBlob {
+  PackMetadata metadata = 1;
+  Manifest manifest = 2;
+  map<string, bytes> files = 3;
+}
+
+message PackMetadata {
+  string pack_id = 1;
+  string version = 2;
+  string minecraft_version = 3;
+  Loader loader = 4;
+}
+
+message Manifest {
+  repeated Dependency dependencies = 1;
+}
+
+message Dependency {
+  string url = 1;
+  Hash hash = 2;
+  PlatformFilter platform = 3;
+}
+
+message Hash {
+  HashAlgorithm algorithm = 1;
+  string hex = 2;
+}
+
+message PlatformFilter {
+  repeated Platform include = 1;
+  repeated Platform exclude = 2;
+}
+
+enum HashAlgorithm {
+  HASH_ALGORITHM_SHA1 = 0;
+  HASH_ALGORITHM_SHA256 = 1;
+}
+
+enum Loader {
+  LOADER_FABRIC = 0;
+  LOADER_FORGE = 1;
+  LOADER_NEO = 2;
+}
+
+enum Platform {
+  PLATFORM_WINDOWS = 0;
+  PLATFORM_LINUX = 1;
+  PLATFORM_MACOS = 2;
+}
