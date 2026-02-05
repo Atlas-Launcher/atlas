@@ -1,4 +1,5 @@
 export type ReleaseAsset = {
+  id?: number;
   name: string;
   browser_download_url: string;
   size: number;
@@ -19,11 +20,17 @@ export type GitHubRelease = {
 const DEFAULT_REVALIDATE_SECONDS = 300;
 
 export function getReleaseRepo(): string | null {
-  return process.env.ATLAS_RELEASE_REPO ?? process.env.NEXT_PUBLIC_ATLAS_RELEASE_REPO ?? null;
+  return (
+    process.env.ATLAS_RELEASE_REPO ??
+    process.env.NEXT_PUBLIC_ATLAS_RELEASE_REPO ??
+    process.env.atlas_release_repo ??
+    null
+  );
 }
 
-function getAuthHeaders(): HeadersInit {
-  const token = process.env.ATLAS_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
+export function getAuthHeaders(): HeadersInit {
+  const token =
+    process.env.ATLAS_GITHUB_TOKEN ?? process.env.atlas_github_token ?? process.env.GITHUB_TOKEN;
   if (!token) {
     return {};
   }
@@ -49,6 +56,29 @@ async function fetchReleases(repo: string): Promise<GitHubRelease[]> {
 
   const data = (await response.json()) as GitHubRelease[];
   return Array.isArray(data) ? data : [];
+}
+
+export async function getReleaseByTag(tag: string): Promise<GitHubRelease | null> {
+  const repo = getReleaseRepo();
+  if (!repo || !tag) {
+    return null;
+  }
+
+  const response = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${tag}`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "atlas-hub-downloads",
+      ...getAuthHeaders(),
+    },
+    next: { revalidate: DEFAULT_REVALIDATE_SECONDS },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = (await response.json()) as GitHubRelease;
+  return data ?? null;
 }
 
 export async function getLatestRelease(tagPrefix: string): Promise<GitHubRelease | null> {

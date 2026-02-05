@@ -54,6 +54,16 @@ export default async function AdminUserPage({ params }: PageProps) {
     .where(eq(packMembers.userId, userId))
     .orderBy(asc(packs.name));
 
+  const userSummary = {
+    ...user,
+    createdAt: user.createdAt.toISOString(),
+  };
+
+  const membershipSummaries = memberships.map((membership) => ({
+    ...membership,
+    joinedAt: membership.joinedAt.toISOString(),
+  }));
+
   return (
     <AdminUserClient
       session={{
@@ -63,8 +73,8 @@ export default async function AdminUserPage({ params }: PageProps) {
           role: session.user.role ?? "player",
         },
       }}
-      user={user}
-      memberships={memberships}
+      user={userSummary}
+      memberships={membershipSummaries}
     />
   );
 }

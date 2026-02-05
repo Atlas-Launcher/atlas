@@ -1,8 +1,20 @@
 import { NextResponse } from "next/server";
 
-import { getLatestRelease } from "@/lib/releases";
+import { getAuthHeaders, getLatestRelease } from "@/lib/releases";
+import { applyRateLimitHeaders, getClientIp, rateLimit } from "@/lib/rate-limit";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const limiter = rateLimit({
+    id: `latest-manifest:${getClientIp(request)}`,
+    limit: 60,
+    windowMs: 300_000,
+  });
+  if (!limiter.allowed) {
+    const headers = new Headers();
+    applyRateLimitHeaders(headers, limiter);
+    return NextResponse.json({ error: "Too many update checks." }, { status: 429, headers });
+  }
+
   const release = await getLatestRelease("launcher-v");
   if (!release) {
     return NextResponse.json({ error: "No launcher release found." }, { status: 404 });
@@ -23,6 +35,7 @@ export async function GET() {
   const response = await fetch(updateAsset.browser_download_url, {
     headers: {
       "User-Agent": "atlas-hub-downloads",
+      ...getAuthHeaders(),
     },
     next: { revalidate: 300 },
   });
