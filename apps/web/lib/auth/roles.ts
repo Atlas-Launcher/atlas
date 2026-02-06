@@ -26,7 +26,7 @@ export function allowedChannels(
   accessLevel: "dev" | "beta" | "production" | "all",
   role?: Role | null
 ) {
-  if (role && role !== "player") {
+  if (role === "admin") {
     return ["dev", "beta", "production"] as const;
   }
 

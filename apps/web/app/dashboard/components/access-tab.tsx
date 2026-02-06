@@ -55,6 +55,7 @@ interface AccessTabProps {
   onRevokeMember: (userId: string) => void;
   onPromoteMember: (userId: string) => void;
   onDemoteMember: (userId: string) => void;
+  onUpdateAccessLevel: (userId: string, accessLevel: AccessLevel) => void;
   loading: boolean;
   currentUserId: string;
   canManageMembers: boolean;
@@ -71,6 +72,7 @@ export default function AccessTab({
   onRevokeMember,
   onPromoteMember,
   onDemoteMember,
+  onUpdateAccessLevel,
   loading,
   currentUserId,
   canManageMembers,
@@ -168,7 +170,26 @@ export default function AccessTab({
                             <Badge variant="secondary">{member.role}</Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{accessLabel(member.accessLevel)}</Badge>
+                            {canManageMembers ? (
+                              <select
+                                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                                value={member.accessLevel}
+                                onChange={(event) =>
+                                  onUpdateAccessLevel(
+                                    member.userId,
+                                    event.target.value as AccessLevel
+                                  )
+                                }
+                                disabled={loading}
+                              >
+                                <option value="production">Prod only</option>
+                                <option value="beta">Beta + Prod</option>
+                                <option value="dev">Dev + Prod</option>
+                                <option value="all">Dev + Beta + Prod</option>
+                              </select>
+                            ) : (
+                              <Badge variant="outline">{accessLabel(member.accessLevel)}</Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             {canManageMembers && member.userId !== currentUserId ? (
