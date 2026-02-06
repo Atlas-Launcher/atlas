@@ -13,18 +13,21 @@ const platformTargets = [
     id: "windows",
     label: "Windows",
     detail: "PowerShell + cmd",
+    nameNeedles: ["-windows-"],
     extensions: [".exe", ".msi", ".zip"],
   },
   {
     id: "macos",
     label: "macOS",
     detail: "Apple silicon + Intel",
+    nameNeedles: ["-macos-", "-darwin-", "-osx-"],
     extensions: [".dmg", ".pkg", ".zip", ".tar.gz"],
   },
   {
     id: "linux",
     label: "Linux",
-    detail: "tar.gz, deb, rpm",
+    detail: "x64 + arm64",
+    nameNeedles: ["-linux-"],
     extensions: [".appimage", ".deb", ".rpm", ".tar.gz"],
   },
 ];
@@ -56,6 +59,12 @@ function groupAssets(assets: ReleaseAsset[]) {
   const grouped = platformTargets.map((platform) => {
     const matches = assets.filter((asset) => {
       const name = asset.name.toLowerCase();
+      const nameMatch = platform.nameNeedles.some((needle) => name.includes(needle));
+      if (nameMatch) {
+        return true;
+      }
+
+      // Backward compatibility with older extension-based CLI artifacts.
       return platform.extensions.some((extension) => name.endsWith(extension));
     });
     matches.forEach((asset) => claimed.add(asset.name));
