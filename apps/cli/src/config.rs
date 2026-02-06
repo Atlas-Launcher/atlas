@@ -55,12 +55,6 @@ pub fn resolve_cli_settings(
     })
 }
 
-pub fn resolve_api_key(api_key_override: Option<String>) -> Result<String> {
-    normalize_optional(api_key_override)
-        .or_else(|| normalize_optional(std::env::var("ATLAS_DEPLOY_KEY").ok()))
-        .context("api_key is required (use --api-key or ATLAS_DEPLOY_KEY)")
-}
-
 pub fn build_pack_bytes(
     root: &Path,
     pack_id_arg: Option<String>,
