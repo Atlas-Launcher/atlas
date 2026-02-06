@@ -1,20 +1,11 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { channels, packMembers, packs } from "@/lib/db/schema";
+import { packs } from "@/lib/db/schema";
 import { hasRole } from "@/lib/auth/roles";
-
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-}
+import { createPackWithDefaults } from "@/lib/packs/create-pack";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -59,36 +50,19 @@ export async function POST(request: Request) {
   const name = body?.name?.toString().trim();
   const description = body?.description?.toString().trim();
   const repoUrl = body?.repoUrl?.toString().trim();
-  const slug = body?.slug?.toString().trim() || (name ? slugify(name) : "");
+  const slug = body?.slug?.toString().trim();
 
-  if (!name || !slug) {
-    return NextResponse.json({ error: "Name and slug are required" }, { status: 400 });
+  if (!name) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const [created] = await db
-    .insert(packs)
-    .values({
-      id: nanoid(),
-      name,
-      slug,
-      description,
-      repoUrl,
-      ownerId: session.user.id,
-    })
-    .returning();
-
-  await db.insert(packMembers).values({
-    packId: created.id,
-    userId: session.user.id,
-    role: "creator",
-    accessLevel: "dev",
+  const created = await createPackWithDefaults({
+    ownerId: session.user.id,
+    name,
+    description,
+    repoUrl,
+    slug,
   });
-
-  await db.insert(channels).values([
-    { packId: created.id, name: "dev" },
-    { packId: created.id, name: "beta" },
-    { packId: created.id, name: "production" },
-  ]);
 
   return NextResponse.json({ pack: created }, { status: 201 });
 }

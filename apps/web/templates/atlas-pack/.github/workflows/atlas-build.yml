@@ -14,7 +14,7 @@ jobs:
     env:
       ATLAS_HUB_URL: ${{ secrets.ATLAS_HUB_URL }}
       ATLAS_PACK_ID: ${{ secrets.ATLAS_PACK_ID }}
-      ATLAS_DEPLOY_KEY: ${{ secrets.ATLAS_DEPLOY_KEY }}
+      ATLAS_API_KEY: ${{ secrets.ATLAS_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,6 +29,6 @@ jobs:
       - name: Deploy pack
         env:
           ATLAS_PACK_ID: ${{ secrets.ATLAS_PACK_ID }}
-          ATLAS_DEPLOY_KEY: ${{ secrets.ATLAS_DEPLOY_KEY }}
+          ATLAS_API_KEY: ${{ secrets.ATLAS_API_KEY }}
         run: |
           atlas deploy --channel dev --commit-hash "${GITHUB_SHA}"
