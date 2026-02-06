@@ -50,10 +50,7 @@ pub async fn fetch_atlas_remote_packs(
     atlas_hub_url: &str,
     access_token: &str,
 ) -> Result<Vec<AtlasRemotePack>, LibraryError> {
-    let endpoint = format!(
-        "{}/api/launcher/packs",
-        atlas_hub_url.trim_end_matches('/')
-    );
+    let endpoint = format!("{}/api/launcher/packs", atlas_hub_url.trim_end_matches('/'));
     let http = ReqwestHttpClient::new();
     let response = http
         .get_json::<AtlasRemotePackResponse>(&endpoint, Some(access_token))
@@ -208,7 +205,8 @@ pub fn uninstall_instance_data(game_dir: &str) -> Result<(), LibraryError> {
         );
     }
 
-    fs::remove_dir_all(&base_dir).map_err(|err| format!("Failed to remove instance data: {err}"))?;
+    fs::remove_dir_all(&base_dir)
+        .map_err(|err| format!("Failed to remove instance data: {err}"))?;
     Ok(())
 }
 

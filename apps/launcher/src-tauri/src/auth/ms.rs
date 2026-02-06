@@ -1,10 +1,12 @@
 use crate::models::DeviceCodeResponse;
+use atlas_auth::device_code::{
+    parse_device_token_poll_json, DeviceTokenPollStatus, DEVICE_CODE_GRANT_TYPE,
+};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::Deserialize;
-use serde_json;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
@@ -28,13 +30,6 @@ pub struct DeviceTokenResponse {
     pub scope: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct DeviceTokenError {
-    error: String,
-    #[allow(dead_code)]
-    error_description: Option<String>,
-}
-
 pub async fn start_device_code<H: HttpClient + ?Sized>(
     http: &H,
     client_id: &str,
@@ -44,7 +39,10 @@ pub async fn start_device_code<H: HttpClient + ?Sized>(
         ("scope", "XboxLive.signin offline_access"),
     ];
 
-    Ok(http.post_form(DEVICE_CODE_URL, &params).await?)
+    let response = http
+        .post_form::<atlas_auth::device_code::DeviceCodeResponse>(DEVICE_CODE_URL, &params)
+        .await?;
+    Ok(response.into())
 }
 
 pub(crate) async fn poll_device_token<H: HttpClient + ?Sized>(
@@ -63,41 +61,33 @@ pub(crate) async fn poll_device_token<H: HttpClient + ?Sized>(
 
         let params = [
             ("client_id", client_id),
-            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+            ("grant_type", DEVICE_CODE_GRANT_TYPE),
             ("device_code", device_code),
         ];
 
         let response = http
             .post_form::<serde_json::Value>(TOKEN_URL, &params)
             .await?;
+        let status = parse_device_token_poll_json::<DeviceTokenResponse>(response)
+            .map_err(|err| err.to_string())?;
 
-        if let Ok(token) = serde_json::from_value::<DeviceTokenResponse>(response.clone()) {
-            return Ok(token);
-        }
-
-        let error =
-            serde_json::from_value::<DeviceTokenError>(response).unwrap_or(DeviceTokenError {
-                error: "unknown".into(),
-                error_description: None,
-            });
-
-        match error.error.as_str() {
-            "authorization_pending" => {
+        match status {
+            DeviceTokenPollStatus::Success(token) => return Ok(token),
+            DeviceTokenPollStatus::AuthorizationPending => {
                 sleep(interval).await;
             }
-            "slow_down" => {
+            DeviceTokenPollStatus::SlowDown => {
                 interval += Duration::from_secs(5);
                 sleep(interval).await;
             }
-            "expired_token" => {
+            DeviceTokenPollStatus::ExpiredToken => {
                 return Err("Device code expired. Start login again.".to_string().into())
             }
-            _ => {
-                return Err(format!(
-                    "Device code login failed: {}",
-                    error.error_description.unwrap_or(error.error)
-                )
-                .into());
+            DeviceTokenPollStatus::AccessDenied => {
+                return Err("Device code authorization denied.".to_string().into())
+            }
+            DeviceTokenPollStatus::Fatal(message) => {
+                return Err(format!("Device code login failed: {message}").into())
             }
         }
     }

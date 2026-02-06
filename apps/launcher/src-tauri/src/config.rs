@@ -2,8 +2,8 @@ use crate::models::AppSettings;
 
 pub const DEFAULT_MS_CLIENT_ID: &str = "e253b0f5-35af-488a-abf2-54149dbd094d";
 pub const DEFAULT_REDIRECT_URI: &str = "atlas://auth";
-pub const DEFAULT_ATLAS_HUB_URL: &str = "https://atlas.nathanm.org";
-pub const DEFAULT_ATLAS_CLIENT_ID: &str = "atlas-launcher";
+pub const DEFAULT_ATLAS_HUB_URL: &str = atlas_auth::device_code::DEFAULT_ATLAS_HUB_URL;
+pub const DEFAULT_ATLAS_CLIENT_ID: &str = atlas_auth::device_code::DEFAULT_ATLAS_DEVICE_CLIENT_ID;
 pub const DEFAULT_ATLAS_REDIRECT_URI: &str = "atlas://signin";
 
 pub fn resolve_client_id(settings: &AppSettings) -> String {

@@ -1,8 +1,11 @@
 use crate::auth;
 use crate::config;
 use crate::library;
-use crate::models::{AtlasRemotePack, FabricLoaderVersion, ModEntry, VersionManifestSummary};
+use crate::models::{
+    AtlasRemotePack, AtlasSession, FabricLoaderVersion, ModEntry, VersionManifestSummary,
+};
 use crate::state::AppState;
+use mod_resolver::Provider;
 
 #[tauri::command]
 pub async fn get_version_manifest_summary() -> Result<VersionManifestSummary, String> {
@@ -52,10 +55,9 @@ pub fn uninstall_instance_data(game_dir: String) -> Result<(), String> {
     library::uninstall_instance_data(&game_dir).map_err(|err| err.to_string())
 }
 
-#[tauri::command]
-pub async fn list_atlas_remote_packs(
-    state: tauri::State<'_, AppState>,
-) -> Result<Vec<AtlasRemotePack>, String> {
+async fn get_fresh_atlas_session(
+    state: &tauri::State<'_, AppState>,
+) -> Result<AtlasSession, String> {
     let session = {
         let guard = state
             .atlas_auth
@@ -78,6 +80,62 @@ pub async fn list_atlas_remote_packs(
             .map_err(|_| "Auth state lock poisoned".to_string())?;
         *guard = Some(refreshed.clone());
     }
+
+    Ok(refreshed)
+}
+
+#[tauri::command]
+pub async fn resolve_pack_mod(
+    state: tauri::State<'_, AppState>,
+    source: String,
+    query: String,
+    loader: String,
+    minecraft_version: String,
+    desired_version: Option<String>,
+    pack_type: String,
+) -> Result<mod_resolver::ModEntry, String> {
+    let provider =
+        Provider::from_short_code(&source).ok_or_else(|| "source must be cf or mr".to_string())?;
+    match provider {
+        Provider::Modrinth => mod_resolver::resolve(
+            provider,
+            &query,
+            &loader,
+            &minecraft_version,
+            desired_version.as_deref(),
+            &pack_type,
+        )
+        .await
+        .map_err(|err| err.to_string()),
+        Provider::CurseForge => {
+            let refreshed = get_fresh_atlas_session(&state).await?;
+            let settings = state
+                .settings
+                .lock()
+                .map_err(|_| "Settings lock poisoned".to_string())?
+                .clone();
+            let hub_url = config::resolve_atlas_hub_url(&settings);
+
+            mod_resolver::resolve_curseforge_via_proxy(
+                &hub_url,
+                &refreshed.access_token,
+                &query,
+                &loader,
+                &minecraft_version,
+                desired_version.as_deref(),
+                &pack_type,
+            )
+            .await
+            .map_err(|err| err.to_string())
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn list_atlas_remote_packs(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<AtlasRemotePack>, String> {
+    let refreshed = get_fresh_atlas_session(&state).await?;
 
     let settings = state
         .settings

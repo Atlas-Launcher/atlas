@@ -13,6 +13,20 @@ pub struct DeviceCodeResponse {
     pub message: Option<String>,
 }
 
+impl From<atlas_auth::device_code::DeviceCodeResponse> for DeviceCodeResponse {
+    fn from(value: atlas_auth::device_code::DeviceCodeResponse) -> Self {
+        Self {
+            device_code: value.device_code,
+            user_code: value.user_code,
+            verification_uri: value.verification_uri,
+            verification_uri_complete: value.verification_uri_complete,
+            expires_in: value.expires_in,
+            interval: value.interval,
+            message: value.message,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Profile {
     pub id: String,
