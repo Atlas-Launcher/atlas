@@ -99,11 +99,20 @@ fn fetch_remote_packs(
     access_token: &str,
 ) -> Result<Vec<RemotePack>> {
     let endpoint = format!("{}/api/launcher/packs", hub_url);
-    client
+    let response = client
         .get(endpoint)
         .bearer_auth(access_token)
         .send()
-        .context("Failed to fetch pack list")?
+        .context("Failed to fetch pack list")?;
+
+    if response.status().as_u16() == 401 {
+        bail!(
+            "Atlas Hub rejected your saved token. Run `atlas auth signout` then `atlas auth signin --hub-url {}`.",
+            hub_url
+        );
+    }
+
+    response
         .error_for_status()
         .context("Failed to load accessible packs from Atlas Hub")?
         .json::<LauncherPacksResponse>()
