@@ -10,6 +10,7 @@ import {
   decodeArtifactRef,
   isStorageProviderEnabled,
 } from "@/lib/storage/harness";
+import { blobExistsInVercel } from "@/lib/storage/vercel-blob";
 import { createStorageToken } from "@/lib/storage/token";
 
 type AccessLevel = "dev" | "beta" | "production" | "all";
@@ -42,8 +43,7 @@ function parseChannelName(value: string | null): ChannelName | null {
   return null;
 }
 
-function selectChannelWithBuild(
-  rowsByChannel: Map<ChannelName, ChannelBuildRow>,
+function buildChannelOrder(
   allowed: readonly ChannelName[],
   accessLevel: AccessLevel,
   requested: ChannelName | null
@@ -56,15 +56,7 @@ function selectChannelWithBuild(
   for (const name of allowed) {
     ordered.add(name);
   }
-
-  for (const name of ordered) {
-    const row = rowsByChannel.get(name);
-    if (row?.buildId && row.artifactKey) {
-      return { channel: name, row };
-    }
-  }
-
-  return null;
+  return [...ordered];
 }
 
 export async function GET(
@@ -127,59 +119,77 @@ export async function GET(
     });
   }
 
-  const selected = selectChannelWithBuild(
-    rowsByChannel,
+  const orderedChannels = buildChannelOrder(
     allowed,
     membership.accessLevel as AccessLevel,
     requestedChannel
   );
-  if (!selected) {
-    return NextResponse.json(
-      { error: "No build is available for this pack." },
-      { status: 404 }
-    );
-  }
+  const origin = new URL(request.url).origin;
 
-  const artifactKey = selected.row.artifactKey;
-  if (!artifactKey) {
-    return NextResponse.json(
-      { error: "Selected build does not have an artifact." },
-      { status: 404 }
-    );
-  }
+  for (const channelName of orderedChannels) {
+    const row = rowsByChannel.get(channelName);
+    if (!row?.buildId || !row.artifactKey) {
+      continue;
+    }
 
-  const artifactRef = decodeArtifactRef(artifactKey);
-  if (!isStorageProviderEnabled(artifactRef.provider)) {
-    return NextResponse.json(
-      { error: `Storage provider '${artifactRef.provider}' is not enabled.` },
-      { status: 503 }
-    );
-  }
+    const artifactRef = decodeArtifactRef(row.artifactKey);
+    if (!isStorageProviderEnabled(artifactRef.provider)) {
+      continue;
+    }
 
-  let downloadUrl: string;
-  if (artifactRef.provider === "r2") {
-    downloadUrl = await createDownloadUrlForArtifactRef(artifactRef);
-  } else {
-    const token = createStorageToken({
-      action: "download",
-      provider: artifactRef.provider,
-      key: artifactRef.key,
-      expiresInSeconds: 900,
+    if (artifactRef.provider === "vercel_blob") {
+      try {
+        const exists = await blobExistsInVercel(artifactRef.key);
+        if (!exists) {
+          console.warn(
+            "Launcher artifact pointer missing in Vercel Blob",
+            JSON.stringify({ packId, channelName, key: artifactRef.key })
+          );
+          continue;
+        }
+      } catch (error) {
+        console.warn(
+          "Launcher artifact existence check failed",
+          JSON.stringify({
+            packId,
+            channelName,
+            key: artifactRef.key,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        );
+        continue;
+      }
+    }
+
+    let downloadUrl: string;
+    if (artifactRef.provider === "r2") {
+      downloadUrl = await createDownloadUrlForArtifactRef(artifactRef);
+    } else {
+      const token = createStorageToken({
+        action: "download",
+        provider: artifactRef.provider,
+        key: artifactRef.key,
+        expiresInSeconds: 900,
+      });
+      downloadUrl = `${origin}/api/storage/download?token=${encodeURIComponent(token)}`;
+    }
+
+    return NextResponse.json({
+      packId,
+      channel: channelName,
+      buildId: row.buildId,
+      buildVersion: row.buildVersion,
+      artifactKey: artifactRef.key,
+      artifactProvider: artifactRef.provider,
+      downloadUrl,
+      minecraftVersion: row.minecraftVersion,
+      modloader: row.modloader,
+      modloaderVersion: row.modloaderVersion,
     });
-    const origin = new URL(request.url).origin;
-    downloadUrl = `${origin}/api/storage/download?token=${encodeURIComponent(token)}`;
   }
 
-  return NextResponse.json({
-    packId,
-    channel: selected.channel,
-    buildId: selected.row.buildId,
-    buildVersion: selected.row.buildVersion,
-    artifactKey: artifactRef.key,
-    artifactProvider: artifactRef.provider,
-    downloadUrl,
-    minecraftVersion: selected.row.minecraftVersion,
-    modloader: selected.row.modloader,
-    modloaderVersion: selected.row.modloaderVersion,
-  });
+  return NextResponse.json(
+    { error: "No downloadable build is available for this pack." },
+    { status: 404 }
+  );
 }
