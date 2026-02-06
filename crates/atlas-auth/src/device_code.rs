@@ -110,10 +110,11 @@ pub fn parse_device_token_poll_body<T: DeserializeOwned>(
         return Ok(DeviceTokenPollStatus::Success(success));
     }
 
-    let err = serde_json::from_str::<OAuthDeviceTokenError>(body).unwrap_or(OAuthDeviceTokenError {
-        error: "unknown".to_string(),
-        error_description: Some(body.to_string()),
-    });
+    let err =
+        serde_json::from_str::<OAuthDeviceTokenError>(body).unwrap_or(OAuthDeviceTokenError {
+            error: "unknown".to_string(),
+            error_description: Some(body.to_string()),
+        });
     Ok(map_device_token_error(err))
 }
 
