@@ -57,7 +57,16 @@ export function decodeArtifactRef(storedValue: string): ArtifactRef {
     }
   }
 
-  // Backward compatibility with legacy records that stored R2 keys directly.
+  // Backward compatibility with legacy records that stored raw keys directly.
+  // Infer provider from configured backends when possible.
+  if (isR2Configured()) {
+    return { provider: "r2", key: storedValue };
+  }
+  if (isVercelBlobConfigured()) {
+    return { provider: "vercel_blob", key: storedValue };
+  }
+
+  // No provider configured; preserve historical fallback.
   return { provider: "r2", key: storedValue };
 }
 
