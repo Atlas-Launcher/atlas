@@ -27,6 +27,9 @@ interface LauncherRemotePack {
   buildVersion: string | null;
   artifactKey: string | null;
   artifactProvider: "r2" | "vercel_blob" | null;
+  minecraftVersion: string | null;
+  modloader: string | null;
+  modloaderVersion: string | null;
 }
 
 function preferredChannel(accessLevel: AccessLevel): ChannelName {
@@ -49,6 +52,9 @@ function selectChannel(
       buildVersion: string | null;
       artifactKey: string | null;
       artifactProvider: "r2" | "vercel_blob" | null;
+      minecraftVersion: string | null;
+      modloader: string | null;
+      modloaderVersion: string | null;
     }
   >
 ) {
@@ -79,6 +85,9 @@ function selectChannel(
     buildVersion: null,
     artifactKey: null,
     artifactProvider: null,
+    minecraftVersion: null,
+    modloader: null,
+    modloaderVersion: null,
   };
 }
 
@@ -113,6 +122,9 @@ export async function GET(request: Request) {
       buildId: channels.buildId,
       buildVersion: builds.version,
       artifactKey: builds.artifactKey,
+      minecraftVersion: builds.minecraftVersion,
+      modloader: builds.modloader,
+      modloaderVersion: builds.modloaderVersion,
     })
     .from(channels)
     .leftJoin(builds, eq(builds.id, channels.buildId))
@@ -127,6 +139,9 @@ export async function GET(request: Request) {
         buildVersion: string | null;
         artifactKey: string | null;
         artifactProvider: "r2" | "vercel_blob" | null;
+        minecraftVersion: string | null;
+        modloader: string | null;
+        modloaderVersion: string | null;
       }
     >
   >();
@@ -142,6 +157,9 @@ export async function GET(request: Request) {
       buildVersion: row.buildVersion ?? null,
       artifactKey: artifactRef?.key ?? null,
       artifactProvider: artifactRef?.provider ?? null,
+      minecraftVersion: row.minecraftVersion ?? null,
+      modloader: row.modloader ?? null,
+      modloaderVersion: row.modloaderVersion ?? null,
     });
     channelMap.set(row.packId, map);
   }
@@ -161,6 +179,9 @@ export async function GET(request: Request) {
         buildVersion: selected.buildVersion,
         artifactKey: selected.artifactKey,
         artifactProvider: selected.artifactProvider,
+        minecraftVersion: selected.minecraftVersion,
+        modloader: selected.modloader,
+        modloaderVersion: selected.modloaderVersion,
       };
     })
     .sort((a, b) => a.packName.localeCompare(b.packName));

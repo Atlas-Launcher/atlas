@@ -59,6 +59,50 @@ function buildChannelOrder(
   return [...ordered];
 }
 
+function parseBlobKeyFromUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    const pathname = parsed.pathname.replace(/^\/+/, "");
+    return pathname || null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveArtifactKeyCandidates({
+  packId,
+  buildId,
+  artifactKey,
+}: {
+  packId: string;
+  buildId: string;
+  artifactKey: string;
+}) {
+  const trimmed = artifactKey.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const candidates = new Set<string>();
+  const normalizedKey = trimmed.replace(/^\/+/, "");
+  const keyFromUrl = parseBlobKeyFromUrl(trimmed);
+
+  candidates.add(normalizedKey);
+  if (keyFromUrl) {
+    candidates.add(keyFromUrl);
+  }
+
+  if (!normalizedKey.includes("/")) {
+    candidates.add(`packs/${packId}/builds/${normalizedKey}`);
+  }
+
+  const canonicalFileName = `${buildId}.atlas`;
+  candidates.add(canonicalFileName);
+  candidates.add(`packs/${packId}/builds/${canonicalFileName}`);
+
+  return [...candidates];
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ packId: string }> }
@@ -137,16 +181,29 @@ export async function GET(
       continue;
     }
 
+    let resolvedArtifactKey = artifactRef.key;
     if (artifactRef.provider === "vercel_blob") {
       try {
-        const exists = await blobExistsInVercel(artifactRef.key);
-        if (!exists) {
+        const candidates = resolveArtifactKeyCandidates({
+          packId,
+          buildId: row.buildId,
+          artifactKey: artifactRef.key,
+        });
+        let matched: string | null = null;
+        for (const candidate of candidates) {
+          if (await blobExistsInVercel(candidate)) {
+            matched = candidate;
+            break;
+          }
+        }
+        if (!matched) {
           console.warn(
             "Launcher artifact pointer missing in Vercel Blob",
-            JSON.stringify({ packId, channelName, key: artifactRef.key })
+            JSON.stringify({ packId, channelName, key: artifactRef.key, buildId: row.buildId })
           );
           continue;
         }
+        resolvedArtifactKey = matched;
       } catch (error) {
         console.warn(
           "Launcher artifact existence check failed",
@@ -154,6 +211,7 @@ export async function GET(
             packId,
             channelName,
             key: artifactRef.key,
+            buildId: row.buildId,
             error: error instanceof Error ? error.message : String(error),
           })
         );
@@ -168,7 +226,7 @@ export async function GET(
       const token = createStorageToken({
         action: "download",
         provider: artifactRef.provider,
-        key: artifactRef.key,
+        key: resolvedArtifactKey,
         expiresInSeconds: 900,
       });
       downloadUrl = `${origin}/api/storage/download?token=${encodeURIComponent(token)}`;
@@ -179,7 +237,7 @@ export async function GET(
       channel: channelName,
       buildId: row.buildId,
       buildVersion: row.buildVersion,
-      artifactKey: artifactRef.key,
+      artifactKey: resolvedArtifactKey,
       artifactProvider: artifactRef.provider,
       downloadUrl,
       minecraftVersion: row.minecraftVersion,
