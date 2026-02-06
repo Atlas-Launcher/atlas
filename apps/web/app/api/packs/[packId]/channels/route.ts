@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { builds, channels, packMembers } from "@/lib/db/schema";
 import { allowedChannels, hasRole } from "@/lib/auth/roles";
+import { decodeArtifactRef, isStorageProviderEnabled } from "@/lib/storage/harness";
 
 interface RouteParams {
   params: Promise<{
@@ -59,12 +60,47 @@ export async function GET(request: Request, { params }: RouteParams) {
       buildId: channels.buildId,
       buildVersion: builds.version,
       buildCommit: builds.commitHash,
+      artifactKey: builds.artifactKey,
     })
     .from(channels)
     .leftJoin(builds, eq(builds.id, channels.buildId))
     .where(and(eq(channels.packId, packId), inArray(channels.name, allowedList)));
 
-  return NextResponse.json({ channels: result });
+  const filtered = result.map((row) => {
+    if (!row.artifactKey) {
+      return {
+        id: row.id,
+        name: row.name,
+        updatedAt: row.updatedAt,
+        buildId: row.buildId,
+        buildVersion: row.buildVersion,
+        buildCommit: row.buildCommit,
+      };
+    }
+
+    const artifactRef = decodeArtifactRef(row.artifactKey);
+    if (!isStorageProviderEnabled(artifactRef.provider)) {
+      return {
+        id: row.id,
+        name: row.name,
+        updatedAt: row.updatedAt,
+        buildId: null,
+        buildVersion: null,
+        buildCommit: null,
+      };
+    }
+
+    return {
+      id: row.id,
+      name: row.name,
+      updatedAt: row.updatedAt,
+      buildId: row.buildId,
+      buildVersion: row.buildVersion,
+      buildCommit: row.buildCommit,
+    };
+  });
+
+  return NextResponse.json({ channels: filtered });
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -101,6 +137,29 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json(
       { error: "Channel and buildId are required" },
       { status: 400 }
+    );
+  }
+
+  const [build] = await db
+    .select({
+      id: builds.id,
+      artifactKey: builds.artifactKey,
+    })
+    .from(builds)
+    .where(and(eq(builds.id, buildId), eq(builds.packId, packId)))
+    .limit(1);
+
+  if (!build) {
+    return NextResponse.json({ error: "Build not found" }, { status: 404 });
+  }
+
+  const artifactRef = decodeArtifactRef(build.artifactKey);
+  if (!isStorageProviderEnabled(artifactRef.provider)) {
+    return NextResponse.json(
+      {
+        error: `Storage provider '${artifactRef.provider}' is not enabled for this build.`,
+      },
+      { status: 503 }
     );
   }
 
