@@ -190,29 +190,61 @@ export async function GET(
           artifactKey: artifactRef.key,
         });
         let matched: string | null = null;
+        let hadProbeError = false;
         for (const candidate of candidates) {
-          if (await blobExistsInVercel(candidate)) {
-            matched = candidate;
-            break;
+          try {
+            if (await blobExistsInVercel(candidate)) {
+              matched = candidate;
+              break;
+            }
+          } catch (error) {
+            hadProbeError = true;
+            console.warn(
+              "Launcher artifact probe failed; will continue optimistically",
+              JSON.stringify({
+                packId,
+                channelName,
+                candidate,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            );
           }
         }
         if (!matched) {
-          console.warn(
-            "Launcher artifact pointer missing in Vercel Blob",
-            JSON.stringify({ packId, channelName, key: artifactRef.key, buildId: row.buildId })
-          );
-          continue;
+          if (hadProbeError) {
+            resolvedArtifactKey = candidates[0] ?? artifactRef.key;
+          } else {
+            console.warn(
+              "Launcher artifact pointer missing in Vercel Blob",
+              JSON.stringify({ packId, channelName, key: artifactRef.key, buildId: row.buildId })
+            );
+            continue;
+          }
+        } else {
+          resolvedArtifactKey = matched;
         }
-        resolvedArtifactKey = matched;
       } catch (error) {
         console.warn(
-          "Launcher artifact existence check failed",
+          "Launcher artifact resolution failed; falling back to stored key",
           JSON.stringify({
             packId,
             channelName,
             key: artifactRef.key,
             buildId: row.buildId,
             error: error instanceof Error ? error.message : String(error),
+          })
+        );
+        resolvedArtifactKey = artifactRef.key;
+      }
+
+      if (!resolvedArtifactKey.trim()) {
+        console.warn(
+          "Launcher artifact key resolved empty",
+          JSON.stringify({
+            packId,
+            channelName,
+            key: artifactRef.key,
+            buildId: row.buildId,
           })
         );
         continue;
