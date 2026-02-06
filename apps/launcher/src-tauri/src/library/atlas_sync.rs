@@ -8,13 +8,14 @@ use protocol::config::mods::{self, ClientOs, ModEntry, ModHashes, ModSide};
 use serde::Deserialize;
 use sha1::{Digest as Sha1Digest, Sha1};
 use sha2::Sha512;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Window};
 use url::Url;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PointerKind {
     Mod,
     Resource,
@@ -59,6 +60,10 @@ struct ArtifactResponse {
     modloader: Option<String>,
     #[serde(default)]
     modloader_version: Option<String>,
+    #[serde(default)]
+    force_reinstall: bool,
+    #[serde(default)]
+    requires_full_reinstall: bool,
 }
 
 impl ArtifactResponse {
@@ -95,15 +100,27 @@ pub async fn sync_atlas_pack(
     ensure_dir(&minecraft_dir)?;
     emit_sync(window, "Checking for pack updates", None, None)?;
 
-    let artifact =
-        fetch_artifact_download(atlas_hub_url, access_token, pack_id, requested_channel).await?;
+    let previous_state = read_last_updated_file(&game_dir);
+    let current_build_id = previous_state
+        .as_ref()
+        .and_then(|state| state.build_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let artifact = fetch_artifact_download(
+        atlas_hub_url,
+        access_token,
+        pack_id,
+        requested_channel,
+        current_build_id,
+    )
+    .await?;
     telemetry::info(format!(
         "sync start pack_id={} channel={} build_id={}",
         artifact.pack_id,
         artifact.channel,
         artifact.build_id.as_deref().unwrap_or("-")
     ));
-    if let Some(last_updated) = read_last_updated_file(&game_dir) {
+    if let Some(last_updated) = previous_state {
         if sync_is_current(&artifact, &last_updated) {
             let bundled_files = last_updated.bundled_files.unwrap_or(0);
             let hydrated_assets = last_updated.hydrated_assets.unwrap_or(0);
@@ -140,10 +157,25 @@ pub async fn sync_atlas_pack(
                     artifact.modloader_version,
                     last_updated.modloader_version,
                 ),
+                force_reinstall: artifact.force_reinstall,
+                requires_full_reinstall: false,
                 bundled_files,
                 hydrated_assets,
             });
         }
+    }
+
+    if artifact.requires_full_reinstall {
+        emit_sync(
+            window,
+            "Force reinstall required by this build; preserving saves",
+            None,
+            None,
+        )?;
+        let game_dir_text = game_dir.to_string_lossy().to_string();
+        crate::library::uninstall_instance_data(&game_dir_text, true)?;
+        ensure_dir(&game_dir)?;
+        ensure_dir(&minecraft_dir)?;
     }
 
     emit_sync(window, "Downloading pack data", None, None)?;
@@ -159,6 +191,7 @@ pub async fn sync_atlas_pack(
         .map_err(|err| format!("Failed to decode pack blob: {err}"))?;
     let blob_minecraft_version = blob.metadata.minecraft_version.clone();
     let blob_modloader = loader_kind_to_modloader(blob.metadata.loader).to_string();
+    let mut expected_mod_paths = HashSet::<PathBuf>::new();
 
     let mut pointer_files = Vec::new();
     let total_files = blob.files.len() as u64;
@@ -168,6 +201,10 @@ pub async fn sync_atlas_pack(
             pointer_files.push(pointer);
             remove_blob_file_if_exists(&minecraft_dir, &relative_path)?;
         } else {
+            let safe_relative = sanitize_relative_path(&relative_path)?;
+            if is_mod_relative_path(&safe_relative) {
+                expected_mod_paths.insert(safe_relative);
+            }
             write_blob_file(&minecraft_dir, &relative_path, &bytes)?;
         }
         processed_files += 1;
@@ -212,6 +249,7 @@ pub async fn sync_atlas_pack(
             relative_asset_path,
             url,
             pointer.entry.download.hashes.clone(),
+            pointer.kind,
         ));
     }
 
@@ -226,9 +264,12 @@ pub async fn sync_atlas_pack(
     }
     let client = shared_client().clone();
     let mut hydrated_assets = 0u64;
-    for (relative_asset_path, url, hashes) in jobs {
+    for (relative_asset_path, url, hashes, kind) in jobs {
         let safe_relative = sanitize_relative_path(&relative_asset_path)?;
-        let asset_path = minecraft_dir.join(safe_relative);
+        if kind == PointerKind::Mod && is_mod_relative_path(&safe_relative) {
+            expected_mod_paths.insert(safe_relative.clone());
+        }
+        let asset_path = minecraft_dir.join(&safe_relative);
         if asset_path.exists() {
             let can_reuse = match hashes.as_ref() {
                 Some(_) => match verify_hashes(&asset_path, hashes.as_ref()) {
@@ -265,6 +306,8 @@ pub async fn sync_atlas_pack(
             Some(total_assets),
         )?;
     }
+    emit_sync(window, "Reconciling mods", None, None)?;
+    prune_stale_mods(&minecraft_dir, &expected_mod_paths)?;
 
     window
         .emit(
@@ -311,6 +354,8 @@ pub async fn sync_atlas_pack(
         ),
         modloader: first_non_blank(artifact.modloader, Some(blob_modloader)),
         modloader_version: artifact.modloader_version,
+        force_reinstall: artifact.force_reinstall,
+        requires_full_reinstall: artifact.requires_full_reinstall,
         bundled_files: processed_files,
         hydrated_assets,
     })
@@ -321,9 +366,16 @@ async fn fetch_artifact_download(
     access_token: &str,
     pack_id: &str,
     requested_channel: &str,
+    current_build_id: Option<&str>,
 ) -> Result<ArtifactResponse, LibraryError> {
-    let mut artifact =
-        request_artifact_download(atlas_hub_url, access_token, pack_id, requested_channel).await?;
+    let mut artifact = request_artifact_download(
+        atlas_hub_url,
+        access_token,
+        pack_id,
+        requested_channel,
+        current_build_id,
+    )
+    .await?;
     if requested_channel == "production" && artifact.channel.trim().to_lowercase() != "production" {
         return Err(
             "No active Production build is available for this pack. Promote a build to Production before installing or launching."
@@ -337,13 +389,22 @@ async fn fetch_artifact_download(
             pack_id, requested_channel
         ));
         let retry =
-            request_artifact_download(atlas_hub_url, access_token, pack_id, requested_channel)
-                .await?;
+            request_artifact_download(
+                atlas_hub_url,
+                access_token,
+                pack_id,
+                requested_channel,
+                current_build_id,
+            )
+            .await?;
         artifact.minecraft_version =
             first_non_blank(artifact.minecraft_version, retry.minecraft_version);
         artifact.modloader = first_non_blank(artifact.modloader, retry.modloader);
         artifact.modloader_version =
             first_non_blank(artifact.modloader_version, retry.modloader_version);
+        artifact.force_reinstall = artifact.force_reinstall || retry.force_reinstall;
+        artifact.requires_full_reinstall =
+            artifact.requires_full_reinstall || retry.requires_full_reinstall;
     }
     if requested_channel == "production" && artifact.channel.trim().to_lowercase() != "production" {
         return Err(
@@ -360,6 +421,7 @@ async fn request_artifact_download(
     access_token: &str,
     pack_id: &str,
     channel: &str,
+    current_build_id: Option<&str>,
 ) -> Result<ArtifactResponse, LibraryError> {
     let mut endpoint = Url::parse(&format!(
         "{}/api/launcher/packs/{}/artifact",
@@ -368,6 +430,11 @@ async fn request_artifact_download(
     ))
     .map_err(|err| format!("Invalid artifact endpoint URL: {err}"))?;
     endpoint.query_pairs_mut().append_pair("channel", channel);
+    if let Some(value) = current_build_id {
+        endpoint
+            .query_pairs_mut()
+            .append_pair("currentBuildId", value);
+    }
 
     let response = shared_client()
         .get(endpoint.as_str())
@@ -563,6 +630,103 @@ fn extension_from_url(url: Option<&str>) -> Option<String> {
         return None;
     }
     Some(format!(".{}", ext))
+}
+
+fn is_mod_relative_path(relative_path: &Path) -> bool {
+    matches!(
+        relative_path.components().next(),
+        Some(Component::Normal(segment)) if segment.to_string_lossy().eq_ignore_ascii_case("mods")
+    )
+}
+
+fn prune_stale_mods(
+    minecraft_dir: &Path,
+    expected_mod_paths: &HashSet<PathBuf>,
+) -> Result<(), LibraryError> {
+    let mods_dir = minecraft_dir.join("mods");
+    if !mods_dir.exists() {
+        return Ok(());
+    }
+
+    let mut stack = vec![mods_dir.clone()];
+    let mut removed_files = 0u64;
+    while let Some(dir) = stack.pop() {
+        let entries = fs::read_dir(&dir)
+            .map_err(|err| format!("Failed to read mods directory {}: {err}", dir.display()))?;
+        for entry in entries {
+            let entry =
+                entry.map_err(|err| format!("Failed to read mods directory entry: {err}"))?;
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let relative = path.strip_prefix(minecraft_dir).map_err(|err| {
+                format!(
+                    "Failed to resolve mod path {} relative to {}: {err}",
+                    path.display(),
+                    minecraft_dir.display()
+                )
+            })?;
+            let normalized = sanitize_relative_path(&relative.to_string_lossy())?;
+            if expected_mod_paths.contains(&normalized) {
+                continue;
+            }
+            fs::remove_file(&path)
+                .map_err(|err| format!("Failed to remove stale mod {}: {err}", path.display()))?;
+            removed_files += 1;
+            telemetry::info(format!(
+                "removed stale mod file not present in latest blob: {}",
+                path.display()
+            ));
+        }
+    }
+
+    prune_empty_mod_subdirs(&mods_dir)?;
+    telemetry::info(format!(
+        "mod reconciliation complete root={} expected={} removed={}",
+        mods_dir.display(),
+        expected_mod_paths.len(),
+        removed_files
+    ));
+    Ok(())
+}
+
+fn prune_empty_mod_subdirs(mods_dir: &Path) -> Result<(), LibraryError> {
+    if !mods_dir.exists() {
+        return Ok(());
+    }
+
+    let mut dirs = Vec::<PathBuf>::new();
+    let mut stack = vec![mods_dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        dirs.push(dir.clone());
+        let entries = fs::read_dir(&dir)
+            .map_err(|err| format!("Failed to read mods directory {}: {err}", dir.display()))?;
+        for entry in entries {
+            let entry =
+                entry.map_err(|err| format!("Failed to read mods directory entry: {err}"))?;
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            }
+        }
+    }
+
+    dirs.sort_by_key(|dir| std::cmp::Reverse(dir.components().count()));
+    for dir in dirs {
+        if dir == mods_dir {
+            continue;
+        }
+        let mut entries = fs::read_dir(&dir)
+            .map_err(|err| format!("Failed to read mods directory {}: {err}", dir.display()))?;
+        if entries.next().is_none() {
+            fs::remove_dir(&dir).map_err(|err| {
+                format!("Failed to remove empty directory {}: {err}", dir.display())
+            })?;
+        }
+    }
+    Ok(())
 }
 
 fn applies_to_this_client(entry: &ModEntry) -> bool {

@@ -68,6 +68,10 @@ pub struct AtlasPackSyncResult {
     pub modloader: Option<String>,
     #[serde(default)]
     pub modloader_version: Option<String>,
+    #[serde(default)]
+    pub force_reinstall: bool,
+    #[serde(default)]
+    pub requires_full_reinstall: bool,
     pub bundled_files: u64,
     pub hydrated_assets: u64,
 }

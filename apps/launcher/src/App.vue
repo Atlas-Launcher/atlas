@@ -204,6 +204,7 @@ async function syncAtlasInstanceFiles(instance: InstanceConfig, options?: AtlasS
       if (hasMissingRuntimeMetadata(result)) {
         result = await syncPack();
       }
+      const forcedReinstallApplied = result.requiresFullReinstall === true;
 
       const previousVersion = normalizeVersion(instance.version);
       const previousLoaderKind = instance.loader?.kind ?? "vanilla";
@@ -220,7 +221,7 @@ async function syncAtlasInstanceFiles(instance: InstanceConfig, options?: AtlasS
           ? null
           : instance.loader?.loaderVersion ?? null;
 
-      if (forLaunch && runtimeChanged) {
+      if (forLaunch && runtimeChanged && !forcedReinstallApplied) {
         await invoke("uninstall_instance_data", {
           gameDir,
           preserveSaves: true
@@ -271,7 +272,9 @@ async function syncAtlasInstanceFiles(instance: InstanceConfig, options?: AtlasS
       await loadMods();
       if (forLaunch) {
         setStatus(
-          runtimeChanged
+          forcedReinstallApplied
+            ? "Atlas pack force-reinstall policy applied. Files were reinstalled while keeping saves."
+            : runtimeChanged
             ? "Atlas pack runtime changed. Reinstalled files while keeping saves."
             : "Atlas pack checked for updates."
         );
