@@ -17,6 +17,46 @@ function buildHeaders(contentType: string | null, size?: number, filename?: stri
   return headers;
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function shouldRetryStatus(status: number) {
+  return status === 429 || status >= 500;
+}
+
+async function fetchAssetWithRetries(
+  url: string,
+  init: RequestInit,
+  attempts = 4
+) {
+  let response: Response | null = null;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      response = await fetch(url, init);
+      if (response.ok || !shouldRetryStatus(response.status)) {
+        return response;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (attempt < attempts) {
+      await sleep(250 * 2 ** (attempt - 1));
+    }
+  }
+
+  if (response) {
+    return response;
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Failed to fetch asset.");
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ tag: string; asset: string }> },
@@ -48,18 +88,51 @@ export async function GET(
     return NextResponse.json({ error: "Asset not found." }, { status: 404 });
   }
 
+  const authHeaders = getAuthHeaders();
+  const hasAuthToken =
+    authHeaders instanceof Headers
+      ? authHeaders.has("Authorization")
+      : Array.isArray(authHeaders)
+        ? authHeaders.some(([key]) => key.toLowerCase() === "authorization")
+        : Boolean((authHeaders as Record<string, string | undefined>).Authorization);
+
   const range = request.headers.get("range");
-  const response = await fetch(asset.browser_download_url, {
+  let response = await fetchAssetWithRetries(asset.browser_download_url, {
     headers: {
       "User-Agent": "atlas-hub-downloads",
-      ...getAuthHeaders(),
+      ...authHeaders,
       ...(range ? { Range: range } : {}),
     },
-    next: { revalidate: 300 },
+    cache: "no-store",
   });
 
+  // If auth headers are misconfigured, retry once without auth for public assets.
+  if (!response.ok && hasAuthToken) {
+    response = await fetchAssetWithRetries(
+      asset.browser_download_url,
+      {
+        headers: {
+          "User-Agent": "atlas-hub-downloads",
+          ...(range ? { Range: range } : {}),
+        },
+        cache: "no-store",
+      },
+      2
+    );
+  }
+
   if (!response.ok) {
-    return NextResponse.json({ error: "Failed to fetch asset." }, { status: 502 });
+    if (!hasAuthToken || response.status === 401 || response.status === 403) {
+      const headers = new Headers({ location: asset.browser_download_url });
+      applyRateLimitHeaders(headers, limiter);
+      headers.set("cache-control", "public, max-age=300");
+      return new NextResponse(null, { status: 302, headers });
+    }
+
+    return NextResponse.json(
+      { error: "Failed to fetch asset.", upstreamStatus: response.status },
+      { status: 502 }
+    );
   }
 
   const headers = buildHeaders(
