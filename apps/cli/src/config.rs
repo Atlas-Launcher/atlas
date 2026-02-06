@@ -85,7 +85,8 @@ pub fn build_pack_bytes(
         },
         zstd_level,
     )
-    .map_err(|_| anyhow::anyhow!("Failed to encode pack"))?;
+    .map_err(anyhow::Error::from)
+    .context("Failed to encode pack")?;
     Ok(BuildOutput {
         bytes: build.bytes,
         metadata: build.metadata,
