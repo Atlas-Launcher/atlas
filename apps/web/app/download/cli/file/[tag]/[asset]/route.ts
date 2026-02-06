@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { getAuthHeaders, getReleaseByTag } from "@/lib/releases";
+import { getAuthHeaders, getReleaseByTag, getReleaseRepo } from "@/lib/releases";
 import { applyRateLimitHeaders, getClientIp, rateLimit } from "@/lib/rate-limit";
 
 function buildHeaders(contentType: string | null, size?: number, filename?: string) {
@@ -105,6 +105,28 @@ export async function GET(
     },
     cache: "no-store",
   });
+
+  // Private repos may return 404 on browser_download_url; retry through the asset API.
+  if (
+    !response.ok &&
+    response.status === 404 &&
+    hasAuthToken &&
+    typeof asset.id === "number" &&
+    getReleaseRepo()
+  ) {
+    response = await fetchAssetWithRetries(
+      `https://api.github.com/repos/${getReleaseRepo()}/releases/assets/${asset.id}`,
+      {
+        headers: {
+          "User-Agent": "atlas-hub-downloads",
+          Accept: "application/octet-stream",
+          ...authHeaders,
+          ...(range ? { Range: range } : {}),
+        },
+        cache: "no-store",
+      }
+    );
+  }
 
   // If auth headers are misconfigured, retry once without auth for public assets.
   if (!response.ok && hasAuthToken) {
