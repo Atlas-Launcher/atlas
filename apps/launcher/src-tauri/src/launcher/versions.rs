@@ -70,7 +70,7 @@ pub async fn resolve_version_data(
                 None,
                 None,
             )?;
-            loaders::neoforge::ensure_profile(game_dir, &loader_version).await?
+            loaders::neoforge::ensure_profile(window, game_dir, &loader_version).await?
         }
     };
 

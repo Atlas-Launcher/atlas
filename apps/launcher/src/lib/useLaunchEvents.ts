@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import type { Ref } from "vue";
-import type { LaunchEvent } from "@/types/launch";
+import type { LaunchEvent, LaunchLogEvent } from "@/types/launch";
 
 interface LaunchEventsDeps {
   status: Ref<string>;
@@ -25,5 +25,11 @@ export async function initLaunchEvents({
       progress.value = Math.round((payload.current / payload.total) * 100);
     }
     pushLog(payload.message);
+  });
+
+  await listen<LaunchLogEvent>("launch://log", (event) => {
+    const payload = event.payload;
+    const prefix = payload.stream?.trim() ? `[mc:${payload.stream}] ` : "[mc] ";
+    pushLog(`${prefix}${payload.message}`);
   });
 }

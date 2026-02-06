@@ -63,7 +63,8 @@ struct ArtifactResponse {
 
 impl ArtifactResponse {
     fn has_missing_runtime_metadata(&self) -> bool {
-        is_blank_option(self.minecraft_version.as_deref()) || is_blank_option(self.modloader.as_deref())
+        is_blank_option(self.minecraft_version.as_deref())
+            || is_blank_option(self.modloader.as_deref())
     }
 }
 
@@ -77,6 +78,8 @@ pub async fn sync_atlas_pack(
 ) -> Result<AtlasPackSyncResult, LibraryError> {
     let game_dir = normalize_path(game_dir);
     ensure_dir(&game_dir)?;
+    let minecraft_dir = game_dir.join(".minecraft");
+    ensure_dir(&minecraft_dir)?;
     emit_sync(window, "Checking for pack updates", None, None)?;
 
     let artifact = fetch_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
@@ -107,9 +110,9 @@ pub async fn sync_atlas_pack(
     for (relative_path, bytes) in blob.files {
         if let Some(pointer) = parse_pointer_file(&relative_path, &bytes)? {
             pointer_files.push(pointer);
-            remove_blob_file_if_exists(&game_dir, &relative_path)?;
+            remove_blob_file_if_exists(&minecraft_dir, &relative_path)?;
         } else {
-            write_blob_file(&game_dir, &relative_path, &bytes)?;
+            write_blob_file(&minecraft_dir, &relative_path, &bytes)?;
         }
         processed_files += 1;
         if processed_files % 100 == 0 || processed_files == total_files {
@@ -169,7 +172,7 @@ pub async fn sync_atlas_pack(
     let mut hydrated_assets = 0u64;
     for (relative_asset_path, url, hashes) in jobs {
         let safe_relative = sanitize_relative_path(&relative_asset_path)?;
-        let asset_path = game_dir.join(safe_relative);
+        let asset_path = minecraft_dir.join(safe_relative);
         download_raw(&client, &url, &asset_path, None, true).await?;
         verify_hashes(&asset_path, hashes.as_ref())?;
         hydrated_assets += 1;
@@ -220,7 +223,10 @@ pub async fn sync_atlas_pack(
         channel: artifact.channel,
         build_id: artifact.build_id,
         build_version: artifact.build_version,
-        minecraft_version: first_non_blank(artifact.minecraft_version, Some(blob_minecraft_version)),
+        minecraft_version: first_non_blank(
+            artifact.minecraft_version,
+            Some(blob_minecraft_version),
+        ),
         modloader: first_non_blank(artifact.modloader, Some(blob_modloader)),
         modloader_version: artifact.modloader_version,
         bundled_files: processed_files,
@@ -234,17 +240,21 @@ async fn fetch_artifact_download(
     pack_id: &str,
     channel: Option<&str>,
 ) -> Result<ArtifactResponse, LibraryError> {
-    let mut artifact = request_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
+    let mut artifact =
+        request_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
     if artifact.has_missing_runtime_metadata() {
         telemetry::warn(format!(
             "artifact metadata missing runtime fields; retrying pack_id={} channel={}",
             pack_id,
             channel.unwrap_or("production")
         ));
-        let retry = request_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
-        artifact.minecraft_version = first_non_blank(artifact.minecraft_version, retry.minecraft_version);
+        let retry =
+            request_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
+        artifact.minecraft_version =
+            first_non_blank(artifact.minecraft_version, retry.minecraft_version);
         artifact.modloader = first_non_blank(artifact.modloader, retry.modloader);
-        artifact.modloader_version = first_non_blank(artifact.modloader_version, retry.modloader_version);
+        artifact.modloader_version =
+            first_non_blank(artifact.modloader_version, retry.modloader_version);
     }
     Ok(artifact)
 }
@@ -580,13 +590,8 @@ fn write_last_updated_file(
     );
 
     let metadata_path = game_dir.join("last_updated.toml");
-    fs::write(&metadata_path, payload).map_err(|err| {
-        format!(
-            "Failed to write {}: {err}",
-            metadata_path.display()
-        )
-        .into()
-    })
+    fs::write(&metadata_path, payload)
+        .map_err(|err| format!("Failed to write {}: {err}", metadata_path.display()).into())
 }
 
 fn toml_optional_string(value: Option<&str>) -> String {

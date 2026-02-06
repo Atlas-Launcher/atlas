@@ -54,7 +54,10 @@ pub fn delete_mod(game_dir: String, file_name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn uninstall_instance_data(game_dir: String, preserve_saves: Option<bool>) -> Result<(), String> {
+pub fn uninstall_instance_data(
+    game_dir: String,
+    preserve_saves: Option<bool>,
+) -> Result<(), String> {
     library::uninstall_instance_data(&game_dir, preserve_saves.unwrap_or(false))
         .map_err(|err| err.to_string())
 }

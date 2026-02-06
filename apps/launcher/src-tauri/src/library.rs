@@ -83,7 +83,8 @@ pub async fn sync_atlas_pack(
 
 pub fn list_installed_versions(game_dir: &str) -> Result<Vec<String>, LibraryError> {
     let base_dir = paths::normalize_path(game_dir);
-    let versions_dir = base_dir.join("versions");
+    let minecraft_dir = minecraft_dir_for_instance(&base_dir);
+    let versions_dir = minecraft_dir.join("versions");
     let mut versions = Vec::new();
     if versions_dir.exists() {
         let entries = fs::read_dir(&versions_dir)
@@ -114,7 +115,7 @@ pub fn list_installed_versions(game_dir: &str) -> Result<Vec<String>, LibraryErr
 
 pub fn list_mods(game_dir: &str) -> Result<Vec<ModEntry>, LibraryError> {
     let base_dir = paths::normalize_path(game_dir);
-    let mods_dir = base_dir.join("mods");
+    let mods_dir = minecraft_dir_for_instance(&base_dir).join("mods");
     paths::ensure_dir(&mods_dir)?;
 
     let mut mods = Vec::new();
@@ -158,7 +159,7 @@ pub fn list_mods(game_dir: &str) -> Result<Vec<ModEntry>, LibraryError> {
 
 pub fn set_mod_enabled(game_dir: &str, file_name: &str, enabled: bool) -> Result<(), LibraryError> {
     let base_dir = paths::normalize_path(game_dir);
-    let mods_dir = base_dir.join("mods");
+    let mods_dir = minecraft_dir_for_instance(&base_dir).join("mods");
     paths::ensure_dir(&mods_dir)?;
 
     let safe_name = sanitize_mod_filename(file_name)?;
@@ -190,7 +191,7 @@ pub fn set_mod_enabled(game_dir: &str, file_name: &str, enabled: bool) -> Result
 
 pub fn delete_mod(game_dir: &str, file_name: &str) -> Result<(), LibraryError> {
     let base_dir = paths::normalize_path(game_dir);
-    let mods_dir = base_dir.join("mods");
+    let mods_dir = minecraft_dir_for_instance(&base_dir).join("mods");
     paths::ensure_dir(&mods_dir)?;
 
     let safe_name = sanitize_mod_filename(file_name)?;
@@ -239,7 +240,8 @@ pub fn uninstall_instance_data(game_dir: &str, preserve_saves: bool) -> Result<(
         return Ok(());
     }
 
-    let saves_path = base_dir.join("saves");
+    let minecraft_dir = minecraft_dir_for_instance(&base_dir);
+    let saves_path = minecraft_dir.join("saves");
     let mut preserved_saves_path = None;
     if saves_path.exists() {
         let parent = base_dir
@@ -273,9 +275,15 @@ pub fn uninstall_instance_data(game_dir: &str, preserve_saves: bool) -> Result<(
 
     fs::create_dir_all(&base_dir)
         .map_err(|err| format!("Failed to recreate instance data directory: {err}"))?;
+    fs::create_dir_all(&minecraft_dir).map_err(|err| {
+        format!(
+            "Failed to recreate Minecraft data directory {}: {err}",
+            minecraft_dir.display()
+        )
+    })?;
 
     if let Some(path) = preserved_saves_path {
-        let restored_saves_path = base_dir.join("saves");
+        let restored_saves_path = minecraft_dir.join("saves");
         fs::rename(&path, &restored_saves_path).map_err(|err| {
             format!(
                 "Failed to restore saves directory to {}: {err}",
@@ -313,4 +321,18 @@ fn sanitize_mod_filename(file_name: &str) -> Result<String, LibraryError> {
         return Err("Invalid mod filename.".to_string().into());
     }
     Ok(file_name.to_string())
+}
+
+fn minecraft_dir_for_instance(base_dir: &std::path::Path) -> std::path::PathBuf {
+    let modern_dir = base_dir.join(".minecraft");
+    if modern_dir.exists() {
+        return modern_dir;
+    }
+
+    // Backward compatibility for legacy installs that wrote files directly into the instance dir.
+    if base_dir.join("versions").exists() || base_dir.join("mods").exists() {
+        return base_dir.to_path_buf();
+    }
+
+    modern_dir
 }
