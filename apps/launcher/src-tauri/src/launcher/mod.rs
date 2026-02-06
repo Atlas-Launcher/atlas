@@ -76,6 +76,7 @@ pub async fn launch_minecraft(
         },
     );
     replace_map.insert("assets_root", assets_dir.to_string_lossy().to_string());
+    replace_map.insert("game_assets", assets_dir.to_string_lossy().to_string());
     let asset_index_id = version_data
         .asset_index
         .as_ref()
@@ -85,6 +86,10 @@ pub async fn launch_minecraft(
     replace_map.insert("assets_index_name", asset_index_id);
     replace_map.insert("auth_uuid", session.profile.id.clone());
     replace_map.insert("auth_access_token", session.access_token.clone());
+    replace_map.insert("auth_session", session.access_token.clone());
+    replace_map.insert("auth_xuid", String::new());
+    replace_map.insert("clientid", session.client_id.clone());
+    replace_map.insert("user_properties", "{}".to_string());
     replace_map.insert("user_type", "msa".to_string());
     replace_map.insert("version_type", version_data.kind.clone());
     replace_map.insert("classpath", classpath.clone());
@@ -96,6 +101,17 @@ pub async fn launch_minecraft(
     replace_map.insert("launcher_version", env!("CARGO_PKG_VERSION").to_string());
 
     let (mut jvm_args, game_args) = args::build_arguments(&version_data, &replace_map)?;
+    let mut unresolved = args::unresolved_tokens(&jvm_args);
+    unresolved.extend(args::unresolved_tokens(&game_args));
+    unresolved.sort();
+    unresolved.dedup();
+    if !unresolved.is_empty() {
+        return Err(format!(
+            "Launch metadata contains unresolved placeholders: {}",
+            unresolved.join(", ")
+        )
+        .into());
+    }
 
     let memory = options.memory_mb.max(1024);
     let mem_arg = format!("-Xmx{}M", memory);
@@ -236,9 +252,10 @@ async fn prepare_minecraft(
         .downloads
         .as_ref()
         .ok_or_else(|| "Missing download metadata after resolving version".to_string())?;
+    let client_download = downloads.client.clone();
     emit(window, "client", "Downloading client jar", None, None)?;
     let client_jar_path = version_folder.join(format!("{}.jar", version_data.id));
-    download_if_needed(&client, &downloads.client, &client_jar_path).await?;
+    download_if_needed(&client, &client_download, &client_jar_path).await?;
 
     emit(window, "libraries", "Syncing libraries", None, None)?;
     let (library_paths, native_jars) =
@@ -365,6 +382,26 @@ async fn prepare_minecraft(
             None,
         )?;
         loaders::neoforge::ensure_installed(window, &game_dir, &loader_version, &java_path).await?;
+    }
+
+    // Fabric/Forge-family installers may rewrite the version directory. Ensure the launch jar
+    // still exists at versions/<version-id>/<version-id>.jar before we build classpath.
+    if !file_exists(&client_jar_path) {
+        emit(
+            window,
+            "client",
+            "Client jar missing after loader install; restoring",
+            None,
+            None,
+        )?;
+        download_if_needed(&client, &client_download, &client_jar_path).await?;
+    }
+    if !file_exists(&client_jar_path) {
+        return Err(format!(
+            "Client jar is missing after prepare: {}",
+            client_jar_path.display()
+        )
+        .into());
     }
 
     Ok(PreparedMinecraft {
