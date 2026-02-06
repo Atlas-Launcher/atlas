@@ -278,10 +278,20 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const role = body?.role?.toString().trim().toLowerCase();
-  if (role !== "player" && role !== "creator") {
+  const roleInput = body?.role?.toString().trim().toLowerCase();
+  const role =
+    roleInput === "player" || roleInput === "creator" ? roleInput : undefined;
+  const accessInput = body?.accessLevel?.toString().trim().toLowerCase();
+  const accessLevel =
+    accessInput === "dev" ||
+    accessInput === "beta" ||
+    accessInput === "production" ||
+    accessInput === "all"
+      ? accessInput
+      : undefined;
+  if (!role && !accessLevel) {
     return NextResponse.json(
-      { error: "role must be 'player' or 'creator'." },
+      { error: "Provide role and/or accessLevel to update a member." },
       { status: 400 }
     );
   }
@@ -432,11 +442,14 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
   }
 
-  const nextAccessLevel = role === "creator" ? "all" : "production";
+  const nextRole = role ?? existing.role;
+  const nextAccessLevel =
+    accessLevel ?? (role ? (role === "creator" ? "all" : "production") : existing.accessLevel);
+
   const [updated] = await db
     .update(packMembers)
     .set({
-      role,
+      role: nextRole,
       accessLevel: nextAccessLevel,
     })
     .where(and(eq(packMembers.packId, packId), eq(packMembers.userId, userId)))

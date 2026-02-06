@@ -13,6 +13,7 @@ import SignOutButton from "@/app/dashboard/sign-out-button";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
+  AccessLevel,
   Build,
   Channel,
   Invite,
@@ -282,6 +283,32 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
     );
   };
 
+  const handleUpdateAccessLevel = async (userId: string, accessLevel: AccessLevel) => {
+    setLoading(true);
+    setError(null);
+    const response = await fetch(`/api/packs/${packId}/members/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessLevel }),
+    });
+    const data = await response
+      .json()
+      .catch(() => ({ error: "Unable to update access level." }));
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data?.error ?? "Unable to update access level.");
+      return;
+    }
+
+    const nextAccess = (data?.member?.accessLevel ?? accessLevel) as AccessLevel;
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.userId === userId ? { ...member, accessLevel: nextAccess } : member
+      )
+    );
+  };
+
   const handleDeletePack = async () => {
     if (!canDeletePack) {
       return;
@@ -414,6 +441,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
               onRevokeMember={handleRevokeMember}
               onPromoteMember={handlePromoteMember}
               onDemoteMember={handleDemoteMember}
+              onUpdateAccessLevel={handleUpdateAccessLevel}
               loading={loading}
               currentUserId={session.user.id}
               canManageMembers={canManageMembers}
