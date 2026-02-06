@@ -10,7 +10,6 @@ import {
   decodeArtifactRef,
   isStorageProviderEnabled,
 } from "@/lib/storage/harness";
-import { blobExistsInVercel } from "@/lib/storage/vercel-blob";
 import { createStorageToken } from "@/lib/storage/token";
 
 type AccessLevel = "dev" | "beta" | "production" | "all";
@@ -59,48 +58,19 @@ function buildChannelOrder(
   return [...ordered];
 }
 
-function parseBlobKeyFromUrl(value: string): string | null {
-  try {
-    const parsed = new URL(value);
-    const pathname = parsed.pathname.replace(/^\/+/, "");
-    return pathname || null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveArtifactKeyCandidates({
-  packId,
-  buildId,
-  artifactKey,
-}: {
-  packId: string;
-  buildId: string;
-  artifactKey: string;
-}) {
-  const trimmed = artifactKey.trim();
+function normalizeArtifactKey(value: string): string {
+  const trimmed = value.trim();
   if (!trimmed) {
-    return [];
+    return "";
   }
 
-  const candidates = new Set<string>();
-  const normalizedKey = trimmed.replace(/^\/+/, "");
-  const keyFromUrl = parseBlobKeyFromUrl(trimmed);
-
-  candidates.add(normalizedKey);
-  if (keyFromUrl) {
-    candidates.add(keyFromUrl);
+  try {
+    const parsed = new URL(trimmed);
+    const pathname = parsed.pathname.replace(/^\/+/, "");
+    return pathname || "";
+  } catch {
+    return trimmed.replace(/^\/+/, "");
   }
-
-  if (!normalizedKey.includes("/")) {
-    candidates.add(`packs/${packId}/builds/${normalizedKey}`);
-  }
-
-  const canonicalFileName = `${buildId}.atlas`;
-  candidates.add(canonicalFileName);
-  candidates.add(`packs/${packId}/builds/${canonicalFileName}`);
-
-  return [...candidates];
 }
 
 export async function GET(
@@ -181,74 +151,9 @@ export async function GET(
       continue;
     }
 
-    let resolvedArtifactKey = artifactRef.key;
-    if (artifactRef.provider === "vercel_blob") {
-      try {
-        const candidates = resolveArtifactKeyCandidates({
-          packId,
-          buildId: row.buildId,
-          artifactKey: artifactRef.key,
-        });
-        let matched: string | null = null;
-        let hadProbeError = false;
-        for (const candidate of candidates) {
-          try {
-            if (await blobExistsInVercel(candidate)) {
-              matched = candidate;
-              break;
-            }
-          } catch (error) {
-            hadProbeError = true;
-            console.warn(
-              "Launcher artifact probe failed; will continue optimistically",
-              JSON.stringify({
-                packId,
-                channelName,
-                candidate,
-                error: error instanceof Error ? error.message : String(error),
-              })
-            );
-          }
-        }
-        if (!matched) {
-          if (hadProbeError) {
-            resolvedArtifactKey = candidates[0] ?? artifactRef.key;
-          } else {
-            console.warn(
-              "Launcher artifact pointer missing in Vercel Blob",
-              JSON.stringify({ packId, channelName, key: artifactRef.key, buildId: row.buildId })
-            );
-            continue;
-          }
-        } else {
-          resolvedArtifactKey = matched;
-        }
-      } catch (error) {
-        console.warn(
-          "Launcher artifact resolution failed; falling back to stored key",
-          JSON.stringify({
-            packId,
-            channelName,
-            key: artifactRef.key,
-            buildId: row.buildId,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        );
-        resolvedArtifactKey = artifactRef.key;
-      }
-
-      if (!resolvedArtifactKey.trim()) {
-        console.warn(
-          "Launcher artifact key resolved empty",
-          JSON.stringify({
-            packId,
-            channelName,
-            key: artifactRef.key,
-            buildId: row.buildId,
-          })
-        );
-        continue;
-      }
+    const resolvedArtifactKey = normalizeArtifactKey(artifactRef.key);
+    if (!resolvedArtifactKey) {
+      continue;
     }
 
     let downloadUrl: string;

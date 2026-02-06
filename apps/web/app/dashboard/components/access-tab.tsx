@@ -29,7 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { AccessLevel, ApiKey, Invite, PackMember } from "@/app/dashboard/types";
+import type { AccessLevel, Invite, PackMember } from "@/app/dashboard/types";
 
 function accessLabel(level: AccessLevel) {
   if (level === "all") {
@@ -55,12 +55,6 @@ interface AccessTabProps {
   onRevokeMember: (userId: string) => void;
   onPromoteMember: (userId: string) => void;
   onDemoteMember: (userId: string) => void;
-  canManageApiKeys: boolean;
-  apiKeyRecords: ApiKey[];
-  apiKeyLabel: string;
-  newApiKey: string | null;
-  onApiKeyLabelChange: (value: string) => void;
-  onCreateApiKey: () => void;
   loading: boolean;
   currentUserId: string;
   canManageMembers: boolean;
@@ -77,12 +71,6 @@ export default function AccessTab({
   onRevokeMember,
   onPromoteMember,
   onDemoteMember,
-  canManageApiKeys,
-  apiKeyRecords,
-  apiKeyLabel,
-  newApiKey,
-  onApiKeyLabelChange,
-  onCreateApiKey,
   loading,
   currentUserId,
   canManageMembers,
@@ -283,46 +271,6 @@ export default function AccessTab({
           </CardContent>
         </Card>
 
-        {canManageApiKeys ? (
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle>Deploy API Keys</CardTitle>
-              <CardDescription>Used by CI to upload new builds.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {newApiKey ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                  Copy this key now: {newApiKey}
-                </div>
-              ) : null}
-              <Input
-                placeholder="Label (optional)"
-                value={apiKeyLabel}
-                onChange={(event) => onApiKeyLabelChange(event.target.value)}
-              />
-              <Button onClick={onCreateApiKey} disabled={loading}>
-                Generate Key
-              </Button>
-              <div className="space-y-2 text-xs text-[var(--atlas-ink-muted)]">
-                {apiKeyRecords.length ? (
-                  apiKeyRecords.map((key) => (
-                    <div
-                      key={key.id}
-                      className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/60 px-3 py-2"
-                    >
-                      <span>{key.name || "Deploy key"}</span>
-                      <Badge variant={key.enabled ? "secondary" : "outline"}>
-                        {key.enabled ? "Active" : "Disabled"}
-                      </Badge>
-                    </div>
-                  ))
-                ) : (
-                  <span>No deploy keys yet.</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
       </div>
     </>
   );

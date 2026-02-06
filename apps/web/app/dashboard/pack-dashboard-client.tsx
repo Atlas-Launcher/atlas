@@ -13,7 +13,6 @@ import SignOutButton from "@/app/dashboard/sign-out-button";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
-  ApiKey,
   Build,
   Channel,
   Invite,
@@ -40,12 +39,9 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const [channels, setChannels] = useState<Channel[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [members, setMembers] = useState<PackMember[]>([]);
-  const [apiKeyRecords, setApiKeyRecords] = useState<ApiKey[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [apiKeyLabel, setApiKeyLabel] = useState("");
-  const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [inviteLinkModal, setInviteLinkModal] = useState<string | null>(null);
   const [friendlyName, setFriendlyName] = useState("");
   const [savingFriendlyName, setSavingFriendlyName] = useState(false);
@@ -56,7 +52,6 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const canPromoteBuilds = canManage;
   const canManageInvites = canManage;
   const canManageMembers = canManage;
-  const canManageApiKeys = canManage;
   const canManageFriendlyName = canManage;
   const canDeletePack = canManage;
 
@@ -85,12 +80,11 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
 
   useEffect(() => {
     const loadDetails = async () => {
-      const [buildRes, channelRes, memberRes, inviteRes, tokenRes] = await Promise.all([
+      const [buildRes, channelRes, memberRes, inviteRes] = await Promise.all([
         fetch(`/api/packs/${packId}/builds`),
         fetch(`/api/packs/${packId}/channels`),
         fetch(`/api/packs/${packId}/members`),
         canManageInvites ? fetch(`/api/packs/${packId}/invites`) : Promise.resolve(null),
-        canManageApiKeys ? fetch(`/api/packs/${packId}/api-keys`) : Promise.resolve(null),
       ]);
 
       if (buildRes.ok) {
@@ -116,17 +110,10 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
       } else {
         setInvites([]);
       }
-
-      if (tokenRes && tokenRes.ok) {
-        const data = await tokenRes.json();
-        setApiKeyRecords(data.keys ?? []);
-      } else {
-        setApiKeyRecords([]);
-      }
     };
 
     loadDetails().catch(() => setError("Unable to load pack details."));
-  }, [packId, canManageInvites, canManageApiKeys]);
+  }, [packId, canManageInvites]);
 
   const handleCreateInvite = async () => {
     setLoading(true);
@@ -196,27 +183,6 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
           : channel
       )
     );
-  };
-
-  const handleCreateApiKey = async () => {
-    setLoading(true);
-    setError(null);
-    const response = await fetch(`/api/packs/${packId}/api-keys`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label: apiKeyLabel || undefined }),
-    });
-    const data = await response.json();
-    setLoading(false);
-
-    if (!response.ok) {
-      setError(data?.error ?? "Unable to create deploy key.");
-      return;
-    }
-
-    setApiKeyLabel("");
-    setNewApiKey(data.key);
-    setApiKeyRecords((prev) => [data.record, ...prev]);
   };
 
   const handleRevokeMember = async (userId: string) => {
@@ -420,12 +386,6 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
               onRevokeMember={handleRevokeMember}
               onPromoteMember={handlePromoteMember}
               onDemoteMember={handleDemoteMember}
-              canManageApiKeys={canManageApiKeys}
-              apiKeyRecords={apiKeyRecords}
-              apiKeyLabel={apiKeyLabel}
-              newApiKey={newApiKey}
-              onApiKeyLabelChange={setApiKeyLabel}
-              onCreateApiKey={handleCreateApiKey}
               loading={loading}
               currentUserId={session.user.id}
               canManageMembers={canManageMembers}

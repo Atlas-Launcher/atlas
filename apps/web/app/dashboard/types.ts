@@ -46,18 +46,6 @@ export interface Invite {
   createdAt?: string;
 }
 
-export interface ApiKey {
-  id: string;
-  name?: string | null;
-  start?: string | null;
-  enabled: boolean;
-  createdAt?: string;
-  metadata?: {
-    packId?: string | null;
-    type?: string | null;
-  } | null;
-}
-
 export interface UserSummary {
   id: string;
   name: string;
