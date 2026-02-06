@@ -53,6 +53,8 @@ interface AccessTabProps {
   onCloseInviteLinkModal: () => void;
   members: PackMember[];
   onRevokeMember: (userId: string) => void;
+  onPromoteMember: (userId: string) => void;
+  onDemoteMember: (userId: string) => void;
   canManageApiKeys: boolean;
   apiKeyRecords: ApiKey[];
   apiKeyLabel: string;
@@ -73,6 +75,8 @@ export default function AccessTab({
   onCloseInviteLinkModal,
   members,
   onRevokeMember,
+  onPromoteMember,
+  onDemoteMember,
   canManageApiKeys,
   apiKeyRecords,
   apiKeyLabel,
@@ -180,14 +184,35 @@ export default function AccessTab({
                           </TableCell>
                           <TableCell className="text-right">
                             {canManageMembers && member.userId !== currentUserId ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => onRevokeMember(member.userId)}
-                                disabled={loading}
-                              >
-                                Remove
-                              </Button>
+                              <div className="flex justify-end gap-2">
+                                {member.role === "player" ? (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => onPromoteMember(member.userId)}
+                                    disabled={loading}
+                                  >
+                                    Promote
+                                  </Button>
+                                ) : null}
+                                {member.role === "creator" ? (
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => onDemoteMember(member.userId)}
+                                    disabled={loading}
+                                  >
+                                    Demote
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => onRevokeMember(member.userId)}
+                                  disabled={loading}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
                             ) : (
                               <span className="text-xs text-[var(--atlas-ink-muted)]">
                                 {member.userId === currentUserId ? "You" : "—"}
