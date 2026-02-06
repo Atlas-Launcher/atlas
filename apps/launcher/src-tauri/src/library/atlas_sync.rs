@@ -68,6 +68,18 @@ impl ArtifactResponse {
     }
 }
 
+#[derive(Debug, Default)]
+struct LastUpdatedState {
+    pack_id: String,
+    channel: String,
+    build_id: Option<String>,
+    bundled_files: Option<u64>,
+    hydrated_assets: Option<u64>,
+    minecraft_version: Option<String>,
+    modloader: Option<String>,
+    modloader_version: Option<String>,
+}
+
 pub async fn sync_atlas_pack(
     window: &Window,
     atlas_hub_url: &str,
@@ -91,6 +103,48 @@ pub async fn sync_atlas_pack(
         artifact.channel,
         artifact.build_id.as_deref().unwrap_or("-")
     ));
+    if let Some(last_updated) = read_last_updated_file(&game_dir) {
+        if sync_is_current(&artifact, &last_updated) {
+            let bundled_files = last_updated.bundled_files.unwrap_or(0);
+            let hydrated_assets = last_updated.hydrated_assets.unwrap_or(0);
+            telemetry::info(format!(
+                "sync skipped pack_id={} channel={} build_id={} (already up to date)",
+                artifact.pack_id,
+                artifact.channel,
+                artifact.build_id.as_deref().unwrap_or("-")
+            ));
+            emit_sync(window, "Pack is already up to date", Some(1), Some(1))?;
+            window
+                .emit(
+                    "launch://status",
+                    LaunchEvent {
+                        phase: "atlas-sync".to_string(),
+                        message: "Pack update complete".to_string(),
+                        current: Some(1),
+                        total: Some(1),
+                        percent: Some(100),
+                    },
+                )
+                .map_err(|err| format!("Emit failed: {err}"))?;
+            return Ok(AtlasPackSyncResult {
+                pack_id: artifact.pack_id,
+                channel: artifact.channel,
+                build_id: artifact.build_id,
+                build_version: artifact.build_version,
+                minecraft_version: first_non_blank(
+                    artifact.minecraft_version,
+                    last_updated.minecraft_version,
+                ),
+                modloader: first_non_blank(artifact.modloader, last_updated.modloader),
+                modloader_version: first_non_blank(
+                    artifact.modloader_version,
+                    last_updated.modloader_version,
+                ),
+                bundled_files,
+                hydrated_assets,
+            });
+        }
+    }
 
     emit_sync(window, "Downloading pack data", None, None)?;
     let blob_bytes = download_blob_bytes(&artifact.download_url).await?;
@@ -175,6 +229,32 @@ pub async fn sync_atlas_pack(
     for (relative_asset_path, url, hashes) in jobs {
         let safe_relative = sanitize_relative_path(&relative_asset_path)?;
         let asset_path = minecraft_dir.join(safe_relative);
+        if asset_path.exists() {
+            let can_reuse = match hashes.as_ref() {
+                Some(_) => match verify_hashes(&asset_path, hashes.as_ref()) {
+                    Ok(()) => true,
+                    Err(err) => {
+                        telemetry::warn(format!(
+                            "asset changed or corrupt; redownloading {}: {}",
+                            asset_path.display(),
+                            err
+                        ));
+                        false
+                    }
+                },
+                None => true,
+            };
+            if can_reuse {
+                hydrated_assets += 1;
+                emit_sync(
+                    window,
+                    "Downloading pack assets",
+                    Some(hydrated_assets),
+                    Some(total_assets),
+                )?;
+                continue;
+            }
+        }
         download_raw(&client, &url, &asset_path, None, true).await?;
         verify_hashes(&asset_path, hashes.as_ref())?;
         hydrated_assets += 1;
@@ -350,6 +430,19 @@ fn write_blob_file(game_dir: &Path, relative_path: &str, bytes: &[u8]) -> Result
     let target_path = game_dir.join(safe_relative);
     if let Some(parent) = target_path.parent() {
         ensure_dir(parent)?;
+    }
+    if target_path.exists() {
+        match fs::read(&target_path) {
+            Ok(existing) if existing == bytes => return Ok(()),
+            Ok(_) => {}
+            Err(err) => {
+                telemetry::warn(format!(
+                    "failed to read existing bundled file {}; rewriting: {}",
+                    target_path.display(),
+                    err
+                ));
+            }
+        }
     }
     fs::write(&target_path, bytes).map_err(|err| {
         format!(
@@ -571,6 +664,99 @@ fn emit_sync(
             },
         )
         .map_err(|err| format!("Emit failed: {err}").into())
+}
+
+fn sync_is_current(artifact: &ArtifactResponse, state: &LastUpdatedState) -> bool {
+    let Some(artifact_build_id) = artifact
+        .build_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return false;
+    };
+
+    let local_build_id = state
+        .build_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if local_build_id != Some(artifact_build_id) {
+        return false;
+    }
+
+    if state.pack_id.trim() != artifact.pack_id.trim() {
+        return false;
+    }
+    state
+        .channel
+        .trim()
+        .eq_ignore_ascii_case(artifact.channel.trim())
+}
+
+fn read_last_updated_file(game_dir: &Path) -> Option<LastUpdatedState> {
+    let metadata_path = game_dir.join("last_updated.toml");
+    let contents = fs::read_to_string(&metadata_path).ok()?;
+    let mut state = LastUpdatedState::default();
+    for raw_line in contents.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        let value = value.trim();
+        match key {
+            "pack_id" => state.pack_id = parse_toml_string(value).unwrap_or_default(),
+            "channel" => state.channel = parse_toml_string(value).unwrap_or_default(),
+            "build_id" => state.build_id = parse_toml_string(value),
+            "bundled_files" => state.bundled_files = value.parse::<u64>().ok(),
+            "hydrated_assets" => state.hydrated_assets = value.parse::<u64>().ok(),
+            "minecraft_version" => state.minecraft_version = parse_toml_string(value),
+            "modloader" => state.modloader = parse_toml_string(value),
+            "modloader_version" => state.modloader_version = parse_toml_string(value),
+            _ => {}
+        }
+    }
+    if state.pack_id.trim().is_empty() || state.channel.trim().is_empty() {
+        return None;
+    }
+    Some(state)
+}
+
+fn parse_toml_string(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.eq_ignore_ascii_case("null") {
+        return None;
+    }
+    let inner = trimmed.strip_prefix('"')?.strip_suffix('"')?;
+    Some(toml_unescape_string(inner))
+}
+
+fn toml_unescape_string(value: &str) -> String {
+    let mut chars = value.chars().peekable();
+    let mut out = String::new();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('r') => out.push('\r'),
+            Some('t') => out.push('\t'),
+            Some('"') => out.push('"'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 fn write_last_updated_file(

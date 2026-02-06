@@ -23,7 +23,7 @@ pub async fn download_if_needed(
         }
         if let Some(expected) = &download.sha1 {
             if let Ok(actual) = sha1_file(path) {
-                if &actual == expected {
+                if actual.eq_ignore_ascii_case(expected) {
                     return Ok(());
                 }
             }

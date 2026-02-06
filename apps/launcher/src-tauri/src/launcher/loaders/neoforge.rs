@@ -82,9 +82,9 @@ pub async fn ensure_profile(
         return Err("NeoForge loader version is required.".to_string().into());
     }
     let version_id = format!("neoforge-{loader_version}");
-    let (_version_dir, installer_path, version_json_path) =
-        ensure_installer_jar(window, game_dir, loader_version, &version_id).await?;
-
+    let version_dir = game_dir.join("versions").join(&version_id);
+    ensure_dir(&version_dir)?;
+    let version_json_path = version_dir.join(format!("{version_id}.json"));
     if version_json_path.exists() {
         emit(
             window,
@@ -95,6 +95,9 @@ pub async fn ensure_profile(
         )?;
         return read_profile(&version_json_path);
     }
+
+    let (_version_dir, installer_path, version_json_path) =
+        ensure_installer_jar(window, game_dir, loader_version, &version_id).await?;
 
     emit(
         window,
@@ -127,8 +130,9 @@ pub async fn ensure_installed(
         return Err("NeoForge loader version is required.".to_string().into());
     }
     let version_id = format!("neoforge-{loader_version}");
-    let (version_dir, installer_path, version_json_path) =
-        ensure_installer_jar(window, game_dir, loader_version, &version_id).await?;
+    let version_dir = game_dir.join("versions").join(&version_id);
+    ensure_dir(&version_dir)?;
+    let version_json_path = version_dir.join(format!("{version_id}.json"));
     let marker_path = version_dir.join(INSTALL_MARKER_FILE);
 
     if marker_path.exists() && version_json_path.exists() {
@@ -141,6 +145,9 @@ pub async fn ensure_installed(
         )?;
         return Ok(());
     }
+
+    let (_, installer_path, _) =
+        ensure_installer_jar(window, game_dir, loader_version, &version_id).await?;
 
     ensure_launcher_profile(window, game_dir)?;
 
