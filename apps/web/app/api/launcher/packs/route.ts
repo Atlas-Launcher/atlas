@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { and, eq, gt, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
   builds,
   channels,
-  oauthAccessTokens,
   packMembers,
   packs,
 } from "@/lib/db/schema";
 import { allowedChannels } from "@/lib/auth/roles";
+import { getAuthenticatedUserId } from "@/lib/auth/request-user";
 import { decodeArtifactRef, isStorageProviderEnabled } from "@/lib/storage/harness";
 
 type AccessLevel = "dev" | "beta" | "production" | "all";
@@ -27,18 +27,6 @@ interface LauncherRemotePack {
   buildVersion: string | null;
   artifactKey: string | null;
   artifactProvider: "r2" | "vercel_blob" | null;
-}
-
-function parseBearerToken(request: Request): string | null {
-  const header = request.headers.get("authorization")?.trim();
-  if (!header) {
-    return null;
-  }
-  const [scheme, token] = header.split(/\s+/, 2);
-  if (!scheme || !token || scheme.toLowerCase() !== "bearer") {
-    return null;
-  }
-  return token.trim() || null;
 }
 
 function preferredChannel(accessLevel: AccessLevel): ChannelName {
@@ -95,26 +83,8 @@ function selectChannel(
 }
 
 export async function GET(request: Request) {
-  const bearer = parseBearerToken(request);
-  if (!bearer) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const [token] = await db
-    .select({
-      userId: oauthAccessTokens.userId,
-      expiresAt: oauthAccessTokens.accessTokenExpiresAt,
-    })
-    .from(oauthAccessTokens)
-    .where(
-      and(
-        eq(oauthAccessTokens.accessToken, bearer),
-        gt(oauthAccessTokens.accessTokenExpiresAt, new Date())
-      )
-    )
-    .limit(1);
-
-  if (!token?.userId) {
+  const userId = await getAuthenticatedUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -129,7 +99,7 @@ export async function GET(request: Request) {
     })
     .from(packMembers)
     .innerJoin(packs, eq(packMembers.packId, packs.id))
-    .where(eq(packMembers.userId, token.userId));
+    .where(eq(packMembers.userId, userId));
 
   if (memberships.length === 0) {
     return NextResponse.json({ packs: [] });
