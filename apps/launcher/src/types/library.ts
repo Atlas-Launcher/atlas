@@ -47,6 +47,8 @@ export interface AtlasPackSyncResult {
   minecraftVersion?: string | null;
   modloader?: string | null;
   modloaderVersion?: string | null;
+  forceReinstall?: boolean;
+  requiresFullReinstall?: boolean;
   bundledFiles: number;
   hydratedAssets: number;
 }
