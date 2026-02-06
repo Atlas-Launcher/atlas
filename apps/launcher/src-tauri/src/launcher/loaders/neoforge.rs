@@ -142,6 +142,8 @@ pub async fn ensure_installed(
         return Ok(());
     }
 
+    ensure_launcher_profile(window, game_dir)?;
+
     emit(
         window,
         "loader",
@@ -342,6 +344,52 @@ fn run_installer(
         failures.join(" | ")
     )
     .into())
+}
+
+fn ensure_launcher_profile(window: &tauri::Window, game_dir: &Path) -> Result<(), LauncherError> {
+    let launcher_profile_path = game_dir.join("launcher_profiles.json");
+    if launcher_profile_path.exists() {
+        return Ok(());
+    }
+
+    let payload = serde_json::json!({
+        "profiles": {
+            "atlas": {
+                "name": "Atlas",
+                "type": "custom",
+                "lastVersionId": "latest-release"
+            }
+        },
+        "selectedProfile": "atlas",
+        "authenticationDatabase": {},
+        "settings": {},
+        "version": 3
+    });
+    let bytes = serde_json::to_vec_pretty(&payload)
+        .map_err(|err| format!("Failed to serialize launcher_profiles.json: {err}"))?;
+    std::fs::write(&launcher_profile_path, bytes).map_err(|err| {
+        format!(
+            "Failed to create launcher profile {}: {err}",
+            launcher_profile_path.display()
+        )
+    })?;
+
+    let _ = emit(
+        window,
+        "loader",
+        "Created launcher_profiles.json for installer compatibility",
+        None,
+        None,
+    );
+    emit_installer_log(
+        window,
+        "loader",
+        format!(
+            "Created installer-compatible launcher profile: {}",
+            launcher_profile_path.display()
+        ),
+    );
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize)]
