@@ -34,6 +34,9 @@ export interface AtlasRemotePack {
   buildId?: string | null;
   buildVersion?: string | null;
   artifactKey?: string | null;
+  minecraftVersion?: string | null;
+  modloader?: string | null;
+  modloaderVersion?: string | null;
 }
 
 export interface AtlasPackSyncResult {

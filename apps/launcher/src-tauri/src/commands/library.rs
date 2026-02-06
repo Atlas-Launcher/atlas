@@ -2,12 +2,13 @@ use crate::auth;
 use crate::config;
 use crate::library;
 use crate::models::{
-    AtlasPackSyncResult, AtlasRemotePack, AtlasSession, FabricLoaderVersion, ModEntry,
+    AtlasPackSyncResult, AtlasRemotePack, AtlasSession, FabricLoaderVersion, LaunchEvent, ModEntry,
     VersionManifestSummary,
 };
 use crate::state::AppState;
 use crate::telemetry;
 use mod_resolver::Provider;
+use tauri::Emitter;
 
 #[tauri::command]
 pub async fn get_version_manifest_summary() -> Result<VersionManifestSummary, String> {
@@ -53,8 +54,9 @@ pub fn delete_mod(game_dir: String, file_name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn uninstall_instance_data(game_dir: String) -> Result<(), String> {
-    library::uninstall_instance_data(&game_dir).map_err(|err| err.to_string())
+pub fn uninstall_instance_data(game_dir: String, preserve_saves: Option<bool>) -> Result<(), String> {
+    library::uninstall_instance_data(&game_dir, preserve_saves.unwrap_or(false))
+        .map_err(|err| err.to_string())
 }
 
 async fn get_fresh_atlas_session(
@@ -186,6 +188,16 @@ pub async fn sync_atlas_pack(
                 channel.as_deref().unwrap_or("-"),
                 err
             ));
+            let _ = window.emit(
+                "launch://status",
+                LaunchEvent {
+                    phase: "atlas-sync".to_string(),
+                    message: "Pack update failed".to_string(),
+                    current: None,
+                    total: None,
+                    percent: Some(100),
+                },
+            );
             Err("Failed to update this Atlas profile. See launcher.log for details.".to_string())
         }
     }

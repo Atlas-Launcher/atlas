@@ -41,6 +41,27 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   const profile = ref<Profile | null>(null);
   const atlasProfile = ref<AtlasProfile | null>(null);
   const atlasPendingDeeplink = ref<string | null>(null);
+  let deviceLoginAttempt = 0;
+
+  async function waitForDeviceApproval(deviceCodeValue: string, attempt: number) {
+    try {
+      const result = await invoke<Profile>("complete_device_code", {
+        deviceCode: deviceCodeValue
+      });
+      if (attempt !== deviceLoginAttempt) {
+        return;
+      }
+      profile.value = result;
+      deviceCode.value = null;
+      setStatus(`Signed in as ${result.name}.`);
+    } catch (err) {
+      if (attempt !== deviceLoginAttempt) {
+        return;
+      }
+      deviceCode.value = null;
+      setStatus(`Login failed: ${String(err)}`);
+    }
+  }
 
   async function restoreSession() {
     try {
@@ -132,37 +153,25 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   }
 
   async function startDeviceLogin() {
-    await run(async () => {
+    const attempt = ++deviceLoginAttempt;
+    const response = await run(async () => {
       try {
         deviceCode.value = null;
-        const response = await invoke<DeviceCodeResponse>("start_device_code");
-        deviceCode.value = response;
-        const url = response.verification_uri_complete ?? response.verification_uri;
+        const nextDeviceCode = await invoke<DeviceCodeResponse>("start_device_code");
+        deviceCode.value = nextDeviceCode;
+        const url = nextDeviceCode.verification_uri_complete ?? nextDeviceCode.verification_uri;
         await openUrl(url);
-        setStatus("Finish signing in, then click Complete sign-in.");
+        setStatus("Waiting for Microsoft sign-in approval in your browser.");
+        return nextDeviceCode;
       } catch (err) {
         setStatus(`Login start failed: ${String(err)}`);
+        return null;
       }
     });
-  }
-
-  async function completeDeviceLogin() {
-    if (!deviceCode.value) {
-      setStatus("Start sign-in first.");
+    if (!response) {
       return;
     }
-    await run(async () => {
-      try {
-        const result = await invoke<Profile>("complete_device_code", {
-          deviceCode: deviceCode.value?.device_code ?? ""
-        });
-        profile.value = result;
-        setStatus(`Signed in as ${result.name}.`);
-        deviceCode.value = null;
-      } catch (err) {
-        setStatus(`Login failed: ${String(err)}`);
-      }
-    });
+    void waitForDeviceApproval(response.device_code, attempt);
   }
 
   async function startDeeplinkLogin() {
@@ -240,6 +249,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   }
 
   async function signOut() {
+    deviceLoginAttempt += 1;
     await run(async () => {
       try {
         await invoke("sign_out");
@@ -270,16 +280,12 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
     authFlow,
     profile,
     atlasProfile,
-    deviceCode,
-    pendingDeeplink,
-    atlasPendingDeeplink,
     restoreSession,
     restoreAtlasSession,
     restoreSessions,
     initDeepLink,
     startLogin,
     startAtlasLogin,
-    completeDeviceLogin,
     finishDeeplinkLogin,
     finishAtlasLogin,
     signOut,

@@ -45,6 +45,12 @@ pub struct AtlasRemotePack {
     pub build_version: Option<String>,
     #[serde(default)]
     pub artifact_key: Option<String>,
+    #[serde(default)]
+    pub minecraft_version: Option<String>,
+    #[serde(default)]
+    pub modloader: Option<String>,
+    #[serde(default)]
+    pub modloader_version: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

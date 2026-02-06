@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import ActivityCard from "./components/ActivityCard.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
@@ -73,27 +73,27 @@ const {
   loadMods,
   toggleMod,
   deleteMod
-} = useLibrary({ activeInstance, setStatus, pushLog, run });
+} = useLibrary({ activeInstance, setStatus, pushLog, run, resolveGameDir: resolveInstanceGameDir });
 const { launchMinecraft, downloadMinecraftFiles } = useLauncher({
   profile,
   instance: activeInstance,
   settings,
   setStatus,
   setProgress,
-  run
+  run,
+  resolveGameDir: resolveInstanceGameDir
 });
 
 const activeTab = ref<"library" | "settings">("library");
 const libraryView = ref<"grid" | "detail">("grid");
 const syncingRemotePacks = ref(false);
 const instanceInstallStateById = ref<Record<string, boolean>>({});
+const tasksPanelOpen = ref(false);
+const TASKS_PANEL_AUTO_MINIMIZE_MS = 5000;
+let tasksPanelAutoMinimizeTimer: ReturnType<typeof setTimeout> | null = null;
 
 const modsDir = computed(() => {
-  const instance = activeInstance.value;
-  if (!instance) {
-    return "";
-  }
-  const base = instance.gameDir?.trim() || defaultGameDir.value || "";
+  const base = resolveInstanceGameDir(activeInstance.value) || defaultGameDir.value || "";
   if (!base) {
     return "";
   }
@@ -132,30 +132,129 @@ function resolveLoaderKind(modloader: string | null | undefined): ModLoaderKind 
   return "vanilla";
 }
 
-async function syncAtlasInstanceFiles(instance: InstanceConfig) {
+function resolveLoaderKindOrNull(modloader: string | null | undefined): ModLoaderKind | null {
+  const normalized = (modloader ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  return resolveLoaderKind(normalized);
+}
+
+function resolveAtlasChannel(value: string | null | undefined): "dev" | "beta" | "production" {
+  if (value === "dev" || value === "beta" || value === "production") {
+    return value;
+  }
+  return "production";
+}
+
+function resolveInstanceGameDir(instance: InstanceConfig | null): string {
+  if (!instance) {
+    return "";
+  }
+  const base = (instance.gameDir ?? "").trim().replace(/[\\/]+$/, "");
+  if (!base) {
+    return "";
+  }
+  if (instance.source !== "atlas") {
+    return base;
+  }
+  const channel = resolveAtlasChannel(instance.atlasPack?.channel);
+  return `${base}/channels/${channel}`;
+}
+
+function normalizeVersion(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+interface AtlasSyncOptions {
+  forLaunch?: boolean;
+}
+
+async function syncAtlasInstanceFiles(instance: InstanceConfig, options?: AtlasSyncOptions) {
   if (!atlasProfile.value) {
     setStatus("Sign in to Atlas Hub to update this profile.");
-    return;
+    return false;
   }
   const packId = instance.atlasPack?.packId;
   if (!packId) {
     setStatus("This Atlas profile is missing pack metadata.");
-    return;
+    return false;
+  }
+  const gameDir = resolveInstanceGameDir(instance);
+  if (!gameDir) {
+    setStatus("Atlas profile is missing a game directory.");
+    return false;
   }
 
-  await runTask("Updating Atlas profile", async () => {
-    try {
-      const result = await invoke<AtlasPackSyncResult>("sync_atlas_pack", {
-        packId,
-        gameDir: instance.gameDir ?? "",
-        channel: instance.atlasPack?.channel ?? null
-      });
+  const forLaunch = options?.forLaunch === true;
+  const taskLabel = forLaunch ? "Checking Atlas updates" : "Updating Atlas profile";
+
+  try {
+    await runTask(taskLabel, async () => {
+      const syncPack = async () =>
+        invoke<AtlasPackSyncResult>("sync_atlas_pack", {
+          packId,
+          gameDir,
+          channel: instance.atlasPack?.channel ?? null
+        });
+      const hasMissingRuntimeMetadata = (value: AtlasPackSyncResult) =>
+        !(value.minecraftVersion ?? "").trim() || !(value.modloader ?? "").trim();
+
+      let result = await syncPack();
+      if (hasMissingRuntimeMetadata(result)) {
+        result = await syncPack();
+      }
+
+      const previousVersion = normalizeVersion(instance.version);
+      const previousLoaderKind = instance.loader?.kind ?? "vanilla";
+      const resultLoaderKind = resolveLoaderKindOrNull(result.modloader);
+      const nextLoaderKind = resultLoaderKind ?? previousLoaderKind;
+      const nextVersionValue = (result.minecraftVersion ?? "").trim()
+        ? result.minecraftVersion ?? null
+        : instance.version ?? null;
+      const nextVersion = normalizeVersion(nextVersionValue);
+      const runtimeChanged = previousVersion !== nextVersion || previousLoaderKind !== nextLoaderKind;
+      const nextLoaderVersionValue = (result.modloaderVersion ?? "").trim()
+        ? result.modloaderVersion ?? null
+        : nextLoaderKind === "vanilla"
+          ? null
+          : instance.loader?.loaderVersion ?? null;
+
+      if (forLaunch && runtimeChanged) {
+        await invoke("uninstall_instance_data", {
+          gameDir,
+          preserveSaves: true
+        });
+        result = await syncPack();
+        if (hasMissingRuntimeMetadata(result)) {
+          result = await syncPack();
+        }
+      }
+
+      const finalLoaderKind = resolveLoaderKindOrNull(result.modloader) ?? nextLoaderKind;
+      const finalVersionValue = (result.minecraftVersion ?? "").trim()
+        ? result.minecraftVersion ?? null
+        : nextVersionValue;
+      const finalLoaderVersionValue = (result.modloaderVersion ?? "").trim()
+        ? result.modloaderVersion ?? null
+        : finalLoaderKind === "vanilla"
+          ? null
+          : nextLoaderVersionValue;
+
+      if (forLaunch) {
+        if (!(finalVersionValue ?? "").trim()) {
+          throw new Error("Atlas metadata is missing Minecraft version. Try update again.");
+        }
+        if (finalLoaderKind === "neoforge" && !(finalLoaderVersionValue ?? "").trim()) {
+          throw new Error("Atlas metadata is missing NeoForge loader version. Try update again.");
+        }
+      }
 
       await updateInstance(instance.id, {
-        version: result.minecraftVersion ?? instance.version ?? null,
+        version: finalVersionValue,
         loader: {
-          kind: resolveLoaderKind(result.modloader),
-          loaderVersion: result.modloaderVersion ?? null
+          kind: finalLoaderKind,
+          loaderVersion: finalLoaderVersionValue
         },
         atlasPack: {
           ...(instance.atlasPack ?? {
@@ -170,13 +269,52 @@ async function syncAtlasInstanceFiles(instance: InstanceConfig) {
       });
 
       await loadMods();
-      setStatus(
-        `Atlas profile updated (${result.hydratedAssets} assets, ${result.bundledFiles} files).`
-      );
-    } catch (err) {
-      setStatus(`Atlas profile update failed: ${String(err)}`);
+      if (forLaunch) {
+        setStatus(
+          runtimeChanged
+            ? "Atlas pack runtime changed. Reinstalled files while keeping saves."
+            : "Atlas pack checked for updates."
+        );
+      } else {
+        setStatus(
+          `Atlas profile updated (${result.hydratedAssets} assets, ${result.bundledFiles} files).`
+        );
+      }
+    });
+  } catch (err) {
+    setStatus(`Atlas profile update failed: ${String(err)}`);
+    return false;
+  }
+  return true;
+}
+
+async function launchActiveInstance() {
+  const instance = activeInstance.value;
+  if (!instance) {
+    setStatus("Select a profile to launch.");
+    return;
+  }
+
+  if (instance.source === "atlas") {
+    const ready = await syncAtlasInstanceFiles(instance, { forLaunch: true });
+    if (!ready) {
+      return;
     }
-  });
+    await loadInstalledVersions();
+    await refreshInstanceInstallStates();
+  }
+
+  await launchMinecraft();
+}
+
+async function launchInstanceFromLibrary(id: string) {
+  await selectInstance(id);
+  await launchActiveInstance();
+}
+
+async function installInstanceFromLibrary(id: string) {
+  await selectInstance(id);
+  await installSelectedVersion();
 }
 
 async function installSelectedVersion() {
@@ -185,7 +323,10 @@ async function installSelectedVersion() {
     return;
   }
   if (instance.source === "atlas") {
-    await syncAtlasInstanceFiles(instance);
+    const ok = await syncAtlasInstanceFiles(instance);
+    if (!ok) {
+      return;
+    }
   } else {
     await downloadMinecraftFiles();
   }
@@ -219,6 +360,50 @@ async function openModsFolder() {
   } catch (err) {
     setStatus(`Failed to open mods folder: ${String(err)}`);
   }
+}
+
+function toggleTasksPanel() {
+  if (!tasks.value.length) {
+    return;
+  }
+  tasksPanelOpen.value = !tasksPanelOpen.value;
+}
+
+function clearTasksPanelAutoMinimizeTimer() {
+  if (!tasksPanelAutoMinimizeTimer) {
+    return;
+  }
+  clearTimeout(tasksPanelAutoMinimizeTimer);
+  tasksPanelAutoMinimizeTimer = null;
+}
+
+function scheduleTasksPanelAutoMinimize() {
+  clearTasksPanelAutoMinimizeTimer();
+  tasksPanelAutoMinimizeTimer = setTimeout(() => {
+    tasksPanelOpen.value = false;
+    tasksPanelAutoMinimizeTimer = null;
+  }, TASKS_PANEL_AUTO_MINIMIZE_MS);
+}
+
+async function updateAtlasChannel(channel: "dev" | "beta" | "production") {
+  const instance = activeInstance.value;
+  if (!instance || instance.source !== "atlas" || !instance.atlasPack) {
+    return;
+  }
+
+  await updateInstance(instance.id, {
+    atlasPack: {
+      ...instance.atlasPack,
+      channel,
+      buildId: null,
+      buildVersion: null,
+      artifactKey: null
+    }
+  });
+  await syncAtlasPacks();
+  await loadInstalledVersions();
+  await refreshInstanceInstallStates();
+  await loadMods();
 }
 
 async function uninstallInstanceData() {
@@ -271,7 +456,7 @@ async function refreshAtlasPacksFromLibrary() {
 async function refreshInstanceInstallStates() {
   const snapshot = instances.value.map((instance) => ({
     id: instance.id,
-    gameDir: instance.gameDir ?? ""
+    gameDir: resolveInstanceGameDir(instance)
   }));
   if (snapshot.length === 0) {
     instanceInstallStateById.value = {};
@@ -323,9 +508,23 @@ watch(
 );
 
 watch(
-  () => instances.value.map((instance) => `${instance.id}:${instance.gameDir ?? ""}`).join("|"),
+  () =>
+    instances.value
+      .map(
+        (instance) =>
+          `${instance.id}:${instance.gameDir ?? ""}:${instance.atlasPack?.channel ?? ""}`
+      )
+      .join("|"),
   async () => {
     await refreshInstanceInstallStates();
+  }
+);
+
+watch(
+  () => activeInstance.value?.atlasPack?.channel,
+  async () => {
+    await loadInstalledVersions();
+    await loadMods();
   }
 );
 
@@ -358,6 +557,35 @@ watch(
     await syncAtlasPacks();
   }
 );
+
+watch(
+  () => tasks.value.length,
+  (count, previousCount) => {
+    if (count === 0) {
+      tasksPanelOpen.value = false;
+      clearTasksPanelAutoMinimizeTimer();
+      return;
+    }
+    if (previousCount === 0) {
+      tasksPanelOpen.value = true;
+    }
+  }
+);
+
+watch(
+  () => tasksPanelOpen.value,
+  (open) => {
+    if (open && tasks.value.length > 0) {
+      scheduleTasksPanelAutoMinimize();
+      return;
+    }
+    clearTasksPanelAutoMinimizeTimer();
+  }
+);
+
+onBeforeUnmount(() => {
+  clearTasksPanelAutoMinimizeTimer();
+});
 </script>
 
 <template>
@@ -366,7 +594,10 @@ watch(
       <SidebarNav
         class="max-h-full sticky top-0 self-start"
         :active-tab="activeTab"
+        :tasks-count="tasks.length"
+        :tasks-open="tasksPanelOpen"
         @select="activeTab = $event"
+        @toggle-tasks="toggleTasksPanel"
       />
 
       <div class="flex h-full min-h-0 flex-col gap-6">
@@ -395,6 +626,8 @@ watch(
                 :instance-install-state-by-id="instanceInstallStateById"
                 :working="working"
                 @select="openInstance"
+                @play="launchInstanceFromLibrary"
+                @install="installInstanceFromLibrary"
                 @create="addInstance"
                 @refresh-packs="refreshAtlasPacksFromLibrary"
               />
@@ -417,7 +650,7 @@ watch(
               :default-memory-mb="settingsDefaultMemoryMb"
               :default-jvm-args="settingsDefaultJvmArgs"
               @back="backToLibrary"
-              @launch="launchMinecraft"
+              @launch="launchActiveInstance"
               @update-files="installSelectedVersion"
               @go-to-settings="startMicrosoftSignIn"
               @toggle-mod="toggleMod"
@@ -430,6 +663,7 @@ watch(
               @duplicate-instance="duplicateInstance"
               @remove-instance="removeInstance"
               @uninstall-instance="uninstallInstanceData"
+              @update-channel="updateAtlasChannel"
             />
           </section>
 
@@ -451,6 +685,6 @@ watch(
         </main>
       </div>
     </div>
-    <GlobalProgressBar :tasks="tasks" />
+    <GlobalProgressBar v-if="tasks.length > 0 && tasksPanelOpen" :tasks="tasks" />
   </div>
 </template>

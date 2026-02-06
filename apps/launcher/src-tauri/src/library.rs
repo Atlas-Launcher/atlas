@@ -12,6 +12,7 @@ use error::LibraryError;
 use serde::Deserialize;
 use std::fs;
 use std::path::Component;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Window;
 
 pub async fn fetch_version_manifest_summary() -> Result<VersionManifestSummary, LibraryError> {
@@ -83,25 +84,30 @@ pub async fn sync_atlas_pack(
 pub fn list_installed_versions(game_dir: &str) -> Result<Vec<String>, LibraryError> {
     let base_dir = paths::normalize_path(game_dir);
     let versions_dir = base_dir.join("versions");
-    if !versions_dir.exists() {
-        return Ok(Vec::new());
+    let mut versions = Vec::new();
+    if versions_dir.exists() {
+        let entries = fs::read_dir(&versions_dir)
+            .map_err(|err| format!("Failed to read versions dir: {err}"))?;
+        for entry in entries {
+            let entry = entry.map_err(|err| format!("Failed to read versions dir entry: {err}"))?;
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            let json_path = path.join(format!("{name}.json"));
+            if json_path.exists() {
+                versions.push(name);
+            }
+        }
     }
 
-    let mut versions = Vec::new();
-    let entries =
-        fs::read_dir(&versions_dir).map_err(|err| format!("Failed to read versions dir: {err}"))?;
-    for entry in entries {
-        let entry = entry.map_err(|err| format!("Failed to read versions dir entry: {err}"))?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().to_string();
-        let json_path = path.join(format!("{name}.json"));
-        if json_path.exists() {
-            versions.push(name);
-        }
+    // Atlas-managed channel installs may not have a Minecraft versions tree yet.
+    // Treat sync metadata as an installed marker so launcher UI can show installed state.
+    if versions.is_empty() && base_dir.join("last_updated.toml").exists() {
+        versions.push("atlas-managed".to_string());
     }
+
     versions.sort();
     Ok(versions)
 }
@@ -196,7 +202,7 @@ pub fn delete_mod(game_dir: &str, file_name: &str) -> Result<(), LibraryError> {
     Ok(())
 }
 
-pub fn uninstall_instance_data(game_dir: &str) -> Result<(), LibraryError> {
+pub fn uninstall_instance_data(game_dir: &str, preserve_saves: bool) -> Result<(), LibraryError> {
     let trimmed = game_dir.trim();
     if trimmed.is_empty() {
         return Err("Game directory is required.".to_string().into());
@@ -227,8 +233,57 @@ pub fn uninstall_instance_data(game_dir: &str) -> Result<(), LibraryError> {
         );
     }
 
-    fs::remove_dir_all(&base_dir)
-        .map_err(|err| format!("Failed to remove instance data: {err}"))?;
+    if !preserve_saves {
+        fs::remove_dir_all(&base_dir)
+            .map_err(|err| format!("Failed to remove instance data: {err}"))?;
+        return Ok(());
+    }
+
+    let saves_path = base_dir.join("saves");
+    let mut preserved_saves_path = None;
+    if saves_path.exists() {
+        let parent = base_dir
+            .parent()
+            .ok_or_else(|| "Instance directory has no parent.".to_string())?;
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| format!("Failed to read system clock: {err}"))?
+            .as_millis();
+        let mut candidate = parent.join(format!(".atlas-preserve-saves-{stamp}"));
+        let mut suffix = 0usize;
+        while candidate.exists() {
+            suffix += 1;
+            candidate = parent.join(format!(".atlas-preserve-saves-{stamp}-{suffix}"));
+        }
+        fs::rename(&saves_path, &candidate).map_err(|err| {
+            format!(
+                "Failed to preserve saves directory {}: {err}",
+                saves_path.display()
+            )
+        })?;
+        preserved_saves_path = Some(candidate);
+    }
+
+    if let Err(err) = fs::remove_dir_all(&base_dir) {
+        if let Some(path) = preserved_saves_path {
+            let _ = fs::rename(path, saves_path);
+        }
+        return Err(format!("Failed to remove instance data: {err}").into());
+    }
+
+    fs::create_dir_all(&base_dir)
+        .map_err(|err| format!("Failed to recreate instance data directory: {err}"))?;
+
+    if let Some(path) = preserved_saves_path {
+        let restored_saves_path = base_dir.join("saves");
+        fs::rename(&path, &restored_saves_path).map_err(|err| {
+            format!(
+                "Failed to restore saves directory to {}: {err}",
+                restored_saves_path.display()
+            )
+        })?;
+    }
+
     Ok(())
 }
 

@@ -10,6 +10,7 @@ import { Box, ChevronLeftIcon } from "lucide-vue-next";
 import type { Profile } from "@/types/auth";
 import type { FabricLoaderVersion, ModEntry, VersionSummary } from "@/types/library";
 import type { InstanceConfig } from "@/types/settings";
+import { formatLoaderKind } from "@/lib/utils";
 
 const props = defineProps<{
   instance: InstanceConfig | null;
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   (event: "duplicate-instance", id: string): void;
   (event: "remove-instance", id: string): void;
   (event: "uninstall-instance"): void;
+  (event: "update-channel", value: "dev" | "beta" | "production"): void;
 }>();
 
 const detailTab = ref<"content" | "setup">("content");
@@ -51,12 +53,17 @@ const activeLoaderLabel = computed(() => {
   if (!instance) {
     return "";
   }
-  const loader = instance.loader?.kind ?? "vanilla";
+  const loader = formatLoaderKind(instance.loader?.kind);
   const version = instance.version?.trim() || "Latest release";
   return `${loader} · ${version}`;
 });
 
 const isRemoteInstance = computed(() => props.instance?.source === "atlas");
+const hasInstalledFiles = computed(() => props.installedVersions.length > 0);
+const needsRemoteInstall = computed(() => isRemoteInstance.value && !hasInstalledFiles.value);
+const remoteControlsDisabled = computed(
+  () => isRemoteInstance.value && !hasInstalledFiles.value
+);
 const contentTabLabel = computed(() =>
   isRemoteInstance.value ? "Manage" : "Content"
 );
@@ -82,13 +89,20 @@ const contentTabLabel = computed(() =>
           </div>
         </div>
         <div class="ml-auto flex flex-wrap items-center gap-2">
-          <Button :disabled="props.working || !props.profile" @click="emit('launch')">
+          <Button v-if="needsRemoteInstall" :disabled="props.working" @click="emit('install-version')">
+            Install
+          </Button>
+          <Button v-else :disabled="props.working || !props.profile" @click="emit('launch')">
             Play
           </Button>
-          <Button :disabled="props.working" variant="secondary" @click="emit('update-files')">
+          <Button
+            v-if="!needsRemoteInstall"
+            :disabled="props.working"
+            variant="secondary"
+            @click="emit('update-files')"
+          >
             Update
           </Button>
-          <Button variant="ghost" @click="detailTab = 'setup'">Settings</Button>
         </div>
       </div>
     </div>
@@ -104,21 +118,28 @@ const contentTabLabel = computed(() =>
     </div>
 
     <Tabs v-model="detailTab" class="flex-1 min-h-0 flex flex-col overflow-hidden gap-4">
-      <TabsList class="flex flex-wrap justify-start gap-2 bg-transparent p-0 shrink-0">
-        <TabsTrigger value="content">{{ contentTabLabel }}</TabsTrigger>
-        <TabsTrigger value="setup">Setup</TabsTrigger>
+      <TabsList
+        class="flex flex-wrap justify-start gap-2 bg-transparent p-0 shrink-0"
+        :class="remoteControlsDisabled ? 'pointer-events-none opacity-50' : ''"
+      >
+        <TabsTrigger :disabled="remoteControlsDisabled" value="content">
+          {{ contentTabLabel }}
+        </TabsTrigger>
+        <TabsTrigger :disabled="remoteControlsDisabled" value="setup">Setup</TabsTrigger>
         <!-- Logs are available in Settings -->
       </TabsList>
       <TabsContent value="content" class="mt-0 flex-1 min-h-0 overflow-auto pr-1">
-        <div class="space-y-6">
+        <div
+          class="space-y-6"
+          :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
+        >
           <RemoteManageCard
             v-if="isRemoteInstance"
             :instance="props.instance"
             :working="props.working"
             :installed-versions="props.installedVersions"
-            @install="emit('install-version')"
-            @refresh="emit('refresh-versions')"
             @uninstall="emit('uninstall-instance')"
+            @update-channel="emit('update-channel', $event)"
           />
           <ModsCard
             v-else
@@ -134,7 +155,10 @@ const contentTabLabel = computed(() =>
         </div>
       </TabsContent>
       <TabsContent value="setup" class="mt-0 flex-1 min-h-0 overflow-auto pr-1">
-        <div class="flex flex-col gap-6">
+        <div
+          class="flex flex-col gap-6"
+          :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
+        >
           <VersionsCard
             v-if="!isRemoteInstance"
             :instance="props.instance"

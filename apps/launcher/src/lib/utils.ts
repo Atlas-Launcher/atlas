@@ -45,3 +45,14 @@ export function pruneHomePath(path?: string | null): string {
   // No recognizable home/profile prefix: return unchanged
   return original
 }
+
+export function formatLoaderKind(loader?: string | null): string {
+  const normalized = (loader ?? "").trim().toLowerCase()
+  if (normalized === "fabric") {
+    return "Fabric"
+  }
+  if (normalized === "neoforge" || normalized === "neo") {
+    return "NeoForge"
+  }
+  return "Vanilla"
+}
