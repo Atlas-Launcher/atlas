@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use url::form_urlencoded::Serializer;
@@ -22,8 +22,10 @@ struct CfMod {
 #[derive(Deserialize)]
 struct CfFile {
     id: i64,
-    displayName: String,
-    downloadUrl: Option<String>,
+    #[serde(rename = "displayName")]
+    display_name: String,
+    #[serde(rename = "downloadUrl")]
+    download_url: Option<String>,
     hashes: Vec<CfHash>,
 }
 
@@ -87,22 +89,23 @@ pub fn resolve(
 
     let file = files.data.first().context("No CurseForge files found")?;
     let download_url = file
-        .downloadUrl
+        .download_url
         .clone()
         .filter(|value| !value.trim().is_empty())
         .context("CurseForge did not return a downloadable URL.")?;
-    let sha1 = file.hashes.iter().find(|hash| hash.algo == 1).map(|h| h.value.clone());
+    let sha1 = file
+        .hashes
+        .iter()
+        .find(|hash| hash.algo == 1)
+        .map(|h| h.value.clone());
 
     Ok(ModEntry {
         source: "curseforge".to_string(),
         project_id: mod_entry.id.to_string(),
-        version: file.displayName.clone(),
+        version: file.display_name.clone(),
         file_id: Some(file.id.to_string()),
         download_url: Some(download_url),
-        hashes: Some(ModHashes {
-            sha1,
-            sha512: None,
-        }),
+        hashes: Some(ModHashes { sha1, sha512: None }),
     })
 }
 

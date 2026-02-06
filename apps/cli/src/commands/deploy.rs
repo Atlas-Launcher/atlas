@@ -31,7 +31,10 @@ pub struct DeployArgs {
 }
 
 pub fn run(args: DeployArgs) -> Result<()> {
-    let root = args.input.canonicalize().context("Failed to resolve input path")?;
+    let root = args
+        .input
+        .canonicalize()
+        .context("Failed to resolve input path")?;
     let settings = config::resolve_cli_settings(&root, args.pack_id, args.hub_url, args.channel)?;
     let api_key = config::resolve_api_key(args.api_key)?;
 
@@ -54,11 +57,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
             args.version.clone(),
             args.zstd_level,
         )?;
-        (
-            build.bytes,
-            build.metadata.pack_id,
-            build.metadata.version,
-        )
+        (build.bytes, build.metadata.pack_id, build.metadata.version)
     };
 
     let commit_hash = args
@@ -67,12 +66,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
     let artifact_size = bytes.len() as u64;
 
     let client = Client::new();
-    let presign = request_presign(
-        &client,
-        &settings.hub_url,
-        &api_key,
-        &pack_id,
-    )?;
+    let presign = request_presign(&client, &settings.hub_url, &api_key, &pack_id)?;
 
     upload_artifact(&client, &presign.upload_url, bytes)?;
     complete_build(

@@ -6,8 +6,7 @@ use anyhow::{Context, Result};
 use walkdir::WalkDir;
 
 pub fn read_to_string(path: &Path) -> Result<String> {
-    fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {}", path.display()))
+    fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))
 }
 
 pub fn read_bytes(path: &PathBuf) -> Result<Vec<u8>> {
@@ -26,8 +25,7 @@ pub fn insert_file(files: &mut BTreeMap<String, Vec<u8>>, root: &Path, name: &st
     if !path.exists() {
         return Ok(());
     }
-    let bytes = fs::read(&path)
-        .with_context(|| format!("Failed to read {}", path.display()))?;
+    let bytes = fs::read(&path).with_context(|| format!("Failed to read {}", path.display()))?;
     files.insert(name.to_string(), bytes);
     Ok(())
 }
@@ -49,8 +47,7 @@ pub fn insert_config_dir(files: &mut BTreeMap<String, Vec<u8>>, root: &Path) -> 
             .strip_prefix(root)
             .context("Failed to compute config relative path")?;
         let rel_str = rel.to_string_lossy().replace('\\', "/");
-        let bytes = fs::read(path)
-            .with_context(|| format!("Failed to read {}", path.display()))?;
+        let bytes = fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
         files.insert(rel_str, bytes);
     }
 
