@@ -27,7 +27,7 @@ interface ChannelBuildRow {
 }
 
 function preferredChannel(accessLevel: AccessLevel): ChannelName {
-  if (accessLevel === "dev" || accessLevel === "all") {
+  if (accessLevel === "dev") {
     return "dev";
   }
   if (accessLevel === "beta") {
