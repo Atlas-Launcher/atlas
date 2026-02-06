@@ -71,14 +71,12 @@ pub async fn ensure_installed(
     let client = shared_client().clone();
     let loader_version =
         resolve_loader_version(&client, minecraft_version, requested_loader_version).await?;
-    let installer_version = fetch_installer_version(&client).await?;
-
-    let marker_dir = game_dir.join("versions").join(format!(
-        "fabric-loader-{loader_version}-{minecraft_version}"
-    ));
+    let version_id = format!("fabric-loader-{loader_version}-{minecraft_version}");
+    let marker_dir = game_dir.join("versions").join(&version_id);
     ensure_dir(&marker_dir)?;
+    let version_json = marker_dir.join(format!("{version_id}.json"));
     let marker_path = marker_dir.join(FABRIC_INSTALL_MARKER_FILE);
-    if marker_path.exists() {
+    if marker_path.exists() && version_json.exists() {
         emit(
             window,
             "loader",
@@ -90,6 +88,8 @@ pub async fn ensure_installed(
         )?;
         return Ok(());
     }
+
+    let installer_version = fetch_installer_version(&client).await?;
 
     let installer_dir = game_dir.join("versions").join("fabric-installer");
     ensure_dir(&installer_dir)?;
