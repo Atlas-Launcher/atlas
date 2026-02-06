@@ -148,22 +148,8 @@ export default function CreatePackClient() {
         setLoading(false);
         return;
       }
-
-      const repoName = data?.repo?.name ?? value.name;
-      const repoUrl = data?.repo?.htmlUrl ?? data?.repo?.cloneUrl ?? "";
-      const packResult = await createPack({
-        name: repoName,
-        repoUrl,
-      });
-
       setLoading(false);
-
-      if (!packResult.ok) {
-        setError(packResult.data?.error ?? "Repository created, but pack failed.");
-        return;
-      }
-
-      router.push(`/dashboard/${packResult.data.pack.id}`);
+      router.push(`/dashboard/${data.pack.id}`);
     },
   });
 

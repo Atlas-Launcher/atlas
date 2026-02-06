@@ -20,7 +20,7 @@ The template includes:
 ## GitHub Secrets (required)
 Set these secrets in GitHub → Settings → Secrets and variables → Actions:
 - `ATLAS_PACK_ID` (from the Atlas Hub)
-- `ATLAS_DEPLOY_KEY` (deploy API key from the Atlas Hub)
+- `ATLAS_API_KEY` (deploy API key from the Atlas Hub)
 
 ## Local workflow
 To test locally:
