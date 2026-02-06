@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 
 use crate::config;
@@ -56,7 +56,10 @@ pub fn run(command: PackCommand) -> Result<()> {
 }
 
 fn build(args: BuildArgs) -> Result<()> {
-    let root = args.input.canonicalize().context("Failed to resolve input path")?;
+    let root = args
+        .input
+        .canonicalize()
+        .context("Failed to resolve input path")?;
     let build = config::build_pack_bytes(&root, args.pack_id, args.version, args.zstd_level)?;
     io::write_output(&args.output, &build.bytes)?;
     println!("Wrote {}", args.output.display());
@@ -64,7 +67,10 @@ fn build(args: BuildArgs) -> Result<()> {
 }
 
 fn add(args: AddArgs) -> Result<()> {
-    let root = args.input.canonicalize().context("Failed to resolve input path")?;
+    let root = args
+        .input
+        .canonicalize()
+        .context("Failed to resolve input path")?;
     let config = config::load_atlas_config(&root)?;
     let loader = config.versions.modloader;
     let minecraft_version = config.versions.mc;
@@ -99,7 +105,10 @@ fn add(args: AddArgs) -> Result<()> {
 }
 
 fn validate(args: ValidateArgs) -> Result<()> {
-    let root = args.input.canonicalize().context("Failed to resolve input path")?;
+    let root = args
+        .input
+        .canonicalize()
+        .context("Failed to resolve input path")?;
     let config_text = io::read_to_string(&root.join("atlas.toml"))?;
     let _config = protocol::config::atlas::parse_config(&config_text)
         .map_err(|_| anyhow::anyhow!("atlas.toml is invalid"))?;

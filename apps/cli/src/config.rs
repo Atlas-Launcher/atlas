@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use protocol::config::atlas::AtlasConfig;
 use protocol::pack::{BuildInput, BuildOutput, build_pack_bytes as build_binary};
 

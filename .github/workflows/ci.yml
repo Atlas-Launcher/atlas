@@ -8,6 +8,8 @@ on:
 jobs:
   build-lint-test:
     runs-on: ubuntu-latest
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
