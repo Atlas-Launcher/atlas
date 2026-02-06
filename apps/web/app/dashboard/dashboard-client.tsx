@@ -235,7 +235,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       body: JSON.stringify({
         provider: "github",
         callbackURL,
-        scopes: ["repo", "read:org", "user:email"],
+        scopes: ["repo", "workflow", "read:org", "user:email"],
         disableRedirect: true,
       }),
     });

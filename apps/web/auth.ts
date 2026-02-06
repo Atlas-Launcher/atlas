@@ -57,7 +57,7 @@ export const auth = betterAuth({
     github: {
       clientId: process.env.GITHUB_CLIENT_ID ?? "",
       clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
-      scope: ["repo", "read:org", "user:email"],
+      scope: ["repo", "workflow", "read:org", "user:email"],
     },
   },
   database: drizzleAdapter(db, {
