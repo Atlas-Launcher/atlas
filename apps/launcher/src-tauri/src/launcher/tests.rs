@@ -92,6 +92,27 @@ fn classpath_joins_with_separator() {
 }
 
 #[test]
+fn classpath_deduplicates_library_entries() {
+    let libs = vec![
+        PathBuf::from("/tmp/a.jar"),
+        PathBuf::from("/tmp/a.jar"),
+        PathBuf::from("/tmp/b.jar"),
+    ];
+    let classpath = libraries::build_classpath(&libs, PathBuf::from("/tmp/c.jar").as_path());
+    let sep = if cfg!(target_os = "windows") {
+        ";"
+    } else {
+        ":"
+    };
+    let entries: Vec<&str> = classpath.split(sep).collect();
+    let a_count = entries
+        .iter()
+        .filter(|entry| entry.ends_with("a.jar"))
+        .count();
+    assert_eq!(a_count, 1);
+}
+
+#[test]
 fn selects_fallback_component() {
     let mut map = serde_json::Map::new();
     map.insert("java-runtime-gamma".to_string(), serde_json::json!([{}]));

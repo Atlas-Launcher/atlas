@@ -1,4 +1,5 @@
 use crate::paths::ensure_dir;
+use std::collections::HashSet;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use zip::ZipArchive;
@@ -19,6 +20,8 @@ pub async fn sync_libraries(
 ) -> Result<(Vec<PathBuf>, Vec<PathBuf>), LauncherError> {
     let mut library_paths = Vec::new();
     let mut native_paths = Vec::new();
+    let mut seen_library_paths: HashSet<PathBuf> = HashSet::new();
+    let mut seen_native_paths: HashSet<PathBuf> = HashSet::new();
     let mut downloads: Vec<(super::manifest::Download, PathBuf)> = Vec::new();
 
     let included: Vec<Library> = libraries
@@ -39,8 +42,10 @@ pub async fn sync_libraries(
                         .clone()
                         .unwrap_or_else(|| library_path_from_name(&library.name)),
                 );
-                library_paths.push(path);
-                downloads.push((artifact.clone(), library_paths.last().unwrap().clone()));
+                if seen_library_paths.insert(path.clone()) {
+                    library_paths.push(path.clone());
+                    downloads.push((artifact.clone(), path));
+                }
             }
 
             if let Some(natives) = &library.natives {
@@ -54,8 +59,10 @@ pub async fn sync_libraries(
                                     .clone()
                                     .unwrap_or_else(|| library_path_from_name(&library.name)),
                             );
-                            native_paths.push(path);
-                            downloads.push((native.clone(), native_paths.last().unwrap().clone()));
+                            if seen_native_paths.insert(path.clone()) {
+                                native_paths.push(path.clone());
+                                downloads.push((native.clone(), path));
+                            }
                         }
                     }
                 }
@@ -68,16 +75,18 @@ pub async fn sync_libraries(
             let artifact_rel = library_path_from_name(&library.name);
             let artifact_url = format!("{base}{artifact_rel}");
             let artifact_path = libraries_dir.join(&artifact_rel);
-            library_paths.push(artifact_path.clone());
-            downloads.push((
-                super::manifest::Download {
-                    path: Some(artifact_rel.clone()),
-                    url: artifact_url,
-                    sha1: None,
-                    size: None,
-                },
-                artifact_path,
-            ));
+            if seen_library_paths.insert(artifact_path.clone()) {
+                library_paths.push(artifact_path.clone());
+                downloads.push((
+                    super::manifest::Download {
+                        path: Some(artifact_rel.clone()),
+                        url: artifact_url,
+                        sha1: None,
+                        size: None,
+                    },
+                    artifact_path,
+                ));
+            }
 
             if let Some(natives) = &library.natives {
                 if let Some(classifier) = natives.get(os_key) {
@@ -85,16 +94,18 @@ pub async fn sync_libraries(
                     let native_rel = library_path_from_parts(&library.name, Some(&classifier));
                     let native_url = format!("{base}{native_rel}");
                     let native_path = libraries_dir.join(&native_rel);
-                    native_paths.push(native_path.clone());
-                    downloads.push((
-                        super::manifest::Download {
-                            path: Some(native_rel.clone()),
-                            url: native_url,
-                            sha1: None,
-                            size: None,
-                        },
-                        native_path,
-                    ));
+                    if seen_native_paths.insert(native_path.clone()) {
+                        native_paths.push(native_path.clone());
+                        downloads.push((
+                            super::manifest::Download {
+                                path: Some(native_rel.clone()),
+                                url: native_url,
+                                sha1: None,
+                                size: None,
+                            },
+                            native_path,
+                        ));
+                    }
                 }
             }
         }
@@ -177,11 +188,18 @@ pub fn build_classpath(libraries: &[PathBuf], client_jar: &Path) -> String {
     } else {
         ":"
     };
-    let mut entries: Vec<String> = libraries
-        .iter()
-        .map(|path| path.to_string_lossy().to_string())
-        .collect();
-    entries.push(client_jar.to_string_lossy().to_string());
+    let mut seen = HashSet::new();
+    let mut entries = Vec::new();
+    for path in libraries {
+        let value = path.to_string_lossy().to_string();
+        if seen.insert(value.clone()) {
+            entries.push(value);
+        }
+    }
+    let client = client_jar.to_string_lossy().to_string();
+    if seen.insert(client.clone()) {
+        entries.push(client);
+    }
     entries.join(sep)
 }
 
