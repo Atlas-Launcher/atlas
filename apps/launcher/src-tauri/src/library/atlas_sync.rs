@@ -388,15 +388,14 @@ async fn fetch_artifact_download(
             "artifact metadata missing runtime fields; retrying pack_id={} channel={}",
             pack_id, requested_channel
         ));
-        let retry =
-            request_artifact_download(
-                atlas_hub_url,
-                access_token,
-                pack_id,
-                requested_channel,
-                current_build_id,
-            )
-            .await?;
+        let retry = request_artifact_download(
+            atlas_hub_url,
+            access_token,
+            pack_id,
+            requested_channel,
+            current_build_id,
+        )
+        .await?;
         artifact.minecraft_version =
             first_non_blank(artifact.minecraft_version, retry.minecraft_version);
         artifact.modloader = first_non_blank(artifact.modloader, retry.modloader);
