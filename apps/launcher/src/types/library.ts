@@ -35,3 +35,15 @@ export interface AtlasRemotePack {
   buildVersion?: string | null;
   artifactKey?: string | null;
 }
+
+export interface AtlasPackSyncResult {
+  packId: string;
+  channel: AtlasChannel;
+  buildId?: string | null;
+  buildVersion?: string | null;
+  minecraftVersion?: string | null;
+  modloader?: string | null;
+  modloaderVersion?: string | null;
+  bundledFiles: number;
+  hydratedAssets: number;
+}

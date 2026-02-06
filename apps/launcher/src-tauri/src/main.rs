@@ -8,6 +8,7 @@ mod net;
 mod paths;
 mod settings;
 mod state;
+mod telemetry;
 
 use crate::state::AppState;
 
@@ -38,6 +39,7 @@ fn main() {
             commands::library::uninstall_instance_data,
             commands::library::resolve_pack_mod,
             commands::library::list_atlas_remote_packs,
+            commands::library::sync_atlas_pack,
             commands::auth::start_device_code,
             commands::auth::begin_deeplink_login,
             commands::auth::complete_deeplink_login,

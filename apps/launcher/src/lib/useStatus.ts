@@ -76,7 +76,7 @@ export function useStatus() {
 
   function upsertTaskFromEvent(event: LaunchEvent) {
     const now = Date.now();
-    const id = `launch:${event.phase}`;
+    const id = "launch:active";
     const percent =
       typeof event.percent === "number"
         ? Math.round(event.percent)
@@ -86,8 +86,11 @@ export function useStatus() {
 
     const existing = tasks.value.find((task) => task.id === id);
     if (existing) {
+      existing.phase = event.phase;
       existing.message = event.message;
-      existing.percent = percent || existing.percent;
+      if (percent > 0 || typeof event.percent === "number") {
+        existing.percent = percent;
+      }
       existing.lastUpdated = now;
     } else {
       tasks.value.push({
@@ -101,7 +104,12 @@ export function useStatus() {
     }
 
     const doneMessage = event.message.toLowerCase();
-    if (percent >= 100 || doneMessage.includes("ready") || doneMessage.includes("started")) {
+    if (
+      percent >= 100 ||
+      doneMessage.includes("ready") ||
+      doneMessage.includes("started") ||
+      doneMessage.includes("complete")
+    ) {
       tasks.value = tasks.value.filter((task) => task.id !== id);
     }
 

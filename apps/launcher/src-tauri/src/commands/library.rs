@@ -2,9 +2,11 @@ use crate::auth;
 use crate::config;
 use crate::library;
 use crate::models::{
-    AtlasRemotePack, AtlasSession, FabricLoaderVersion, ModEntry, VersionManifestSummary,
+    AtlasPackSyncResult, AtlasRemotePack, AtlasSession, FabricLoaderVersion, ModEntry,
+    VersionManifestSummary,
 };
 use crate::state::AppState;
+use crate::telemetry;
 use mod_resolver::Provider;
 
 #[tauri::command]
@@ -147,4 +149,44 @@ pub async fn list_atlas_remote_packs(
     library::fetch_atlas_remote_packs(&hub_url, &refreshed.access_token)
         .await
         .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub async fn sync_atlas_pack(
+    window: tauri::Window,
+    state: tauri::State<'_, AppState>,
+    pack_id: String,
+    game_dir: String,
+    channel: Option<String>,
+) -> Result<AtlasPackSyncResult, String> {
+    let refreshed = get_fresh_atlas_session(&state).await?;
+    let settings = state
+        .settings
+        .lock()
+        .map_err(|_| "Settings lock poisoned".to_string())?
+        .clone();
+    let hub_url = config::resolve_atlas_hub_url(&settings);
+
+    match library::sync_atlas_pack(
+        &window,
+        &hub_url,
+        &refreshed.access_token,
+        &pack_id,
+        channel.as_deref(),
+        &game_dir,
+    )
+    .await
+    {
+        Ok(result) => Ok(result),
+        Err(err) => {
+            telemetry::error(format!(
+                "atlas pack sync failed pack_id={} game_dir={} channel={}: {}",
+                pack_id,
+                game_dir,
+                channel.as_deref().unwrap_or("-"),
+                err
+            ));
+            Err("Failed to update this Atlas profile. See launcher.log for details.".to_string())
+        }
+    }
 }

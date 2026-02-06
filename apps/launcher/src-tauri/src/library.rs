@@ -1,8 +1,10 @@
+mod atlas_sync;
 mod error;
 
 use crate::launcher::manifest::VersionManifest;
 use crate::models::{
-    AtlasRemotePack, FabricLoaderVersion, ModEntry, VersionManifestSummary, VersionSummary,
+    AtlasPackSyncResult, AtlasRemotePack, FabricLoaderVersion, ModEntry, VersionManifestSummary,
+    VersionSummary,
 };
 use crate::net::http::{fetch_json_shared, shared_client, HttpClient, ReqwestHttpClient};
 use crate::paths;
@@ -10,6 +12,7 @@ use error::LibraryError;
 use serde::Deserialize;
 use std::fs;
 use std::path::Component;
+use tauri::Window;
 
 pub async fn fetch_version_manifest_summary() -> Result<VersionManifestSummary, LibraryError> {
     let manifest: VersionManifest =
@@ -56,6 +59,25 @@ pub async fn fetch_atlas_remote_packs(
         .get_json::<AtlasRemotePackResponse>(&endpoint, Some(access_token))
         .await?;
     Ok(response.packs)
+}
+
+pub async fn sync_atlas_pack(
+    window: &Window,
+    atlas_hub_url: &str,
+    access_token: &str,
+    pack_id: &str,
+    channel: Option<&str>,
+    game_dir: &str,
+) -> Result<AtlasPackSyncResult, LibraryError> {
+    atlas_sync::sync_atlas_pack(
+        window,
+        atlas_hub_url,
+        access_token,
+        pack_id,
+        channel,
+        game_dir,
+    )
+    .await
 }
 
 pub fn list_installed_versions(game_dir: &str) -> Result<Vec<String>, LibraryError> {

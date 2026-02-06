@@ -41,7 +41,7 @@ const visibleTasks = computed(() => activeTasks.value.slice(0, 3));
               :key="task.id"
               class="rounded-full border border-border/60 bg-card/70 px-2 py-1"
             >
-              {{ task.phase }} · {{ task.message }}
+              {{ task.message }}
             </span>
             <span v-if="activeTasks.length > visibleTasks.length">
               +{{ activeTasks.length - visibleTasks.length }} more

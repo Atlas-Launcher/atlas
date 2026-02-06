@@ -46,3 +46,22 @@ pub struct AtlasRemotePack {
     #[serde(default)]
     pub artifact_key: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AtlasPackSyncResult {
+    pub pack_id: String,
+    pub channel: String,
+    #[serde(default)]
+    pub build_id: Option<String>,
+    #[serde(default)]
+    pub build_version: Option<String>,
+    #[serde(default)]
+    pub minecraft_version: Option<String>,
+    #[serde(default)]
+    pub modloader: Option<String>,
+    #[serde(default)]
+    pub modloader_version: Option<String>,
+    pub bundled_files: u64,
+    pub hydrated_assets: u64,
+}
