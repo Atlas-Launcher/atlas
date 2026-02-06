@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
-import sodium from "tweetsodium";
 
 import { auth } from "@/auth";
 import { hasRole } from "@/lib/auth/roles";
@@ -25,6 +24,21 @@ type GithubRepo = {
 type GithubRepoPublicKey = {
   key_id: string;
   key: string;
+};
+
+type GithubContentFile = {
+  sha: string;
+  content: string;
+  encoding: string;
+};
+
+type GithubWorkflow = {
+  id: number;
+  state: string;
+};
+
+type GithubWorkflowListResponse = {
+  workflows?: GithubWorkflow[];
 };
 
 function getTemplateRepo() {
@@ -132,11 +146,129 @@ async function createRepositoryFromTemplate({
   );
 }
 
-function encryptSecret(secretValue: string, base64PublicKey: string) {
-  const messageBytes = Buffer.from(secretValue);
-  const publicKeyBytes = Buffer.from(base64PublicKey, "base64");
-  const encryptedBytes = sodium.seal(messageBytes, publicKeyBytes);
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+interface LibsodiumLike {
+  ready: Promise<unknown>;
+  crypto_box_seal(message: Uint8Array, publicKey: Uint8Array): Uint8Array;
+}
+
+let sodiumModulePromise: Promise<LibsodiumLike> | null = null;
+
+async function getSodium() {
+  if (!sodiumModulePromise) {
+    const moduleName = "libsodium-wrappers";
+    sodiumModulePromise = import(moduleName) as Promise<LibsodiumLike>;
+  }
+
+  const sodium = await sodiumModulePromise;
+  await sodium.ready;
+  return sodium;
+}
+
+async function encryptSecret(secretValue: string, base64PublicKey: string) {
+  const sodium = await getSodium();
+  const messageBytes = new Uint8Array(Buffer.from(secretValue, "utf8"));
+  const publicKeyBytes = new Uint8Array(Buffer.from(base64PublicKey, "base64"));
+  const encryptedBytes = sodium.crypto_box_seal(messageBytes, publicKeyBytes);
   return Buffer.from(encryptedBytes).toString("base64");
+}
+
+function quoteTomlString(value: string) {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function upsertCliTomlField(toml: string, key: string, value: string) {
+  const newline = toml.includes("\r\n") ? "\r\n" : "\n";
+  const lines = toml.split(/\r?\n/);
+  const hasTrailingNewline = /(?:\r?\n)$/.test(toml);
+  const cliHeaderPattern = /^\s*\[cli\]\s*$/;
+  const sectionPattern = /^\s*\[[^\]]+\]\s*$/;
+  const fieldPattern = new RegExp(`^\\s*${key}\\s*=`);
+  const replacement = `${key} = ${quoteTomlString(value)}`;
+
+  const cliStart = lines.findIndex((line) => cliHeaderPattern.test(line));
+  if (cliStart === -1) {
+    if (lines.length && lines[lines.length - 1].trim().length !== 0) {
+      lines.push("");
+    }
+    lines.push("[cli]");
+    lines.push(replacement);
+  } else {
+    let cliEnd = lines.length;
+    for (let i = cliStart + 1; i < lines.length; i += 1) {
+      if (sectionPattern.test(lines[i])) {
+        cliEnd = i;
+        break;
+      }
+    }
+
+    const fieldIndex = lines.findIndex(
+      (line, index) => index > cliStart && index < cliEnd && fieldPattern.test(line)
+    );
+
+    if (fieldIndex >= 0) {
+      lines[fieldIndex] = replacement;
+    } else {
+      lines.splice(cliStart + 1, 0, replacement);
+    }
+  }
+
+  const output = lines.join(newline);
+  return hasTrailingNewline ? `${output}${newline}` : output;
+}
+
+function decodeBase64Content(content: string) {
+  return Buffer.from(content.replace(/\n/g, ""), "base64").toString("utf8");
+}
+
+async function setAtlasTomlCliConfig({
+  token,
+  owner,
+  repo,
+  packId,
+  hubUrl,
+}: {
+  token: string;
+  owner: string;
+  repo: string;
+  packId: string;
+  hubUrl: string;
+}) {
+  const atlasTomlPath = "atlas.toml";
+  const file = await githubRequest<GithubContentFile>(
+    token,
+    `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(atlasTomlPath)}`
+  );
+
+  if (file.encoding !== "base64") {
+    throw new Error("Unexpected atlas.toml encoding from GitHub API.");
+  }
+
+  const currentToml = decodeBase64Content(file.content);
+  let updatedToml = upsertCliTomlField(currentToml, "pack_id", packId);
+  updatedToml = upsertCliTomlField(updatedToml, "hub_url", hubUrl);
+
+  if (updatedToml === currentToml) {
+    return;
+  }
+
+  await githubRequest<null>(
+    token,
+    `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(atlasTomlPath)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        message: "Configure Atlas Hub CLI defaults",
+        content: Buffer.from(updatedToml, "utf8").toString("base64"),
+        sha: file.sha,
+      }),
+    }
+  );
 }
 
 async function setRepositorySecret({
@@ -157,7 +289,7 @@ async function setRepositorySecret({
     `https://api.github.com/repos/${owner}/${repo}/actions/secrets/public-key`
   );
 
-  const encryptedValue = encryptSecret(value, publicKey.key);
+  const encryptedValue = await encryptSecret(value, publicKey.key);
   await githubRequest<null>(
     token,
     `https://api.github.com/repos/${owner}/${repo}/actions/secrets/${encodeURIComponent(name)}`,
@@ -169,6 +301,100 @@ async function setRepositorySecret({
       }),
     }
   );
+}
+
+async function setRepositoryActionsPermissions({
+  token,
+  owner,
+  repo,
+}: {
+  token: string;
+  owner: string;
+  repo: string;
+}) {
+  await githubRequest<null>(
+    token,
+    `https://api.github.com/repos/${owner}/${repo}/actions/permissions`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        enabled: true,
+        allowed_actions: "all",
+      }),
+    }
+  );
+}
+
+async function listRepositoryWorkflows({
+  token,
+  owner,
+  repo,
+}: {
+  token: string;
+  owner: string;
+  repo: string;
+}) {
+  const response = await githubRequest<GithubWorkflowListResponse>(
+    token,
+    `https://api.github.com/repos/${owner}/${repo}/actions/workflows?per_page=100`
+  );
+  return Array.isArray(response.workflows) ? response.workflows : [];
+}
+
+async function enableRepositoryWorkflows({
+  token,
+  owner,
+  repo,
+}: {
+  token: string;
+  owner: string;
+  repo: string;
+}) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const workflows = await listRepositoryWorkflows({ token, owner, repo });
+    if (workflows.length === 0) {
+      if (attempt === 4) {
+        throw new Error(
+          "No workflows were found in the generated repository. Ensure the template includes .github/workflows files."
+        );
+      }
+      await sleep(750 * (attempt + 1));
+      continue;
+    }
+
+    await Promise.all(
+      workflows.map(async (workflow) => {
+        if (workflow.state === "active") {
+          return;
+        }
+
+        await githubRequest<null>(
+          token,
+          `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${encodeURIComponent(
+            String(workflow.id)
+          )}/enable`,
+          {
+            method: "PUT",
+          }
+        );
+      })
+    );
+
+    return;
+  }
+}
+
+async function enableRepositoryActionsAndWorkflows({
+  token,
+  owner,
+  repo,
+}: {
+  token: string;
+  owner: string;
+  repo: string;
+}) {
+  await setRepositoryActionsPermissions({ token, owner, repo });
+  await enableRepositoryWorkflows({ token, owner, repo });
 }
 
 async function deleteRepository({
@@ -282,6 +508,20 @@ export async function POST(request: Request) {
     const resolvedOwner = repo?.owner?.login ?? owner;
     const hubUrl = getAtlasHubUrl(request);
 
+    await enableRepositoryActionsAndWorkflows({
+      token,
+      owner: resolvedOwner,
+      repo: repo.name,
+    });
+
+    await setAtlasTomlCliConfig({
+      token,
+      owner: resolvedOwner,
+      repo: repo.name,
+      packId: createdPack.id,
+      hubUrl,
+    });
+
     await Promise.all([
       setRepositorySecret({
         token,
@@ -289,27 +529,6 @@ export async function POST(request: Request) {
         repo: repo.name,
         name: "ATLAS_API_KEY",
         value: atlasApiKey,
-      }),
-      setRepositorySecret({
-        token,
-        owner: resolvedOwner,
-        repo: repo.name,
-        name: "ATLAS_DEPLOY_KEY",
-        value: atlasApiKey,
-      }),
-      setRepositorySecret({
-        token,
-        owner: resolvedOwner,
-        repo: repo.name,
-        name: "ATLAS_PACK_ID",
-        value: createdPack.id,
-      }),
-      setRepositorySecret({
-        token,
-        owner: resolvedOwner,
-        repo: repo.name,
-        name: "ATLAS_HUB_URL",
-        value: hubUrl,
       }),
     ]);
 

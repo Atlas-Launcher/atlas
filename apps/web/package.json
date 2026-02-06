@@ -32,6 +32,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.33.0",
+    "libsodium-wrappers": "^0.8.2",
     "lucide-react": "^0.563.0",
     "nanoid": "^3.3.11",
     "next": "16.1.6",
@@ -40,7 +41,6 @@
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.1",
     "tailwind-merge": "^3.4.0",
-    "tweetsodium": "^0.0.6",
     "zod": "^4.3.6"
   },
   "devDependencies": {

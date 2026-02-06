@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { packs } from "@/lib/db/schema";
+import { packMembers, packs } from "@/lib/db/schema";
 import { hasRole } from "@/lib/auth/roles";
 import { createPackWithDefaults } from "@/lib/packs/create-pack";
 
