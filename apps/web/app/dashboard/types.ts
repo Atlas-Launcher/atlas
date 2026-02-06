@@ -19,6 +19,7 @@ export interface Build {
   minecraftVersion?: string | null;
   modloader?: string | null;
   modloaderVersion?: string | null;
+  forceReinstall?: boolean;
   artifactKey: string;
   artifactProvider?: "r2" | "vercel_blob" | null;
   createdAt?: string;

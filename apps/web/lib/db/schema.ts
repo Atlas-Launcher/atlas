@@ -225,6 +225,7 @@ export const builds = pgTable("builds", {
   minecraftVersion: text("minecraft_version"),
   modloader: text("modloader"),
   modloaderVersion: text("modloader_version"),
+  forceReinstall: boolean("force_reinstall").notNull().default(false),
   artifactKey: text("artifact_key").notNull(),
   artifactSize: integer("artifact_size"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

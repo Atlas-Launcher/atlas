@@ -10,6 +10,7 @@ interface DashboardHeaderProps {
   email?: string;
   subtitle?: string;
   role?: Role;
+  identifier?: string;
   eyebrow?: string;
   leading?: ReactNode;
   meta?: ReactNode;
@@ -22,6 +23,7 @@ export default function DashboardHeader({
   email,
   subtitle,
   role,
+  identifier,
   eyebrow = "Dashboard",
   leading,
   meta,
@@ -47,6 +49,13 @@ export default function DashboardHeader({
                 </Badge>
               ) : null}
             </div>
+            {identifier ? (
+              <div className="mt-1">
+                <Badge variant="outline" className="text-[10px] uppercase tracking-[0.2em]">
+                  {identifier}
+                </Badge>
+              </div>
+            ) : null}
             {detail ? <p className="text-xs text-[var(--atlas-ink-muted)]">{detail}</p> : null}
             {meta ? <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div> : null}
           </div>
