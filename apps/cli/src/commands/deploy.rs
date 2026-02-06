@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Command;
 
 use anyhow::{Context, Result};
 use clap::Args;
@@ -23,8 +24,6 @@ pub struct DeployArgs {
     #[arg(long)]
     commit_hash: Option<String>,
     #[arg(long)]
-    version: Option<String>,
-    #[arg(long)]
     input_file: Option<PathBuf>,
     #[arg(long, default_value_t = protocol::DEFAULT_ZSTD_LEVEL)]
     zstd_level: i32,
@@ -37,32 +36,25 @@ pub fn run(args: DeployArgs) -> Result<()> {
         .context("Failed to resolve input path")?;
     let settings = config::resolve_cli_settings(&root, args.pack_id, args.hub_url, args.channel)?;
     let api_key = config::resolve_api_key(args.api_key)?;
+    let commit_hash = resolve_commit_hash(&root, args.commit_hash)?;
+    let derived_version = commit_hash.clone();
 
     let (bytes, pack_id, version) = if let Some(input_file) = args.input_file.clone() {
         let bytes = io::read_bytes(&input_file)?;
-        let config = config::load_atlas_config(&root)?;
         let pack_id = settings
             .pack_id
             .clone()
             .context("pack_id is required (use --pack-id or ATLAS_PACK_ID)")?;
-        let version = args
-            .version
-            .or(config.metadata.version)
-            .context("version is required (use --version)")?;
-        (bytes, pack_id, version)
+        (bytes, pack_id, derived_version.clone())
     } else {
         let build = config::build_pack_bytes(
             &root,
             settings.pack_id.clone(),
-            args.version.clone(),
+            Some(derived_version.clone()),
             args.zstd_level,
         )?;
         (build.bytes, build.metadata.pack_id, build.metadata.version)
     };
-
-    let commit_hash = args
-        .commit_hash
-        .or_else(|| std::env::var("GITHUB_SHA").ok());
     let artifact_size = bytes.len() as u64;
 
     let client = Client::new();
@@ -78,7 +70,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
             build_id: &presign.build_id,
             artifact_key: &presign.artifact_key,
             version: &version,
-            commit_hash: commit_hash.as_deref(),
+            commit_hash: Some(commit_hash.as_str()),
             artifact_size,
             channel: &settings.channel,
         },
@@ -168,4 +160,43 @@ fn complete_build(
         .error_for_status()
         .context("Complete request failed")?;
     Ok(())
+}
+
+fn resolve_commit_hash(root: &std::path::Path, commit_hash_arg: Option<String>) -> Result<String> {
+    if let Some(commit_hash) = normalize_optional(commit_hash_arg) {
+        return Ok(commit_hash);
+    }
+
+    if let Some(commit_hash) = normalize_optional(std::env::var("GITHUB_SHA").ok()) {
+        return Ok(commit_hash);
+    }
+
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg("HEAD")
+        .current_dir(root)
+        .output()
+        .context("Failed to run git rev-parse HEAD")?;
+
+    if !output.status.success() {
+        anyhow::bail!(
+            "commit hash is required (use --commit-hash, GITHUB_SHA, or run deploy from a git repository)"
+        );
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    normalize_optional(Some(stdout)).context(
+        "commit hash is required (use --commit-hash, GITHUB_SHA, or run deploy from a git repository)",
+    )
+}
+
+fn normalize_optional(value: Option<String>) -> Option<String> {
+    value.and_then(|val| {
+        let trimmed = val.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
 }
