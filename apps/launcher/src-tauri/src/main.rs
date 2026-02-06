@@ -36,6 +36,7 @@ fn main() {
             commands::library::set_mod_enabled,
             commands::library::delete_mod,
             commands::library::uninstall_instance_data,
+            commands::library::resolve_pack_mod,
             commands::library::list_atlas_remote_packs,
             commands::auth::start_device_code,
             commands::auth::begin_deeplink_login,

@@ -21,6 +21,7 @@ import type { InstanceConfig } from "@/types/settings";
 const props = defineProps<{
   instances: InstanceConfig[];
   activeInstanceId: string | null;
+  instanceInstallStateById: Record<string, boolean>;
   working: boolean;
 }>();
 
@@ -86,11 +87,14 @@ const groupedInstances = computed(() => {
 });
 
 function displaySource(instance: InstanceConfig) {
-  return instance.source === "atlas" ? "Atlas" : "Local";
+  return instance.source === "atlas" ? "Atlas Hub" : "Local";
 }
 
 function displayLoader(instance: InstanceConfig) {
   const kind = instance.loader?.kind ?? "vanilla";
+  if (props.instanceInstallStateById[instance.id] === false) {
+    return "Not installed";
+  }
   if (kind === "neoforge") {
     return "NeoForge";
   }
@@ -101,6 +105,9 @@ function displayLoader(instance: InstanceConfig) {
 }
 
 function displayVersion(instance: InstanceConfig) {
+  if (props.instanceInstallStateById[instance.id] === false) {
+    return null
+  }
   return instance.version?.trim() ? instance.version : "Latest release";
 }
 </script>
@@ -192,7 +199,7 @@ function displayVersion(instance: InstanceConfig) {
             <div class="flex-1">
               <div class="font-semibold text-foreground">{{ instance.name }}</div>
               <div class="text-xs text-muted-foreground">
-                {{ displaySource(instance) }} · {{ displayLoader(instance) }} · {{ displayVersion(instance) }}
+                {{ displaySource(instance) }} · {{ displayLoader(instance) }} {{(displayVersion(instance)) ? ` · ${displayVersion(instance)}` : `` }}
               </div>
             </div>
           </button>

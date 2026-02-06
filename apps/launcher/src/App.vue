@@ -85,6 +85,7 @@ const { launchMinecraft, downloadMinecraftFiles } = useLauncher({
 const activeTab = ref<"library" | "settings">("library");
 const libraryView = ref<"grid" | "detail">("grid");
 const syncingRemotePacks = ref(false);
+const instanceInstallStateById = ref<Record<string, boolean>>({});
 
 const modsDir = computed(() => {
   const instance = activeInstance.value;
@@ -122,6 +123,7 @@ async function signOutAtlasFromMenu() {
 async function installSelectedVersion() {
   await downloadMinecraftFiles();
   await loadInstalledVersions();
+  await refreshInstanceInstallStates();
 }
 
 async function refreshVersions() {
@@ -163,6 +165,7 @@ async function uninstallInstanceData() {
         gameDir: instance.gameDir ?? ""
       });
       await loadInstalledVersions();
+      await refreshInstanceInstallStates();
       await loadMods();
       setStatus("Profile files removed.");
     } catch (err) {
@@ -198,6 +201,31 @@ async function refreshAtlasPacksFromLibrary() {
   await syncAtlasPacks();
 }
 
+async function refreshInstanceInstallStates() {
+  const snapshot = instances.value.map((instance) => ({
+    id: instance.id,
+    gameDir: instance.gameDir ?? ""
+  }));
+  if (snapshot.length === 0) {
+    instanceInstallStateById.value = {};
+    return;
+  }
+
+  const results = await Promise.all(
+    snapshot.map(async ({ id, gameDir }) => {
+      try {
+        const versions = await invoke<string[]>("list_installed_versions", { gameDir });
+        return [id, versions.length > 0] as const;
+      } catch (err) {
+        pushLog(`Failed to list installed versions for ${id}: ${String(err)}`);
+        return [id, false] as const;
+      }
+    })
+  );
+
+  instanceInstallStateById.value = Object.fromEntries(results);
+}
+
 onMounted(async () => {
   await initLaunchEvents({ status, progress, pushLog, upsertTaskFromEvent });
   await restoreSessions();
@@ -206,6 +234,7 @@ onMounted(async () => {
   await initDeepLink();
   await loadAvailableVersions();
   await loadInstalledVersions();
+  await refreshInstanceInstallStates();
   await loadFabricLoaderVersions();
   await loadNeoForgeLoaderVersions();
   await loadMods();
@@ -223,6 +252,13 @@ watch(
     await loadFabricLoaderVersions();
     await loadNeoForgeLoaderVersions();
     await loadMods();
+  }
+);
+
+watch(
+  () => instances.value.map((instance) => `${instance.id}:${instance.gameDir ?? ""}`).join("|"),
+  async () => {
+    await refreshInstanceInstallStates();
   }
 );
 
@@ -289,6 +325,7 @@ watch(
               <LibraryView
                 :instances="instances"
                 :active-instance-id="activeInstance?.id ?? null"
+                :instance-install-state-by-id="instanceInstallStateById"
                 :working="working"
                 @select="openInstance"
                 @create="addInstance"

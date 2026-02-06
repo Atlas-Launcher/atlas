@@ -5,6 +5,7 @@ import type { InstanceConfig } from "@/types/settings";
 const props = defineProps<{
   instances: InstanceConfig[];
   activeInstanceId: string | null;
+  instanceInstallStateById: Record<string, boolean>;
   working: boolean;
 }>();
 
@@ -19,6 +20,7 @@ const emit = defineEmits<{
   <InstancesCard
     :instances="props.instances"
     :active-instance-id="props.activeInstanceId"
+    :instance-install-state-by-id="props.instanceInstallStateById"
     :working="props.working"
     @select="emit('select', $event)"
     @create="emit('create')"
