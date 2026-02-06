@@ -37,11 +37,28 @@ jobs:
       - name: Build CLI
         run: cargo build --release -p atlas-cli
 
+      - name: Stage CLI artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          BIN_PATH="target/release/atlas"
+          FILE_NAME="atlas-cli-${{ runner.os }}-${{ runner.arch }}"
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            BIN_PATH="target/release/atlas.exe"
+            FILE_NAME="${FILE_NAME}.exe"
+          fi
+
+          cp "${BIN_PATH}" "dist/${FILE_NAME}"
+          ls -lah dist
+
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
           name: atlas-cli-${{ matrix.os }}
-          path: target/release/atlas*
+          path: dist/atlas-cli-*
           if-no-files-found: error
 
   release-cli:
@@ -64,4 +81,4 @@ jobs:
         with:
           name: Atlas CLI v${{ steps.tag.outputs.version }}
           tag_name: ${{ github.ref_name }}
-          files: dist/cli/**/*
+          files: dist/cli/**/atlas-cli-*
