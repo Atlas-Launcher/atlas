@@ -1,3 +1,5 @@
+import { head } from "@vercel/blob";
+
 const VERCEL_BLOB_API_BASE = "https://blob.vercel-storage.com";
 
 interface VercelBlobConfig {
@@ -25,6 +27,19 @@ function encodeBlobPath(pathname: string) {
     .filter((segment) => segment.length > 0)
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+}
+
+function normalizeBlobPathname(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.pathname.replace(/^\/+/, "");
+  } catch {
+    return trimmed.replace(/^\/+/, "");
+  }
 }
 
 export function isVercelBlobConfigured() {
@@ -81,4 +96,15 @@ export async function downloadFromVercelBlob(pathname: string) {
   }
 
   return response;
+}
+
+export async function createVercelBlobDownloadUrl(pathname: string) {
+  const { token } = getConfig();
+  const normalizedPath = normalizeBlobPathname(pathname);
+  if (!normalizedPath) {
+    throw new Error("Blob pathname is required");
+  }
+
+  const metadata = await head(normalizedPath, { token });
+  return metadata.downloadUrl ?? metadata.url;
 }

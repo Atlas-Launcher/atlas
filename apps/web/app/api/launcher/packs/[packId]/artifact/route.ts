@@ -10,7 +10,6 @@ import {
   decodeArtifactRef,
   isStorageProviderEnabled,
 } from "@/lib/storage/harness";
-import { createStorageToken } from "@/lib/storage/token";
 
 type AccessLevel = "dev" | "beta" | "production" | "all";
 type ChannelName = "dev" | "beta" | "production";
@@ -138,8 +137,6 @@ export async function GET(
     membership.accessLevel as AccessLevel,
     requestedChannel
   );
-  const origin = new URL(request.url).origin;
-
   for (const channelName of orderedChannels) {
     const row = rowsByChannel.get(channelName);
     if (!row?.buildId || !row.artifactKey) {
@@ -156,18 +153,10 @@ export async function GET(
       continue;
     }
 
-    let downloadUrl: string;
-    if (artifactRef.provider === "r2") {
-      downloadUrl = await createDownloadUrlForArtifactRef(artifactRef);
-    } else {
-      const token = createStorageToken({
-        action: "download",
-        provider: artifactRef.provider,
-        key: resolvedArtifactKey,
-        expiresInSeconds: 900,
-      });
-      downloadUrl = `${origin}/api/storage/download?token=${encodeURIComponent(token)}`;
-    }
+    const downloadUrl = await createDownloadUrlForArtifactRef({
+      provider: artifactRef.provider,
+      key: resolvedArtifactKey,
+    });
 
     return NextResponse.json({
       packId,
