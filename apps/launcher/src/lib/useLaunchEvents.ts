@@ -24,6 +24,6 @@ export async function initLaunchEvents({
     } else if (payload.total && payload.current) {
       progress.value = Math.round((payload.current / payload.total) * 100);
     }
-    pushLog(`${payload.phase}: ${payload.message}`);
+    pushLog(payload.message);
   });
 }

@@ -6,6 +6,7 @@ pub mod settings;
 pub use auth::{AtlasProfile, AtlasSession, AuthSession, DeviceCodeResponse, Profile};
 pub use launch::{LaunchEvent, LaunchOptions};
 pub use library::{
-    AtlasRemotePack, FabricLoaderVersion, ModEntry, VersionManifestSummary, VersionSummary,
+    AtlasPackSyncResult, AtlasRemotePack, FabricLoaderVersion, ModEntry, VersionManifestSummary,
+    VersionSummary,
 };
 pub use settings::{AppSettings, ModLoaderKind};

@@ -15,7 +15,8 @@ import { useLauncher } from "./lib/useLauncher";
 import { useSettings } from "./lib/useSettings";
 import { useStatus } from "./lib/useStatus";
 import { useWorking } from "./lib/useWorking";
-import type { AtlasRemotePack } from "@/types/library";
+import type { AtlasPackSyncResult, AtlasRemotePack } from "@/types/library";
+import type { InstanceConfig, ModLoaderKind } from "@/types/settings";
 
 const {
   status,
@@ -120,8 +121,74 @@ async function signOutAtlasFromMenu() {
   await signOutAtlas();
 }
 
+function resolveLoaderKind(modloader: string | null | undefined): ModLoaderKind {
+  const normalized = (modloader ?? "").trim().toLowerCase();
+  if (normalized === "fabric") {
+    return "fabric";
+  }
+  if (normalized === "neo" || normalized === "neoforge") {
+    return "neoforge";
+  }
+  return "vanilla";
+}
+
+async function syncAtlasInstanceFiles(instance: InstanceConfig) {
+  if (!atlasProfile.value) {
+    setStatus("Sign in to Atlas Hub to update this profile.");
+    return;
+  }
+  const packId = instance.atlasPack?.packId;
+  if (!packId) {
+    setStatus("This Atlas profile is missing pack metadata.");
+    return;
+  }
+
+  await runTask("Updating Atlas profile", async () => {
+    try {
+      const result = await invoke<AtlasPackSyncResult>("sync_atlas_pack", {
+        packId,
+        gameDir: instance.gameDir ?? "",
+        channel: instance.atlasPack?.channel ?? null
+      });
+
+      await updateInstance(instance.id, {
+        version: result.minecraftVersion ?? instance.version ?? null,
+        loader: {
+          kind: resolveLoaderKind(result.modloader),
+          loaderVersion: result.modloaderVersion ?? null
+        },
+        atlasPack: {
+          ...(instance.atlasPack ?? {
+            packId,
+            packSlug: instance.name,
+            channel: result.channel
+          }),
+          channel: result.channel,
+          buildId: result.buildId ?? null,
+          buildVersion: result.buildVersion ?? null
+        }
+      });
+
+      await loadMods();
+      setStatus(
+        `Atlas profile updated (${result.hydratedAssets} assets, ${result.bundledFiles} files).`
+      );
+    } catch (err) {
+      setStatus(`Atlas profile update failed: ${String(err)}`);
+    }
+  });
+}
+
 async function installSelectedVersion() {
-  await downloadMinecraftFiles();
+  const instance = activeInstance.value;
+  if (!instance) {
+    return;
+  }
+  if (instance.source === "atlas") {
+    await syncAtlasInstanceFiles(instance);
+  } else {
+    await downloadMinecraftFiles();
+  }
   await loadInstalledVersions();
   await refreshInstanceInstallStates();
 }
@@ -351,7 +418,7 @@ watch(
               :default-jvm-args="settingsDefaultJvmArgs"
               @back="backToLibrary"
               @launch="launchMinecraft"
-              @update-files="downloadMinecraftFiles"
+              @update-files="installSelectedVersion"
               @go-to-settings="startMicrosoftSignIn"
               @toggle-mod="toggleMod"
               @delete-mod="deleteMod"
