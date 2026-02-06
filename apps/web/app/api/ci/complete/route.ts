@@ -1,50 +1,31 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { builds, channels } from "@/lib/db/schema";
 import { decodeArtifactRef, isStorageProviderEnabled } from "@/lib/storage/harness";
-
-function getApiKey(request: Request) {
-  const header = request.headers.get("authorization");
-  if (header?.toLowerCase().startsWith("bearer ")) {
-    return header.slice(7).trim();
-  }
-  return request.headers.get("x-api-key")?.trim();
-}
+import { resolveCiAuthContext } from "@/lib/ci/auth";
 
 export async function POST(request: Request) {
-  const apiKey = getApiKey(request);
-
-  if (!apiKey) {
-    return NextResponse.json({ error: "Missing API key" }, { status: 401 });
-  }
-
-  const verification = await auth.api.verifyApiKey({
-    body: { key: apiKey },
-  });
-
-  if (!verification?.valid || !verification.key) {
-    return NextResponse.json({ error: "Invalid API key" }, { status: 403 });
-  }
-
   const body = await request.json().catch(() => ({}));
-  const packIdFromKey = verification.key.metadata?.packId?.toString();
-  const keyType = verification.key.metadata?.type?.toString();
-  const packId = body?.packId?.toString() ?? packIdFromKey;
+  let authContext;
+  try {
+    authContext = await resolveCiAuthContext(request, body?.packId?.toString() ?? null);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unauthorized" },
+      { status: 403 }
+    );
+  }
+  const packId = authContext.packId;
   const buildId = body?.buildId?.toString();
   const artifactKey = body?.artifactKey?.toString();
   const version = body?.version?.toString();
   const commitHash = body?.commitHash?.toString();
+  const commitMessage = normalizeOptionalString(body?.commitMessage);
+  const minecraftVersion = normalizeOptionalString(body?.minecraftVersion);
+  const modloader = normalizeOptionalString(body?.modloader);
+  const modloaderVersion = normalizeOptionalString(body?.modloaderVersion);
   const artifactSize = body?.artifactSize ? Number(body.artifactSize) : null;
   const channel = (body?.channel?.toString() ?? "dev") as "dev" | "beta" | "production";
-
-  if (keyType && keyType !== "deploy") {
-    return NextResponse.json({ error: "Invalid API key type" }, { status: 403 });
-  }
-
-  if (!packId || !packIdFromKey || packId !== packIdFromKey) {
-    return NextResponse.json({ error: "Pack mismatch" }, { status: 403 });
-  }
 
   if (!buildId || !artifactKey || !version) {
     return NextResponse.json(
@@ -70,6 +51,10 @@ export async function POST(request: Request) {
       packId,
       version,
       commitHash,
+      commitMessage,
+      minecraftVersion,
+      modloader,
+      modloaderVersion,
       artifactKey,
       artifactSize: artifactSize ?? undefined,
     })
@@ -78,6 +63,10 @@ export async function POST(request: Request) {
       set: {
         version,
         commitHash,
+        commitMessage,
+        minecraftVersion,
+        modloader,
+        modloaderVersion,
         artifactKey,
         artifactSize: artifactSize ?? undefined,
       },
@@ -99,4 +88,13 @@ export async function POST(request: Request) {
     .returning();
 
   return NextResponse.json({ build, channel: channelRow });
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (value == null) {
+    return null;
+  }
+
+  const normalized = value.toString().trim();
+  return normalized.length ? normalized : null;
 }

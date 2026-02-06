@@ -1,48 +1,25 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { auth } from "@/auth";
 import {
   createUploadUrlForProvider,
   encodeArtifactRef,
   getPreferredStorageProvider,
 } from "@/lib/storage/harness";
 import { createStorageToken } from "@/lib/storage/token";
-
-function getApiKey(request: Request) {
-  const header = request.headers.get("authorization");
-  if (header?.toLowerCase().startsWith("bearer ")) {
-    return header.slice(7).trim();
-  }
-  return request.headers.get("x-api-key")?.trim();
-}
+import { resolveCiAuthContext } from "@/lib/ci/auth";
 
 export async function POST(request: Request) {
-  const apiKey = getApiKey(request);
-
-  if (!apiKey) {
-    return NextResponse.json({ error: "Missing API key" }, { status: 401 });
-  }
-
-  const verification = await auth.api.verifyApiKey({
-    body: { key: apiKey },
-  });
-
-  if (!verification?.valid || !verification.key) {
-    return NextResponse.json({ error: "Invalid API key" }, { status: 403 });
-  }
-
   const body = await request.json().catch(() => ({}));
-  const packIdFromKey = verification.key.metadata?.packId?.toString();
-  const keyType = verification.key.metadata?.type?.toString();
-  const packId = body?.packId?.toString() ?? packIdFromKey;
-
-  if (keyType && keyType !== "deploy") {
-    return NextResponse.json({ error: "Invalid API key type" }, { status: 403 });
+  let authContext;
+  try {
+    authContext = await resolveCiAuthContext(request, body?.packId?.toString() ?? null);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unauthorized" },
+      { status: 403 }
+    );
   }
-
-  if (!packId || !packIdFromKey || packId !== packIdFromKey) {
-    return NextResponse.json({ error: "Pack mismatch" }, { status: 403 });
-  }
+  const packId = authContext.packId;
 
   try {
     const buildId = crypto.randomUUID();

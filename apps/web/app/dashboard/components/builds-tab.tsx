@@ -18,10 +18,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Build, Channel } from "@/app/dashboard/types";
+import { toGithubCommitUrl } from "@/lib/github";
 
 interface BuildsTabProps {
   channels: Channel[];
   builds: Build[];
+  repoUrl?: string | null;
   canPromoteBuilds: boolean;
   onPromote: (channel: Channel["name"], buildId: string) => void;
   loading: boolean;
@@ -33,6 +35,7 @@ const channelLabel = (name: Channel["name"]) => name[0].toUpperCase() + name.sli
 export default function BuildsTab({
   channels,
   builds,
+  repoUrl,
   canPromoteBuilds,
   onPromote,
   loading,
@@ -58,11 +61,47 @@ export default function BuildsTab({
             {builds.length ? (
               builds.map((build) => {
                 const liveChannels = channels.filter((channel) => channel.buildId === build.id);
+                const commitUrl = toGithubCommitUrl(repoUrl, build.commitHash);
+                const runtimeMetadata = formatRuntimeMetadata(build);
 
                 return (
                   <TableRow key={build.id}>
-                    <TableCell className="font-semibold">{build.version}</TableCell>
-                    <TableCell>{build.commitHash ?? "-"}</TableCell>
+                    <TableCell className="font-semibold">
+                      <div>{build.version}</div>
+                      {runtimeMetadata ? (
+                        <div className="mt-1 text-xs font-normal text-[var(--atlas-ink-muted)]">
+                          {runtimeMetadata}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      {build.commitHash ? (
+                        <div className="space-y-1">
+                          {commitUrl ? (
+                            <a
+                              href={commitUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-mono underline-offset-2 hover:underline"
+                              title={build.commitHash}
+                            >
+                              {shortHash(build.commitHash)}
+                            </a>
+                          ) : (
+                            <span className="font-mono" title={build.commitHash}>
+                              {shortHash(build.commitHash)}
+                            </span>
+                          )}
+                          {build.commitMessage ? (
+                            <p className="text-xs text-[var(--atlas-ink-muted)]">
+                              {build.commitMessage}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        "-"
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
                       {build.artifactKey}
                     </TableCell>
@@ -123,4 +162,32 @@ export default function BuildsTab({
       </CardContent>
     </Card>
   );
+}
+
+function shortHash(value: string) {
+  return value.length > 12 ? value.slice(0, 12) : value;
+}
+
+function formatRuntimeMetadata(build: Build): string | null {
+  const mc = build.minecraftVersion?.trim();
+  const loader = build.modloader?.trim();
+  const loaderVersion = build.modloaderVersion?.trim();
+
+  if (!mc && !loader) {
+    return null;
+  }
+
+  const loaderText = loader
+    ? loaderVersion
+      ? `${loader} ${loaderVersion}`
+      : loader
+    : null;
+
+  if (mc && loaderText) {
+    return `MC ${mc} · ${loaderText}`;
+  }
+  if (mc) {
+    return `MC ${mc}`;
+  }
+  return loaderText;
 }

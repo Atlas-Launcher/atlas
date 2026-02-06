@@ -15,6 +15,10 @@ export interface Build {
   id: string;
   version: string;
   commitHash?: string | null;
+  commitMessage?: string | null;
+  minecraftVersion?: string | null;
+  modloader?: string | null;
+  modloaderVersion?: string | null;
   artifactKey: string;
   artifactProvider?: "r2" | "vercel_blob" | null;
   createdAt?: string;
