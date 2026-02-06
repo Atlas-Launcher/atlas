@@ -3,7 +3,7 @@
   "ui": "tui",
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build:nomigrate"],
       "outputs": ["dist/**", ".next/**", "target/**", "src-tauri/target/**"]
     },
     "lint": {},

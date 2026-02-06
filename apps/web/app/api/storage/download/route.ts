@@ -28,10 +28,26 @@ export async function GET(request: Request) {
     );
   }
 
-  const result = await downloadViaStorageProvider({
-    provider: payload.provider,
-    key: payload.key,
-  });
+  let result: Awaited<ReturnType<typeof downloadViaStorageProvider>>;
+  try {
+    result = await downloadViaStorageProvider({
+      provider: payload.provider,
+      key: payload.key,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const normalized = message.toLowerCase();
+    if (normalized.includes("404") || normalized.includes("not_found") || normalized.includes("not found")) {
+      return NextResponse.json(
+        { error: "Requested artifact was not found in storage." },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json(
+      { error: "Unable to download artifact from storage." },
+      { status: 502 }
+    );
+  }
 
   if (result instanceof Response) {
     return new Response(result.body, {

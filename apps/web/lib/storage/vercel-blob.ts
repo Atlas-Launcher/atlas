@@ -82,3 +82,44 @@ export async function downloadFromVercelBlob(pathname: string) {
 
   return response;
 }
+
+export async function blobExistsInVercel(pathname: string) {
+  const { token } = getConfig();
+  const encodedPath = encodeBlobPath(pathname);
+  const response = await fetch(`${VERCEL_BLOB_API_BASE}/${encodedPath}`, {
+    method: "HEAD",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (response.status === 404) {
+    return false;
+  }
+
+  if (response.ok) {
+    return true;
+  }
+
+  // Some Blob endpoints may not allow HEAD; do a tiny ranged GET as fallback.
+  if (response.status === 405) {
+    const probe = await fetch(`${VERCEL_BLOB_API_BASE}/${encodedPath}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Range: "bytes=0-0",
+      },
+    });
+    if (probe.status === 404) {
+      return false;
+    }
+    if (probe.ok || probe.status === 206) {
+      return true;
+    }
+    const detail = await probe.text().catch(() => "unknown error");
+    throw new Error(`Vercel Blob existence check failed (${probe.status}): ${detail}`);
+  }
+
+  const detail = await response.text().catch(() => "unknown error");
+  throw new Error(`Vercel Blob existence check failed (${response.status}): ${detail}`);
+}
