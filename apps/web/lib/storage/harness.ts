@@ -6,6 +6,7 @@ import {
   uploadToR2,
 } from "@/lib/storage/r2";
 import {
+  createVercelBlobDownloadUrl,
   downloadFromVercelBlob,
   isVercelBlobConfigured,
   uploadToVercelBlob,
@@ -99,7 +100,7 @@ export async function createDownloadUrlForArtifactRef(ref: ArtifactRef) {
     return createR2DownloadUrl({ key: ref.key });
   }
 
-  throw new Error(`Provider '${ref.provider}' does not support direct presigned downloads.`);
+  return createVercelBlobDownloadUrl(ref.key);
 }
 
 export async function uploadViaStorageProvider({
