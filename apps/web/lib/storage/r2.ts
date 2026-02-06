@@ -21,6 +21,15 @@ function getConfig() {
   };
 }
 
+export function isR2Configured() {
+  return Boolean(
+    process.env.R2_ACCOUNT_ID &&
+      process.env.R2_ACCESS_KEY_ID &&
+      process.env.R2_SECRET_ACCESS_KEY &&
+      process.env.R2_BUCKET
+  );
+}
+
 function createClient() {
   const config = getConfig();
   return new S3Client({
@@ -69,4 +78,44 @@ export async function createPresignedDownloadUrl({
   });
 
   return getSignedUrl(client, command, { expiresIn });
+}
+
+export async function uploadToR2({
+  key,
+  body,
+  contentType,
+}: {
+  key: string;
+  body: ArrayBuffer;
+  contentType?: string;
+}) {
+  const config = getConfig();
+  const client = createClient();
+  const command = new PutObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+    Body: Buffer.from(body),
+    ContentType: contentType,
+  });
+  await client.send(command);
+}
+
+export async function downloadFromR2(key: string) {
+  const config = getConfig();
+  const client = createClient();
+  const command = new GetObjectCommand({
+    Bucket: config.bucket,
+    Key: key,
+  });
+  const output = await client.send(command);
+  if (!output.Body) {
+    throw new Error("R2 returned an empty response body.");
+  }
+
+  const stream = output.Body.transformToWebStream();
+  return {
+    stream,
+    contentType: output.ContentType ?? "application/octet-stream",
+    contentLength: output.ContentLength ?? undefined,
+  };
 }

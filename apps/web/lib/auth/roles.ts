@@ -22,9 +22,20 @@ export function requireRole(session: SessionLike, roles: Role[]) {
   }
 }
 
-export function allowedChannels(accessLevel: "dev" | "beta" | "production") {
-  if (accessLevel === "dev") {
+export function allowedChannels(
+  accessLevel: "dev" | "beta" | "production" | "all",
+  role?: Role | null
+) {
+  if (role && role !== "player") {
     return ["dev", "beta", "production"] as const;
+  }
+
+  if (accessLevel === "all") {
+    return ["dev", "beta", "production"] as const;
+  }
+
+  if (accessLevel === "dev") {
+    return ["dev", "production"] as const;
   }
 
   if (accessLevel === "beta") {

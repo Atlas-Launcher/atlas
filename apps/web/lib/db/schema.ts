@@ -13,7 +13,12 @@ import {
 
 export const roleEnum = pgEnum("role", ["admin", "creator", "player"]);
 export const channelEnum = pgEnum("release_channel", ["dev", "beta", "production"]);
-export const accessLevelEnum = pgEnum("access_level", ["dev", "beta", "production"]);
+export const accessLevelEnum = pgEnum("access_level", [
+  "dev",
+  "beta",
+  "production",
+  "all",
+]);
 
 export const users = pgTable("user", {
   id: text("id").primaryKey(),

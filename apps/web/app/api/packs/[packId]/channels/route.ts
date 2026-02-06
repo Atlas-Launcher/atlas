@@ -21,11 +21,15 @@ export async function GET(request: Request, { params }: RouteParams) {
   }
 
   const isAdmin = hasRole(session, ["admin"]);
-  let accessLevel: "dev" | "beta" | "production" = "production";
+  let accessLevel: "dev" | "beta" | "production" | "all" = "production";
+  let memberRole: "admin" | "creator" | "player" = "player";
 
   if (!isAdmin) {
     const [membership] = await db
-      .select({ accessLevel: packMembers.accessLevel })
+      .select({
+        accessLevel: packMembers.accessLevel,
+        role: packMembers.role,
+      })
       .from(packMembers)
       .where(
         and(
@@ -39,11 +43,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     accessLevel = membership.accessLevel;
+    memberRole = membership.role;
   }
 
   const allowed = isAdmin
     ? (["dev", "beta", "production"] as const)
-    : allowedChannels(accessLevel);
+    : allowedChannels(accessLevel, memberRole);
   const allowedList = [...allowed];
 
   const result = await db

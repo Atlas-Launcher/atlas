@@ -7,8 +7,12 @@ import type { Role } from "@/app/dashboard/types";
 
 interface DashboardHeaderProps {
   workspaceName: string;
-  email: string;
-  role: Role;
+  email?: string;
+  subtitle?: string;
+  role?: Role;
+  eyebrow?: string;
+  leading?: ReactNode;
+  meta?: ReactNode;
   actions?: ReactNode;
   tabs?: ReactNode;
 }
@@ -16,24 +20,36 @@ interface DashboardHeaderProps {
 export default function DashboardHeader({
   workspaceName,
   email,
+  subtitle,
   role,
+  eyebrow = "Dashboard",
+  leading,
+  meta,
   actions,
   tabs,
 }: DashboardHeaderProps) {
+  const detail = subtitle ?? email;
+
   return (
     <div className="pb-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
-            DASHBOARD
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold">{workspaceName}</h1>
-            <Badge variant="outline" className="text-[10px] uppercase tracking-[0.2em]">
-              {role}
-            </Badge>
+        <div className="flex min-w-0 items-start gap-3">
+          {leading ? <div className="shrink-0">{leading}</div> : null}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
+              {eyebrow}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold">{workspaceName}</h1>
+              {role ? (
+                <Badge variant="outline" className="text-[10px] uppercase tracking-[0.2em]">
+                  {role}
+                </Badge>
+              ) : null}
+            </div>
+            {detail ? <p className="text-xs text-[var(--atlas-ink-muted)]">{detail}</p> : null}
+            {meta ? <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div> : null}
           </div>
-          <p className="text-xs text-[var(--atlas-ink-muted)]">{email}</p>
         </div>
         <div className="flex items-center gap-2">{actions}</div>
       </div>

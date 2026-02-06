@@ -10,9 +10,11 @@ import {
   packs,
 } from "@/lib/db/schema";
 import { allowedChannels } from "@/lib/auth/roles";
+import { decodeArtifactRef, isStorageProviderEnabled } from "@/lib/storage/harness";
 
-type AccessLevel = "dev" | "beta" | "production";
+type AccessLevel = "dev" | "beta" | "production" | "all";
 type ChannelName = "dev" | "beta" | "production";
+type MemberRole = "admin" | "creator" | "player";
 
 interface LauncherRemotePack {
   packId: string;
@@ -23,6 +25,7 @@ interface LauncherRemotePack {
   buildId: string | null;
   buildVersion: string | null;
   artifactKey: string | null;
+  artifactProvider: "r2" | "vercel_blob" | null;
 }
 
 function parseBearerToken(request: Request): string | null {
@@ -38,7 +41,7 @@ function parseBearerToken(request: Request): string | null {
 }
 
 function preferredChannel(accessLevel: AccessLevel): ChannelName {
-  if (accessLevel === "dev") {
+  if (accessLevel === "dev" || accessLevel === "all") {
     return "dev";
   }
   if (accessLevel === "beta") {
@@ -49,10 +52,19 @@ function preferredChannel(accessLevel: AccessLevel): ChannelName {
 
 function selectChannel(
   accessLevel: AccessLevel,
-  channelRows: Map<ChannelName, { buildId: string | null; buildVersion: string | null; artifactKey: string | null }>
+  role: MemberRole,
+  channelRows: Map<
+    ChannelName,
+    {
+      buildId: string | null;
+      buildVersion: string | null;
+      artifactKey: string | null;
+      artifactProvider: "r2" | "vercel_blob" | null;
+    }
+  >
 ) {
   const preferred = preferredChannel(accessLevel);
-  const allowed = allowedChannels(accessLevel) as readonly ChannelName[];
+  const allowed = allowedChannels(accessLevel, role) as readonly ChannelName[];
 
   const preferredRow = channelRows.get(preferred);
   if (preferredRow) {
@@ -77,6 +89,7 @@ function selectChannel(
     buildId: null,
     buildVersion: null,
     artifactKey: null,
+    artifactProvider: null,
   };
 }
 
@@ -112,6 +125,7 @@ export async function GET(request: Request) {
       packId: packs.id,
       packName: packs.name,
       packSlug: packs.slug,
+      role: packMembers.role,
       accessLevel: packMembers.accessLevel,
     })
     .from(packMembers)
@@ -137,14 +151,28 @@ export async function GET(request: Request) {
 
   const channelMap = new Map<
     string,
-    Map<ChannelName, { buildId: string | null; buildVersion: string | null; artifactKey: string | null }>
+    Map<
+      ChannelName,
+      {
+        buildId: string | null;
+        buildVersion: string | null;
+        artifactKey: string | null;
+        artifactProvider: "r2" | "vercel_blob" | null;
+      }
+    >
   >();
   for (const row of channelRows) {
+    const artifactRef = row.artifactKey ? decodeArtifactRef(row.artifactKey) : null;
+    if (artifactRef && !isStorageProviderEnabled(artifactRef.provider)) {
+      continue;
+    }
+
     const map = channelMap.get(row.packId) ?? new Map();
     map.set(row.name, {
       buildId: row.buildId ?? null,
       buildVersion: row.buildVersion ?? null,
-      artifactKey: row.artifactKey ?? null,
+      artifactKey: artifactRef?.key ?? null,
+      artifactProvider: artifactRef?.provider ?? null,
     });
     channelMap.set(row.packId, map);
   }
@@ -152,7 +180,7 @@ export async function GET(request: Request) {
   const remotePacks: LauncherRemotePack[] = memberships
     .map((membership) => {
       const channelsForPack = channelMap.get(membership.packId) ?? new Map();
-      const selected = selectChannel(membership.accessLevel, channelsForPack);
+      const selected = selectChannel(membership.accessLevel, membership.role, channelsForPack);
       return {
         packId: membership.packId,
         packName: membership.packName,
@@ -162,6 +190,7 @@ export async function GET(request: Request) {
         buildId: selected.buildId,
         buildVersion: selected.buildVersion,
         artifactKey: selected.artifactKey,
+        artifactProvider: selected.artifactProvider,
       };
     })
     .sort((a, b) => a.packName.localeCompare(b.packName));

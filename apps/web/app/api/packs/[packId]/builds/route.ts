@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { builds, packMembers } from "@/lib/db/schema";
 import { hasRole } from "@/lib/auth/roles";
+import { decodeArtifactRef, isStorageProviderEnabled } from "@/lib/storage/harness";
 
 interface RouteParams {
   params: Promise<{
@@ -38,11 +39,25 @@ export async function GET(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const result = await db
+  const rows = await db
     .select()
     .from(builds)
     .where(eq(builds.packId, packId))
     .orderBy(desc(builds.createdAt));
+
+  const result = rows
+    .map((build) => {
+      const artifactRef = decodeArtifactRef(build.artifactKey);
+      if (!isStorageProviderEnabled(artifactRef.provider)) {
+        return null;
+      }
+      return {
+        ...build,
+        artifactKey: artifactRef.key,
+        artifactProvider: artifactRef.provider,
+      };
+    })
+    .filter((build): build is NonNullable<typeof build> => Boolean(build));
 
   return NextResponse.json({ builds: result });
 }
