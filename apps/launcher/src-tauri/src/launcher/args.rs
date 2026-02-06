@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use super::manifest::{ArgValue, Argument, Rule, VersionData};
 
@@ -32,6 +33,18 @@ pub fn split_jvm_args(raw: &str) -> Vec<String> {
         .collect()
 }
 
+pub fn unresolved_tokens(args: &[String]) -> Vec<String> {
+    let mut out = HashSet::new();
+    for arg in args {
+        for token in extract_tokens(arg) {
+            out.insert(token);
+        }
+    }
+    let mut values = out.into_iter().collect::<Vec<_>>();
+    values.sort();
+    values
+}
+
 fn expand_args(args: &[Argument], replacements: &HashMap<&str, String>) -> Vec<String> {
     let mut expanded = Vec::new();
     for arg in args {
@@ -57,11 +70,48 @@ fn expand_args(args: &[Argument], replacements: &HashMap<&str, String>) -> Vec<S
 }
 
 fn replace_tokens(input: &str, replacements: &HashMap<&str, String>) -> String {
-    let mut output = input.to_string();
-    for (key, value) in replacements {
-        output = output.replace(&format!("${{{}}}", key), value);
+    let mut cursor = 0usize;
+    let mut output = String::new();
+    while let Some(start_rel) = input[cursor..].find("${") {
+        let start = cursor + start_rel;
+        output.push_str(&input[cursor..start]);
+
+        let token_start = start + 2;
+        let Some(end_rel) = input[token_start..].find('}') else {
+            output.push_str(&input[start..]);
+            cursor = input.len();
+            break;
+        };
+        let end = token_start + end_rel;
+        let key = &input[token_start..end];
+        if let Some(value) = replacements.get(key) {
+            output.push_str(value);
+        } else {
+            output.push_str(&input[start..=end]);
+        }
+        cursor = end + 1;
+    }
+    if cursor < input.len() {
+        output.push_str(&input[cursor..]);
     }
     output
+}
+
+fn extract_tokens(input: &str) -> Vec<String> {
+    let mut cursor = 0usize;
+    let mut tokens = Vec::new();
+    while let Some(start_rel) = input[cursor..].find("${") {
+        let start = cursor + start_rel + 2;
+        let Some(end_rel) = input[start..].find('}') else {
+            break;
+        };
+        let end = start + end_rel;
+        if end > start {
+            tokens.push(input[start..end].to_string());
+        }
+        cursor = end + 1;
+    }
+    tokens
 }
 
 pub fn rules_allow(rules: &Option<Vec<Rule>>) -> bool {

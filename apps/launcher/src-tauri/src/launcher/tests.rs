@@ -72,6 +72,20 @@ fn filters_feature_gated_args() {
 }
 
 #[test]
+fn unresolved_tokens_are_reported() {
+    let args = vec![
+        "-Dfoo=${known}".to_string(),
+        "--bar".to_string(),
+        "${missing_token}".to_string(),
+    ];
+    let unresolved = crate::launcher::args::unresolved_tokens(&args);
+    assert_eq!(
+        unresolved,
+        vec!["known".to_string(), "missing_token".to_string()]
+    );
+}
+
+#[test]
 fn library_path_from_maven_coords() {
     let path = libraries::library_path_from_name("com.example:demo:1.2.3");
     assert_eq!(path, "com/example/demo/1.2.3/demo-1.2.3.jar");
