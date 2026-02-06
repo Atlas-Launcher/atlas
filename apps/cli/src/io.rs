@@ -57,7 +57,18 @@ pub fn insert_config_dir(files: &mut BTreeMap<String, Vec<u8>>, root: &Path) -> 
 pub fn write_mod_entry(root: &Path, entry: &crate::mods::ModEntry) -> Result<()> {
     let mods_dir = root.join("mods");
     fs::create_dir_all(&mods_dir).context("Failed to create mods directory")?;
-    let file_name = format!("{}.mod.toml", entry.project_id);
+    let slug = slugify_mod_name(
+        entry
+            .metadata
+            .as_ref()
+            .map(|metadata| metadata.name.as_str())
+            .unwrap_or(""),
+    );
+    let file_name = if slug.is_empty() {
+        format!("{}.mod.toml", entry.project_id)
+    } else {
+        format!("{}-{}.mod.toml", slug, entry.project_id)
+    };
     let file_path = mods_dir.join(file_name);
     let content = entry
         .to_toml_string()
@@ -65,4 +76,25 @@ pub fn write_mod_entry(root: &Path, entry: &crate::mods::ModEntry) -> Result<()>
     fs::write(&file_path, content)
         .with_context(|| format!("Failed to write {}", file_path.display()))?;
     Ok(())
+}
+
+fn slugify_mod_name(value: &str) -> String {
+    let mut slug = String::new();
+    let mut last_dash = false;
+
+    for ch in value.chars() {
+        let normalized = ch.to_ascii_lowercase();
+        if normalized.is_ascii_alphanumeric() {
+            slug.push(normalized);
+            last_dash = false;
+            continue;
+        }
+
+        if !last_dash {
+            slug.push('-');
+            last_dash = true;
+        }
+    }
+
+    slug.trim_matches('-').to_string()
 }

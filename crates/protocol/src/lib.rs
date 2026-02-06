@@ -6,7 +6,7 @@ mod platform;
 mod types;
 mod wire;
 
-pub use crate::codec::{decode_blob, encode_blob, encode_blob_default, DEFAULT_ZSTD_LEVEL};
+pub use crate::codec::{DEFAULT_ZSTD_LEVEL, decode_blob, encode_blob, encode_blob_default};
 pub use crate::config::*;
 pub use crate::error::ProtocolError;
 pub use crate::pack::*;

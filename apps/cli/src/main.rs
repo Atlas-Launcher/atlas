@@ -5,6 +5,7 @@ mod commands;
 mod config;
 mod io;
 mod mods;
+mod version_catalog;
 
 use commands::{deploy, init, pack};
 

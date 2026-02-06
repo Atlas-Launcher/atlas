@@ -35,11 +35,7 @@ impl TryFrom<PackMetadata> for crate::types::PackMetadata {
 impl From<&crate::types::Manifest> for Manifest {
     fn from(value: &crate::types::Manifest) -> Self {
         Self {
-            dependencies: value
-                .dependencies
-                .iter()
-                .map(Dependency::from)
-                .collect(),
+            dependencies: value.dependencies.iter().map(Dependency::from).collect(),
         }
     }
 }
@@ -113,8 +109,16 @@ impl TryFrom<Hash> for crate::types::Hash {
 impl From<&crate::platform::PlatformFilter> for PlatformFilter {
     fn from(value: &crate::platform::PlatformFilter) -> Self {
         Self {
-            include: value.include.iter().map(|platform| *platform as i32).collect(),
-            exclude: value.exclude.iter().map(|platform| *platform as i32).collect(),
+            include: value
+                .include
+                .iter()
+                .map(|platform| *platform as i32)
+                .collect(),
+            exclude: value
+                .exclude
+                .iter()
+                .map(|platform| *platform as i32)
+                .collect(),
         }
     }
 }

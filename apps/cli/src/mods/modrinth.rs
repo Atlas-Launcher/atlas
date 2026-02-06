@@ -3,7 +3,7 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 use url::form_urlencoded::Serializer;
 
-use super::{ModEntry, ModHashes};
+use super::{ModEntry, ModHashes, ModMetadata};
 
 #[derive(Deserialize)]
 struct SearchResponse {
@@ -13,6 +13,7 @@ struct SearchResponse {
 #[derive(Deserialize)]
 struct SearchHit {
     project_id: String,
+    title: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -89,6 +90,9 @@ pub fn resolve(
     }
 
     Ok(ModEntry {
+        metadata: Some(ModMetadata {
+            name: hit.title.clone().unwrap_or_else(|| query.to_string()),
+        }),
         source: "modrinth".to_string(),
         project_id: hit.project_id.clone(),
         version: version.version_number.clone(),
