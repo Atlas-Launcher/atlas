@@ -7,7 +7,7 @@ mod config;
 mod io;
 mod version_catalog;
 
-use commands::{auth, deploy, init, pack};
+use commands::{auth, ci, deploy, init, pack, pull};
 
 #[derive(Parser)]
 #[command(name = "atlas", version, about = "Atlas pack tooling")]
@@ -28,6 +28,11 @@ enum Commands {
         #[command(subcommand)]
         command: auth::AuthCommand,
     },
+    Ci {
+        #[command(subcommand)]
+        command: ci::CiCommand,
+    },
+    Pull(pull::PullArgs),
     Deploy(deploy::DeployArgs),
 }
 
@@ -39,6 +44,8 @@ fn main() -> Result<()> {
         Commands::Reinit(args) => init::run_reinit(args),
         Commands::Pack { command } => pack::run(command),
         Commands::Auth { command } => auth::run(command),
+        Commands::Ci { command } => ci::run(command),
+        Commands::Pull(args) => pull::run(args),
         Commands::Deploy(args) => deploy::run(args),
     }
 }

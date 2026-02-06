@@ -1,3 +1,5 @@
+use std::io::{self, IsTerminal, Write};
+use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -14,7 +16,9 @@ use crate::auth_store::{self, CliAuthSession};
 
 #[derive(Subcommand)]
 pub enum AuthCommand {
+    #[command(alias = "login")]
     Signin(SignInArgs),
+    #[command(alias = "logout")]
     Signout,
     Status,
 }
@@ -41,14 +45,14 @@ fn signin(args: SignInArgs) -> Result<()> {
     let client = Client::new();
 
     let code = request_device_code(&client, &hub_url, &client_id)?;
-    println!("Atlas Hub device sign-in");
-    println!("Hub: {}", hub_url);
-    println!("Client ID: {}", client_id);
-    if let Some(url) = code.verification_uri_complete.as_ref() {
-        println!("Open: {}", url);
-    } else {
-        println!("Open: {}", code.verification_uri);
-        println!("Enter code: {}", code.user_code);
+    let verification_url = code
+        .verification_uri_complete
+        .clone()
+        .unwrap_or_else(|| code.verification_uri.clone());
+
+    prompt_open_browser(&verification_url)?;
+    if code.verification_uri_complete.is_none() {
+        println!("If prompted, paste the one-time code in the browser.");
     }
     if let Some(message) = code
         .message
@@ -57,6 +61,7 @@ fn signin(args: SignInArgs) -> Result<()> {
     {
         println!("{}", message.trim());
     }
+    println!("Waiting for authorization...");
 
     let started = Instant::now();
     let timeout = Duration::from_secs(code.expires_in.max(1));
@@ -81,7 +86,7 @@ fn signin(args: SignInArgs) -> Result<()> {
                     created_at: now,
                 };
                 auth_store::save_cli_auth_session(&session)?;
-                println!("Signed in successfully.");
+                println!("Signed in to {}.", hub_url);
                 return Ok(());
             }
             DeviceTokenPollStatus::AuthorizationPending => sleep(interval),
@@ -89,7 +94,9 @@ fn signin(args: SignInArgs) -> Result<()> {
                 interval += Duration::from_secs(5);
                 sleep(interval);
             }
-            DeviceTokenPollStatus::AccessDenied => bail!("Authorization denied."),
+            DeviceTokenPollStatus::AccessDenied => {
+                bail!("Authorization was denied in the browser.")
+            }
             DeviceTokenPollStatus::ExpiredToken => {
                 bail!("Device code expired. Run `atlas auth signin` again.")
             }
@@ -158,4 +165,54 @@ fn request_device_token(
     let body = response.text().unwrap_or_default();
     parse_device_token_poll_body::<StandardDeviceTokenResponse>(status, &body)
         .context("Failed to parse device token response")
+}
+
+fn prompt_open_browser(url: &str) -> Result<()> {
+    if io::stdin().is_terminal() && io::stdout().is_terminal() {
+        print!("Press Enter to open {url} in your browser...");
+        io::stdout().flush().context("Failed to flush stdout")?;
+        let mut line = String::new();
+        io::stdin()
+            .read_line(&mut line)
+            .context("Failed to read confirmation input")?;
+        println!();
+    } else {
+        println!("Open this URL in your browser: {url}");
+        return Ok(());
+    }
+
+    if !open_browser(url) {
+        println!("Could not open a browser automatically.");
+        println!("Open this URL manually: {url}");
+    }
+
+    Ok(())
+}
+
+fn open_browser(url: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return command_succeeds("open", &[url]);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return command_succeeds("xdg-open", &[url]);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return command_succeeds("cmd", &["/C", "start", "", url]);
+    }
+
+    #[allow(unreachable_code)]
+    false
+}
+
+fn command_succeeds(program: &str, args: &[&str]) -> bool {
+    Command::new(program)
+        .args(args)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
