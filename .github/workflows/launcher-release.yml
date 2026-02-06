@@ -15,7 +15,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-22.04, macos-latest, windows-latest]
+        include:
+          - platform: ubuntu-22.04
+            tauri_args: --ci --no-sign
+          - platform: windows-latest
+            tauri_args: --ci --no-sign
+          - platform: macos-latest
+            tauri_args: --ci --no-sign
 
     steps:
       - name: Checkout
@@ -77,4 +83,4 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: false
-          args: --ci
+          args: ${{ matrix.tauri_args }}
