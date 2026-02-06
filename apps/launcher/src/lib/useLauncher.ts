@@ -11,13 +11,27 @@ interface LauncherDeps {
   setStatus: (message: string) => void;
   setProgress: (value: number) => void;
   run: <T>(task: () => Promise<T>) => Promise<T | undefined>;
+  resolveGameDir: (instance: InstanceConfig | null) => string;
 }
 
-export function useLauncher({ profile, instance, settings, setStatus, setProgress, run }: LauncherDeps) {
+export function useLauncher({
+  profile,
+  instance,
+  settings,
+  setStatus,
+  setProgress,
+  run,
+  resolveGameDir
+}: LauncherDeps) {
   function buildOptions(): LaunchOptions | null {
     const active = instance.value;
     if (!active) {
       setStatus("Select an instance before launching.");
+      return null;
+    }
+    const gameDir = resolveGameDir(active);
+    if (!gameDir) {
+      setStatus("Select an instance with a valid data directory.");
       return null;
     }
     const loader = active.loader ?? { kind: "vanilla", loaderVersion: null };
@@ -37,7 +51,7 @@ export function useLauncher({ profile, instance, settings, setStatus, setProgres
     const jvmArgs = (active.jvmArgs ?? "").trim() || (settings.value.defaultJvmArgs ?? "");
 
     return {
-      gameDir: active.gameDir ?? "",
+      gameDir,
       javaPath: active.javaPath ?? "",
       memoryMb,
       jvmArgs,

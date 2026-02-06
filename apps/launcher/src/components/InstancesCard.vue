@@ -15,8 +15,9 @@ import {
   SelectTrigger,
   SelectValue
 } from "./ui/select";
-import { Box } from "lucide-vue-next";
+import { Box, Download, Play } from "lucide-vue-next";
 import type { InstanceConfig } from "@/types/settings";
+import { formatLoaderKind } from "@/lib/utils";
 
 const props = defineProps<{
   instances: InstanceConfig[];
@@ -27,6 +28,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: "select", id: string): void;
+  (event: "play", id: string): void;
+  (event: "install", id: string): void;
   (event: "create"): void;
   (event: "refresh-packs"): void;
 }>();
@@ -95,13 +98,7 @@ function displayLoader(instance: InstanceConfig) {
   if (props.instanceInstallStateById[instance.id] === false) {
     return "Not installed";
   }
-  if (kind === "neoforge") {
-    return "NeoForge";
-  }
-  if (kind === "fabric") {
-    return "Fabric";
-  }
-  return "Vanilla";
+  return formatLoaderKind(kind);
 }
 
 function displayVersion(instance: InstanceConfig) {
@@ -109,6 +106,30 @@ function displayVersion(instance: InstanceConfig) {
     return null
   }
   return instance.version?.trim() ? instance.version : "Latest release";
+}
+
+function onCardKeydown(event: KeyboardEvent, id: string) {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  event.preventDefault();
+  emit("select", id);
+}
+
+function needsRemoteInstall(instance: InstanceConfig) {
+  return instance.source === "atlas" && props.instanceInstallStateById[instance.id] === false;
+}
+
+function quickActionLabel(instance: InstanceConfig) {
+  return needsRemoteInstall(instance) ? `Install ${instance.name}` : `Play ${instance.name}`;
+}
+
+function onQuickAction(instance: InstanceConfig) {
+  if (needsRemoteInstall(instance)) {
+    emit("install", instance.id);
+    return;
+  }
+  emit("play", instance.id);
 }
 </script>
 
@@ -180,21 +201,33 @@ function displayVersion(instance: InstanceConfig) {
           {{ grouping.label }}
         </div>
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <button
+          <div
             v-for="instance in grouping.items"
             :key="instance.id"
-            class="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-left transition hover:shadow-sm"
+            class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-left transition hover:shadow-sm"
             :class="
               instance.id === props.activeInstanceId
                 ? 'border-foreground/70 bg-foreground/5'
                 : ''
             "
+            role="button"
+            tabindex="0"
             @click="emit('select', instance.id)"
+            @keydown="(event) => onCardKeydown(event, instance.id)"
           >
             <div
-              class="flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-muted"
+              class="relative flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-muted"
             >
-              <Box class="h-6 w-6 text-muted-foreground" />
+              <Box class="h-6 w-6 text-muted-foreground transition-opacity group-hover:opacity-0 group-focus-within:opacity-0" />
+              <button
+                type="button"
+                class="absolute inset-1 inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground opacity-0 transition-opacity hover:bg-primary/90 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+                :aria-label="quickActionLabel(instance)"
+                @click.stop="onQuickAction(instance)"
+              >
+                <Download v-if="needsRemoteInstall(instance)" class="h-4 w-4" />
+                <Play v-else class="h-4 w-4" />
+              </button>
             </div>
             <div class="flex-1">
               <div class="font-semibold text-foreground">{{ instance.name }}</div>
@@ -202,7 +235,7 @@ function displayVersion(instance: InstanceConfig) {
                 {{ displaySource(instance) }} · {{ displayLoader(instance) }} {{(displayVersion(instance)) ? ` · ${displayVersion(instance)}` : `` }}
               </div>
             </div>
-          </button>
+          </div>
         </div>
       </div>
     </CardContent>

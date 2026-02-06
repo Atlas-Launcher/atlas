@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, InstanceConfig, ModLoaderConfig } from "@/types/settings";
+import type { AppSettings, AtlasPackChannel, InstanceConfig, ModLoaderConfig } from "@/types/settings";
 import type { AtlasRemotePack } from "@/types/library";
 
 interface SettingsDeps {
@@ -82,6 +82,27 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     };
   }
 
+  function normalizeAtlasChannel(value: string | null | undefined): AtlasPackChannel {
+    if (value === "dev" || value === "beta" || value === "production") {
+      return value;
+    }
+    return "production";
+  }
+
+  function normalizeRemoteLoaderKind(value: string | null | undefined): ModLoaderConfig["kind"] | null {
+    const normalized = (value ?? "").trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+    if (normalized === "fabric") {
+      return "fabric";
+    }
+    if (normalized === "neoforge" || normalized === "neo") {
+      return "neoforge";
+    }
+    return "vanilla";
+  }
+
   function createInstanceConfig(id: string, name: string, baseDir: string): InstanceConfig {
     return {
       id,
@@ -104,7 +125,7 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
         ? {
             packId: instance.atlasPack.packId,
             packSlug: instance.atlasPack.packSlug,
-            channel: instance.atlasPack.channel,
+            channel: normalizeAtlasChannel(instance.atlasPack.channel),
             buildId: instance.atlasPack.buildId ?? null,
             buildVersion: instance.atlasPack.buildVersion ?? null,
             artifactKey: instance.atlasPack.artifactKey ?? null
@@ -288,6 +309,20 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
   ): InstanceConfig {
     const id = normalizeRemoteId(remote.packId);
     const fallback = createInstanceConfig(id, remote.packName, baseDir);
+    const selectedChannel = normalizeAtlasChannel(existing?.atlasPack?.channel ?? "production");
+    const remoteChannel = normalizeAtlasChannel(remote.channel);
+    const canApplyRemoteRuntime = selectedChannel === remoteChannel;
+    const remoteLoaderKind = canApplyRemoteRuntime
+      ? normalizeRemoteLoaderKind(remote.modloader)
+      : null;
+    const nextLoaderKind = remoteLoaderKind ?? existing?.loader?.kind ?? "vanilla";
+    const nextLoaderVersion = canApplyRemoteRuntime
+      ? remote.modloaderVersion ??
+        (nextLoaderKind === "vanilla" ? null : existing?.loader?.loaderVersion ?? null)
+      : existing?.loader?.loaderVersion ?? null;
+    const nextMinecraftVersion = canApplyRemoteRuntime
+      ? remote.minecraftVersion ?? existing?.version ?? null
+      : existing?.version ?? null;
     return {
       id,
       name: remote.packName,
@@ -295,10 +330,10 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
         existing?.gameDir?.trim() ||
         fallback.gameDir ||
         normalizeRemoteGameDir(baseDir, remote.packSlug, remote.packId),
-      version: existing?.version ?? null,
+      version: nextMinecraftVersion,
       loader: {
-        ...defaultLoader(),
-        ...(existing?.loader ?? {})
+        kind: nextLoaderKind,
+        loaderVersion: nextLoaderVersion
       },
       javaPath: existing?.javaPath ?? "",
       memoryMb: typeof existing?.memoryMb === "number" ? existing.memoryMb : null,
@@ -307,7 +342,7 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
       atlasPack: {
         packId: remote.packId,
         packSlug: remote.packSlug,
-        channel: remote.channel,
+        channel: selectedChannel,
         buildId: remote.buildId ?? null,
         buildVersion: remote.buildVersion ?? null,
         artifactKey: remote.artifactKey ?? null

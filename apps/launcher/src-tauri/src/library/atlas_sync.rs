@@ -10,6 +10,7 @@ use sha1::{Digest as Sha1Digest, Sha1};
 use sha2::Sha512;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Window};
 use url::Url;
 
@@ -60,6 +61,12 @@ struct ArtifactResponse {
     modloader_version: Option<String>,
 }
 
+impl ArtifactResponse {
+    fn has_missing_runtime_metadata(&self) -> bool {
+        is_blank_option(self.minecraft_version.as_deref()) || is_blank_option(self.modloader.as_deref())
+    }
+}
+
 pub async fn sync_atlas_pack(
     window: &Window,
     atlas_hub_url: &str,
@@ -91,14 +98,18 @@ pub async fn sync_atlas_pack(
     emit_sync(window, "Applying bundled files", None, None)?;
     let blob = protocol::decode_blob(&blob_bytes)
         .map_err(|err| format!("Failed to decode pack blob: {err}"))?;
+    let blob_minecraft_version = blob.metadata.minecraft_version.clone();
+    let blob_modloader = loader_kind_to_modloader(blob.metadata.loader).to_string();
 
     let mut pointer_files = Vec::new();
     let total_files = blob.files.len() as u64;
     let mut processed_files = 0u64;
     for (relative_path, bytes) in blob.files {
-        write_blob_file(&game_dir, &relative_path, &bytes)?;
         if let Some(pointer) = parse_pointer_file(&relative_path, &bytes)? {
             pointer_files.push(pointer);
+            remove_blob_file_if_exists(&game_dir, &relative_path)?;
+        } else {
+            write_blob_file(&game_dir, &relative_path, &bytes)?;
         }
         processed_files += 1;
         if processed_files % 100 == 0 || processed_files == total_files {
@@ -186,14 +197,31 @@ pub async fn sync_atlas_pack(
         "sync complete pack_id={} files={} assets={}",
         artifact.pack_id, processed_files, hydrated_assets
     ));
+    if let Err(err) = write_last_updated_file(
+        &game_dir,
+        &artifact.pack_id,
+        &artifact.channel,
+        artifact.build_id.as_deref(),
+        artifact.build_version.as_deref(),
+        artifact.minecraft_version.as_deref(),
+        artifact.modloader.as_deref(),
+        artifact.modloader_version.as_deref(),
+        processed_files,
+        hydrated_assets,
+    ) {
+        telemetry::warn(format!(
+            "failed to write last_updated.toml pack_id={} channel={}: {}",
+            artifact.pack_id, artifact.channel, err
+        ));
+    }
 
     Ok(AtlasPackSyncResult {
         pack_id: artifact.pack_id,
         channel: artifact.channel,
         build_id: artifact.build_id,
         build_version: artifact.build_version,
-        minecraft_version: artifact.minecraft_version,
-        modloader: artifact.modloader,
+        minecraft_version: first_non_blank(artifact.minecraft_version, Some(blob_minecraft_version)),
+        modloader: first_non_blank(artifact.modloader, Some(blob_modloader)),
         modloader_version: artifact.modloader_version,
         bundled_files: processed_files,
         hydrated_assets,
@@ -201,6 +229,27 @@ pub async fn sync_atlas_pack(
 }
 
 async fn fetch_artifact_download(
+    atlas_hub_url: &str,
+    access_token: &str,
+    pack_id: &str,
+    channel: Option<&str>,
+) -> Result<ArtifactResponse, LibraryError> {
+    let mut artifact = request_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
+    if artifact.has_missing_runtime_metadata() {
+        telemetry::warn(format!(
+            "artifact metadata missing runtime fields; retrying pack_id={} channel={}",
+            pack_id,
+            channel.unwrap_or("production")
+        ));
+        let retry = request_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
+        artifact.minecraft_version = first_non_blank(artifact.minecraft_version, retry.minecraft_version);
+        artifact.modloader = first_non_blank(artifact.modloader, retry.modloader);
+        artifact.modloader_version = first_non_blank(artifact.modloader_version, retry.modloader_version);
+    }
+    Ok(artifact)
+}
+
+async fn request_artifact_download(
     atlas_hub_url: &str,
     access_token: &str,
     pack_id: &str,
@@ -267,6 +316,22 @@ fn write_blob_file(game_dir: &Path, relative_path: &str, bytes: &[u8]) -> Result
     fs::write(&target_path, bytes).map_err(|err| {
         format!(
             "Failed to write bundled file {}: {err}",
+            target_path.display()
+        )
+    })?;
+    Ok(())
+}
+
+fn remove_blob_file_if_exists(game_dir: &Path, relative_path: &str) -> Result<(), LibraryError> {
+    let safe_relative = sanitize_relative_path(relative_path)?;
+    let target_path = game_dir.join(safe_relative);
+    if !target_path.exists() {
+        return Ok(());
+    }
+
+    fs::remove_file(&target_path).map_err(|err| {
+        format!(
+            "Failed to remove pointer file {}: {err}",
             target_path.display()
         )
     })?;
@@ -468,4 +533,98 @@ fn emit_sync(
             },
         )
         .map_err(|err| format!("Emit failed: {err}").into())
+}
+
+fn write_last_updated_file(
+    game_dir: &Path,
+    pack_id: &str,
+    channel: &str,
+    build_id: Option<&str>,
+    build_version: Option<&str>,
+    minecraft_version: Option<&str>,
+    modloader: Option<&str>,
+    modloader_version: Option<&str>,
+    bundled_files: u64,
+    hydrated_assets: u64,
+) -> Result<(), LibraryError> {
+    ensure_dir(game_dir)?;
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| format!("Failed to read system clock: {err}"))?
+        .as_secs();
+
+    let payload = format!(
+        concat!(
+            "updated_at_unix = {updated_at}\n",
+            "pack_id = \"{pack_id}\"\n",
+            "channel = \"{channel}\"\n",
+            "build_id = {build_id}\n",
+            "build_version = {build_version}\n",
+            "minecraft_version = {minecraft_version}\n",
+            "modloader = {modloader}\n",
+            "modloader_version = {modloader_version}\n",
+            "bundled_files = {bundled_files}\n",
+            "hydrated_assets = {hydrated_assets}\n"
+        ),
+        updated_at = timestamp,
+        pack_id = toml_escape_string(pack_id),
+        channel = toml_escape_string(channel),
+        build_id = toml_optional_string(build_id),
+        build_version = toml_optional_string(build_version),
+        minecraft_version = toml_optional_string(minecraft_version),
+        modloader = toml_optional_string(modloader),
+        modloader_version = toml_optional_string(modloader_version),
+        bundled_files = bundled_files,
+        hydrated_assets = hydrated_assets
+    );
+
+    let metadata_path = game_dir.join("last_updated.toml");
+    fs::write(&metadata_path, payload).map_err(|err| {
+        format!(
+            "Failed to write {}: {err}",
+            metadata_path.display()
+        )
+        .into()
+    })
+}
+
+fn toml_optional_string(value: Option<&str>) -> String {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(v) => format!("\"{}\"", toml_escape_string(v)),
+        None => "null".to_string(),
+    }
+}
+
+fn toml_escape_string(value: &str) -> String {
+    value
+        .chars()
+        .flat_map(|ch| match ch {
+            '\\' => ['\\', '\\'].into_iter().collect::<Vec<char>>(),
+            '"' => ['\\', '"'].into_iter().collect::<Vec<char>>(),
+            '\n' => ['\\', 'n'].into_iter().collect::<Vec<char>>(),
+            '\r' => ['\\', 'r'].into_iter().collect::<Vec<char>>(),
+            '\t' => ['\\', 't'].into_iter().collect::<Vec<char>>(),
+            _ => [ch].into_iter().collect::<Vec<char>>(),
+        })
+        .collect()
+}
+
+fn is_blank_option(value: Option<&str>) -> bool {
+    value.is_none_or(|v| v.trim().is_empty())
+}
+
+fn first_non_blank(first: Option<String>, second: Option<String>) -> Option<String> {
+    match first {
+        Some(value) if !value.trim().is_empty() => Some(value),
+        _ => second.filter(|value| !value.trim().is_empty()),
+    }
+}
+
+fn loader_kind_to_modloader(loader: protocol::Loader) -> &'static str {
+    match loader {
+        protocol::Loader::Fabric => "fabric",
+        protocol::Loader::Forge => "forge",
+        protocol::Loader::Neo => "neoforge",
+    }
 }

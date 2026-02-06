@@ -15,9 +15,10 @@ interface LibraryDeps {
   setStatus: (message: string) => void;
   pushLog: (entry: string) => void;
   run: <T>(task: () => Promise<T>) => Promise<T | undefined>;
+  resolveGameDir: (instance: InstanceConfig | null) => string;
 }
 
-export function useLibrary({ activeInstance, setStatus, pushLog, run }: LibraryDeps) {
+export function useLibrary({ activeInstance, setStatus, pushLog, run, resolveGameDir }: LibraryDeps) {
   const availableVersions = ref<VersionSummary[]>([]);
   const latestRelease = ref("");
   const installedVersions = ref<string[]>([]);
@@ -41,9 +42,14 @@ export function useLibrary({ activeInstance, setStatus, pushLog, run }: LibraryD
       installedVersions.value = [];
       return;
     }
+    const gameDir = resolveGameDir(instance);
+    if (!gameDir) {
+      installedVersions.value = [];
+      return;
+    }
     try {
       installedVersions.value = await invoke<string[]>("list_installed_versions", {
-        gameDir: instance.gameDir ?? ""
+        gameDir
       });
     } catch (err) {
       pushLog(`Failed to list installed versions: ${String(err)}`);
@@ -94,9 +100,14 @@ export function useLibrary({ activeInstance, setStatus, pushLog, run }: LibraryD
       mods.value = [];
       return;
     }
+    const gameDir = resolveGameDir(instance);
+    if (!gameDir) {
+      mods.value = [];
+      return;
+    }
     try {
       mods.value = await invoke<ModEntry[]>("list_mods", {
-        gameDir: instance.gameDir ?? ""
+        gameDir
       });
     } catch (err) {
       pushLog(`Failed to list mods: ${String(err)}`);
@@ -108,10 +119,14 @@ export function useLibrary({ activeInstance, setStatus, pushLog, run }: LibraryD
     if (!instance) {
       return;
     }
+    const gameDir = resolveGameDir(instance);
+    if (!gameDir) {
+      return;
+    }
     await run(async () => {
       try {
         await invoke("set_mod_enabled", {
-          gameDir: instance.gameDir ?? "",
+          gameDir,
           fileName,
           enabled
         });
@@ -128,10 +143,14 @@ export function useLibrary({ activeInstance, setStatus, pushLog, run }: LibraryD
     if (!instance) {
       return;
     }
+    const gameDir = resolveGameDir(instance);
+    if (!gameDir) {
+      return;
+    }
     await run(async () => {
       try {
         await invoke("delete_mod", {
-          gameDir: instance.gameDir ?? "",
+          gameDir,
           fileName
         });
         await loadMods();

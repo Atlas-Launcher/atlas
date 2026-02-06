@@ -11,6 +11,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: "select", id: string): void;
+  (event: "play", id: string): void;
+  (event: "install", id: string): void;
   (event: "create"): void;
   (event: "refresh-packs"): void;
 }>();
@@ -23,6 +25,8 @@ const emit = defineEmits<{
     :instance-install-state-by-id="props.instanceInstallStateById"
     :working="props.working"
     @select="emit('select', $event)"
+    @play="emit('play', $event)"
+    @install="emit('install', $event)"
     @create="emit('create')"
     @refresh-packs="emit('refresh-packs')"
   />

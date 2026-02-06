@@ -15,6 +15,8 @@ export function useStatus() {
   const logs = ref<string[]>([]);
   const progress = ref(0);
   const tasks = ref<ActiveTask[]>([]);
+  const ACTIVE_LAUNCH_TASK_ID = "launch:active";
+  const ACTIVE_LAUNCH_TASK_STALE_MS = 300000;
 
   function pushLog(entry: string) {
     logs.value = [entry, ...logs.value].slice(0, 8);
@@ -76,7 +78,7 @@ export function useStatus() {
 
   function upsertTaskFromEvent(event: LaunchEvent) {
     const now = Date.now();
-    const id = "launch:active";
+    const id = ACTIVE_LAUNCH_TASK_ID;
     const percent =
       typeof event.percent === "number"
         ? Math.round(event.percent)
@@ -108,17 +110,19 @@ export function useStatus() {
       percent >= 100 ||
       doneMessage.includes("ready") ||
       doneMessage.includes("started") ||
-      doneMessage.includes("complete")
+      doneMessage.includes("complete") ||
+      doneMessage.includes("failed") ||
+      doneMessage.includes("error")
     ) {
       tasks.value = tasks.value.filter((task) => task.id !== id);
     }
 
-    const cutoff = now - 120000;
+    const cutoff = now - ACTIVE_LAUNCH_TASK_STALE_MS;
     tasks.value = tasks.value.filter((task) => {
-      if (task.lastUpdated >= cutoff) {
+      if (task.id !== id) {
         return true;
       }
-      return task.percent < 100;
+      return task.lastUpdated >= cutoff;
     });
   }
 

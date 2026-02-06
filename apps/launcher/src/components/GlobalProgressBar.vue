@@ -2,7 +2,6 @@
 import { computed } from "vue";
 import Card from "./ui/card/Card.vue";
 import CardContent from "./ui/card/CardContent.vue";
-import Progress from "./ui/progress/Progress.vue";
 import type { ActiveTask } from "@/lib/useStatus";
 
 const props = defineProps<{
@@ -14,8 +13,16 @@ const activeTasks = computed(() => {
 });
 
 const primaryTask = computed(() => activeTasks.value[0] ?? null);
+const primaryPercent = computed(() => {
+  return Math.min(100, Math.max(0, primaryTask.value?.percent ?? 0));
+});
+const showIndeterminateProgress = computed(() => primaryPercent.value < 10);
+const hasMultipleTasks = computed(() => activeTasks.value.length > 1);
+const secondaryTasks = computed(() => activeTasks.value.slice(1, 4));
+const hiddenSecondaryCount = computed(() => {
+  return Math.max(0, activeTasks.value.length - 1 - secondaryTasks.value.length);
+});
 
-const visibleTasks = computed(() => activeTasks.value.slice(0, 3));
 </script>
 
 <template>
@@ -30,21 +37,31 @@ const visibleTasks = computed(() => activeTasks.value.slice(0, 3));
                 {{ primaryTask?.message ?? "Working" }}
               </div>
             </div>
-            <div class="text-xs text-muted-foreground">
+            <div v-if="hasMultipleTasks" class="text-xs text-muted-foreground">
               {{ activeTasks.length }} task{{ activeTasks.length === 1 ? "" : "s" }} running
             </div>
           </div>
-          <Progress :model-value="primaryTask?.percent ?? 0" />
-          <div class="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <div class="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
+            <div
+              v-if="showIndeterminateProgress"
+              class="progress-stripe absolute inset-y-0 w-1/3 rounded-full"
+            />
+            <div
+              v-else
+              class="h-full rounded-full bg-primary transition-all"
+              :style="{ width: `${primaryPercent}%` }"
+            />
+          </div>
+          <div v-if="hasMultipleTasks" class="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span
-              v-for="task in visibleTasks"
+              v-for="task in secondaryTasks"
               :key="task.id"
               class="rounded-full border border-border/60 bg-card/70 px-2 py-1"
             >
               {{ task.message }}
             </span>
-            <span v-if="activeTasks.length > visibleTasks.length">
-              +{{ activeTasks.length - visibleTasks.length }} more
+            <span v-if="hiddenSecondaryCount > 0">
+              +{{ hiddenSecondaryCount }} more
             </span>
           </div>
         </CardContent>
@@ -52,3 +69,27 @@ const visibleTasks = computed(() => activeTasks.value.slice(0, 3));
     </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes progress-stripe-sweep {
+  from {
+    transform: translateX(-140%);
+  }
+
+  to {
+    transform: translateX(360%);
+  }
+}
+
+.progress-stripe {
+  animation: progress-stripe-sweep 1.2s linear infinite;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--primary) / 0.2) 35%,
+    hsl(var(--primary) / 0.85) 50%,
+    hsl(var(--primary) / 0.2) 65%,
+    transparent 100%
+  );
+}
+</style>
