@@ -136,6 +136,7 @@ const contentTabLabel = computed(() =>
       <TabsContent value="setup" class="mt-0 flex-1 min-h-0 overflow-auto pr-1">
         <div class="flex flex-col gap-6">
           <VersionsCard
+            v-if="!isRemoteInstance"
             :instance="props.instance"
             :available-versions="props.availableVersions"
             :latest-release="props.latestRelease"
@@ -143,7 +144,6 @@ const contentTabLabel = computed(() =>
             :fabric-loader-versions="props.fabricLoaderVersions"
             :neoforge-loader-versions="props.neoforgeLoaderVersions"
             :working="props.working"
-            :setup-locked="isRemoteInstance"
             @update="emit('update-instance', $event)"
             @install="emit('install-version')"
             @refresh="emit('refresh-versions')"
