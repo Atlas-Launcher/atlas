@@ -68,8 +68,7 @@ pub fn build_pack_bytes(
 
     let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     io::insert_file(&mut files, root, "atlas.toml")?;
-    io::insert_file(&mut files, root, "mods.toml")?;
-    io::insert_config_dir(&mut files, root)?;
+    io::insert_repo_text_files(&mut files, root)?;
 
     let build = build_binary(
         BuildInput {

@@ -113,22 +113,29 @@ impl VersionCatalog {
     fn fetch_neoforge_versions(&self, mc_version: &str) -> Result<Vec<String>> {
         let metadata = self.get_text(NEOFORGE_MAVEN_METADATA_URL)?;
         let all_versions = extract_versions_from_maven_metadata(&metadata);
-        let line = neoforge_line(mc_version)?;
-        let exact_prefix = format!("{}.", line);
+        let candidate_lines = neoforge_candidate_lines(mc_version)?;
 
-        let mut versions = all_versions
-            .iter()
-            .filter(|version| version.starts_with(&exact_prefix))
-            .cloned()
-            .collect::<Vec<_>>();
-
-        if versions.is_empty() {
-            let fallback_prefix = format!("{}-", line);
+        let mut versions = Vec::new();
+        for line in candidate_lines {
+            let exact_prefix = format!("{}.", line);
             versions = all_versions
                 .iter()
-                .filter(|version| version.starts_with(&fallback_prefix))
+                .filter(|version| version.starts_with(&exact_prefix))
                 .cloned()
                 .collect::<Vec<_>>();
+
+            if versions.is_empty() {
+                let fallback_prefix = format!("{}-", line);
+                versions = all_versions
+                    .iter()
+                    .filter(|version| version.starts_with(&fallback_prefix))
+                    .cloned()
+                    .collect::<Vec<_>>();
+            }
+
+            if !versions.is_empty() {
+                break;
+            }
         }
 
         sort_versions_desc(&mut versions);
@@ -216,7 +223,7 @@ fn extract_versions_from_maven_metadata(metadata: &str) -> Vec<String> {
     versions
 }
 
-fn neoforge_line(mc_version: &str) -> Result<String> {
+fn neoforge_candidate_lines(mc_version: &str) -> Result<Vec<String>> {
     let parts = mc_version.split('.').collect::<Vec<_>>();
     if parts.len() < 3 || parts[0] != "1" {
         bail!(
@@ -232,7 +239,12 @@ fn neoforge_line(mc_version: &str) -> Result<String> {
         .parse::<u64>()
         .with_context(|| format!("Invalid Minecraft version: {}", mc_version))?;
 
-    Ok(format!("{}.{}", major, patch))
+    // NeoForge 1.20.1 builds are published on the 20.2 line.
+    if major == 20 && patch == 1 {
+        return Ok(vec!["20.2".to_string(), "20.1".to_string()]);
+    }
+
+    Ok(vec![format!("{}.{}", major, patch)])
 }
 
 fn dedupe_versions(versions: &mut Vec<String>) {
@@ -340,4 +352,21 @@ fn push_token(
     }
 
     current.clear();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::neoforge_candidate_lines;
+
+    #[test]
+    fn neoforge_line_supports_1201_alias() {
+        let lines = neoforge_candidate_lines("1.20.1").expect("valid mc version");
+        assert_eq!(lines, vec!["20.2".to_string(), "20.1".to_string()]);
+    }
+
+    #[test]
+    fn neoforge_line_uses_patch_for_standard_versions() {
+        let lines = neoforge_candidate_lines("1.21.1").expect("valid mc version");
+        assert_eq!(lines, vec!["21.1".to_string()]);
+    }
 }
