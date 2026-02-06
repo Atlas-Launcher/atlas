@@ -24,19 +24,22 @@ const deviceClientIds = (process.env.ATLAS_DEVICE_CLIENT_ID ?? "atlas-launcher")
   .map((value) => value.trim())
   .filter(Boolean);
 const launcherClientId = process.env.ATLAS_OIDC_LAUNCHER_CLIENT_ID ?? "atlas-launcher";
-const launcherRedirectUrls = (
+const launcherRedirectUrlsRaw = (
   process.env.ATLAS_OIDC_LAUNCHER_REDIRECT_URIS ?? "atlas://signin"
 )
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
+const launcherRedirectUrls =
+  launcherRedirectUrlsRaw.length > 0 ? launcherRedirectUrlsRaw : ["atlas://signin"];
 const launcherTrustedClients =
   launcherRedirectUrls.length > 0
     ? [
         {
           clientId: launcherClientId,
           name: "Atlas Launcher",
-          type: "native" as const,
+          // Launcher uses PKCE without a client secret, so it must be a public client.
+          type: "public" as const,
           disabled: false,
           redirectUrls: launcherRedirectUrls,
           skipConsent: true,
