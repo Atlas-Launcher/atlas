@@ -63,6 +63,18 @@ pub async fn launch_minecraft(
     replace_map.insert("auth_player_name", session.profile.name.clone());
     replace_map.insert("version_name", version_data.id.clone());
     replace_map.insert("game_directory", game_dir.to_string_lossy().to_string());
+    replace_map.insert(
+        "library_directory",
+        game_dir.join("libraries").to_string_lossy().to_string(),
+    );
+    replace_map.insert(
+        "classpath_separator",
+        if cfg!(target_os = "windows") {
+            ";".to_string()
+        } else {
+            ":".to_string()
+        },
+    );
     replace_map.insert("assets_root", assets_dir.to_string_lossy().to_string());
     let asset_index_id = version_data
         .asset_index
