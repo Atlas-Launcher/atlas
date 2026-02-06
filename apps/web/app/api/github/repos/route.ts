@@ -157,17 +157,30 @@ interface LibsodiumLike {
   crypto_box_seal(message: Uint8Array, publicKey: Uint8Array): Uint8Array;
 }
 
-let sodiumModulePromise: Promise<LibsodiumLike> | null = null;
+type LibsodiumModule = {
+  default?: LibsodiumLike;
+} & Partial<LibsodiumLike>;
+
+let sodiumModulePromise: Promise<LibsodiumModule> | null = null;
 
 async function getSodium() {
   if (!sodiumModulePromise) {
     const moduleName = "libsodium-wrappers";
-    sodiumModulePromise = import(moduleName) as Promise<LibsodiumLike>;
+    sodiumModulePromise = import(moduleName) as Promise<LibsodiumModule>;
   }
 
-  const sodium = await sodiumModulePromise;
+  const sodiumModule = await sodiumModulePromise;
+  const sodium = sodiumModule.default ?? sodiumModule;
+  if (!sodium.ready) {
+    throw new Error("libsodium-wrappers did not expose ready");
+  }
   await sodium.ready;
-  return sodium;
+
+  if (typeof sodium.crypto_box_seal !== "function") {
+    throw new Error("libsodium-wrappers did not expose crypto_box_seal");
+  }
+
+  return sodium as LibsodiumLike;
 }
 
 async function encryptSecret(secretValue: string, base64PublicKey: string) {
