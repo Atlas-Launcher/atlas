@@ -4,11 +4,53 @@ import { NextResponse } from "next/server";
 import { getAuthHeaders, getLatestRelease, type ReleaseAsset } from "@/lib/releases";
 import { applyRateLimitHeaders, getClientIp, rateLimit } from "@/lib/rate-limit";
 
-const TARGET_PRIORITIES: Record<string, string[]> = {
-  windows: [".msi", ".exe"],
-  darwin: [".app.tar.gz"],
-  linux: [".appimage"],
+const TARGET_PRIORITIES: Record<"windows" | "macos" | "linux", string[]> = {
+  windows: [".nsis.zip", ".msi.zip", "setup-exe", ".msi", ".exe"],
+  macos: [".app.tar.gz", ".app.zip", ".dmg", ".pkg", ".zip"],
+  linux: [".appimage.tar.gz", ".appimage", ".deb", ".rpm", ".tar.gz"],
 };
+
+const TARGET_ALIASES: Record<string, "windows" | "macos" | "linux"> = {
+  windows: "windows",
+  win32: "windows",
+  darwin: "macos",
+  macos: "macos",
+  osx: "macos",
+  linux: "linux",
+};
+
+const ARCH_ALIASES: Record<string, string[]> = {
+  x86_64: ["x86_64", "amd64", "x64"],
+  amd64: ["x86_64", "amd64", "x64"],
+  x64: ["x86_64", "amd64", "x64"],
+  aarch64: ["aarch64", "arm64"],
+  arm64: ["aarch64", "arm64"],
+  x86: ["x86", "i686", "386"],
+  i686: ["x86", "i686", "386"],
+  "386": ["x86", "i686", "386"],
+};
+
+function normalizeTarget(target: string): "windows" | "macos" | "linux" | null {
+  const value = target.trim().toLowerCase();
+  return TARGET_ALIASES[value] ?? null;
+}
+
+function getArchNeedles(arch: string) {
+  const value = arch.trim().toLowerCase();
+  const aliases = ARCH_ALIASES[value] ?? [value];
+  return [...new Set(aliases.filter(Boolean))];
+}
+
+function matchesPriority(name: string, priority: string) {
+  if (priority === "setup-exe") {
+    return (
+      name.endsWith("-setup.exe") ||
+      name.endsWith("_setup.exe") ||
+      name.includes("setup.exe")
+    );
+  }
+  return name.endsWith(priority);
+}
 
 function normalizeVersion(input: string): string {
   return input.trim().replace(/^v/, "");
@@ -50,25 +92,37 @@ function compareSemver(a: string, b: string) {
 }
 
 function pickUpdateAsset(assets: ReleaseAsset[], target: string, arch: string) {
-  const priorities = TARGET_PRIORITIES[target] ?? [];
+  const normalizedTarget = normalizeTarget(target);
+  if (!normalizedTarget) return null;
+
+  const priorities = TARGET_PRIORITIES[normalizedTarget];
   if (!priorities.length) return null;
 
   const candidates = assets.filter((asset) => {
     const name = asset.name.toLowerCase();
     if (name.endsWith(".sig")) return false;
-    return priorities.some((ext) => name.endsWith(ext));
+    if (name.startsWith("source code")) return false;
+    return priorities.some((priority) => matchesPriority(name, priority));
   });
 
   if (!candidates.length) return null;
 
-  const archNeedle = arch.toLowerCase();
-  const archMatches = candidates.filter((asset) => asset.name.toLowerCase().includes(archNeedle));
+  const archNeedles = getArchNeedles(arch);
+  const archMatches = candidates.filter((asset) => {
+    const name = asset.name.toLowerCase();
+    return archNeedles.some((needle) => name.includes(needle));
+  });
   const scoped = archMatches.length ? archMatches : candidates;
 
   const sorted = [...scoped].sort((a, b) => {
-    const aIndex = priorities.findIndex((ext) => a.name.toLowerCase().endsWith(ext));
-    const bIndex = priorities.findIndex((ext) => b.name.toLowerCase().endsWith(ext));
-    return (aIndex === -1 ? priorities.length : aIndex) - (bIndex === -1 ? priorities.length : bIndex);
+    const aName = a.name.toLowerCase();
+    const bName = b.name.toLowerCase();
+    const aIndex = priorities.findIndex((priority) => matchesPriority(aName, priority));
+    const bIndex = priorities.findIndex((priority) => matchesPriority(bName, priority));
+    return (
+      (aIndex === -1 ? priorities.length : aIndex) -
+      (bIndex === -1 ? priorities.length : bIndex)
+    );
   });
 
   return sorted[0] ?? null;
