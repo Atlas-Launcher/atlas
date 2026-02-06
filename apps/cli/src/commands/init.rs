@@ -6,6 +6,8 @@ use clap::Args;
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 use protocol::config::atlas::{AtlasConfig, CliConfig, MetadataConfig, VersionsConfig};
 
+use crate::version_catalog::VersionCatalog;
+
 #[derive(Args)]
 pub struct InitArgs {
     #[arg(long, default_value = ".")]
@@ -136,6 +138,7 @@ fn prompt_versions(
     theme: &ColorfulTheme,
     existing: Option<&VersionsConfig>,
 ) -> Result<VersionsConfig> {
+    let catalog = VersionCatalog::new()?;
     let loader_options = ["Fabric", "Forge", "NeoForge"];
     let default_loader = existing
         .map(|v| normalize_loader(&v.modloader))
@@ -153,58 +156,63 @@ fn prompt_versions(
         .context("Failed to read modloader selection")?;
 
     let modloader = normalize_loader(loader_options[loader_selection]).to_string();
-    let mc = prompt_minecraft_version(theme, existing.map(|v| v.mc.as_str()))?;
-
-    let suggested_loader_version = existing
-        .and_then(|v| {
-            if normalize_loader(&v.modloader) == modloader {
-                Some(v.modloader_version.clone())
-            } else {
-                None
-            }
-        })
-        .and_then(|value| non_empty(Some(value)))
-        .unwrap_or_else(|| default_loader_version(&modloader, &mc).to_string());
-
-    let modloader_version: String = Input::with_theme(theme)
-        .with_prompt(format!("{} loader version for MC {}", modloader, mc))
-        .default(suggested_loader_version)
-        .validate_with(|input: &String| -> std::result::Result<(), &str> {
-            if input.trim().is_empty() {
-                Err("Modloader version cannot be empty")
-            } else {
-                Ok(())
-            }
-        })
-        .interact_text()
-        .context("Failed to read modloader version")?;
+    let mc_versions = catalog.fetch_minecraft_versions()?;
+    let mc = prompt_minecraft_version(theme, &mc_versions, existing.map(|v| v.mc.as_str()))?;
+    let loader_versions = catalog.fetch_loader_versions(&modloader, &mc)?;
+    let modloader_version = prompt_loader_version(
+        theme,
+        &modloader,
+        &mc,
+        &loader_versions,
+        existing
+            .and_then(|v| {
+                if normalize_loader(&v.modloader) == modloader {
+                    Some(v.modloader_version.as_str())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(""),
+    )?;
 
     Ok(VersionsConfig {
         mc,
         modloader,
-        modloader_version: modloader_version.trim().to_string(),
+        modloader_version,
     })
 }
 
-fn prompt_minecraft_version(theme: &ColorfulTheme, existing: Option<&str>) -> Result<String> {
-    let options = ["1.21.4", "1.21.1", "1.20.6", "1.20.1", "Custom"];
-    let default_version = existing.unwrap_or("1.20.1").trim();
-    let default_index = options
-        .iter()
-        .position(|candidate| *candidate == default_version)
-        .unwrap_or(options.len() - 1);
+fn prompt_minecraft_version(
+    theme: &ColorfulTheme,
+    versions: &[String],
+    existing: Option<&str>,
+) -> Result<String> {
+    if versions.is_empty() {
+        bail!("No Minecraft versions available");
+    }
+
+    let latest = versions
+        .first()
+        .map(String::as_str)
+        .context("No Minecraft versions available")?;
+
+    let mut options = versions.to_vec();
+    options.push("Custom".to_string());
 
     let selection = Select::with_theme(theme)
         .with_prompt("Select Minecraft version")
         .items(&options)
-        .default(default_index)
+        .default(0)
         .interact()
         .context("Failed to read Minecraft version selection")?;
 
-    if options[selection] == "Custom" {
+    if selection == options.len() - 1 {
+        let default_custom = non_empty(existing.map(|value| value.to_string()))
+            .unwrap_or_else(|| latest.to_string());
+
         let custom_version: String = Input::with_theme(theme)
             .with_prompt("Minecraft version")
-            .default(default_version.to_string())
+            .default(default_custom)
             .validate_with(|input: &String| -> std::result::Result<(), &str> {
                 if input.trim().is_empty() {
                     Err("Minecraft version cannot be empty")
@@ -214,10 +222,64 @@ fn prompt_minecraft_version(theme: &ColorfulTheme, existing: Option<&str>) -> Re
             })
             .interact_text()
             .context("Failed to read Minecraft version")?;
-        Ok(custom_version.trim().to_string())
-    } else {
-        Ok(options[selection].to_string())
+        return Ok(custom_version.trim().to_string());
     }
+
+    Ok(options[selection].to_string())
+}
+
+fn prompt_loader_version(
+    theme: &ColorfulTheme,
+    modloader: &str,
+    mc_version: &str,
+    versions: &[String],
+    existing: &str,
+) -> Result<String> {
+    if versions.is_empty() {
+        bail!(
+            "No {} versions available for Minecraft {}",
+            modloader,
+            mc_version
+        );
+    }
+
+    let latest = versions
+        .first()
+        .map(String::as_str)
+        .context("No loader versions available")?;
+
+    let mut options = versions.to_vec();
+    options.push("Custom".to_string());
+
+    let selection = Select::with_theme(theme)
+        .with_prompt(format!(
+            "Select {} version for MC {}",
+            modloader, mc_version
+        ))
+        .items(&options)
+        .default(0)
+        .interact()
+        .context("Failed to read modloader version selection")?;
+
+    if selection == options.len() - 1 {
+        let default_custom =
+            non_empty(Some(existing.to_string())).unwrap_or_else(|| latest.to_string());
+        let custom_version: String = Input::with_theme(theme)
+            .with_prompt(format!("{} version", modloader))
+            .default(default_custom)
+            .validate_with(|input: &String| -> std::result::Result<(), &str> {
+                if input.trim().is_empty() {
+                    Err("Modloader version cannot be empty")
+                } else {
+                    Ok(())
+                }
+            })
+            .interact_text()
+            .context("Failed to read modloader version")?;
+        return Ok(custom_version.trim().to_string());
+    }
+
+    Ok(options[selection].to_string())
 }
 
 fn prompt_cli(theme: &ColorfulTheme, pack_name: &str) -> Result<Option<CliConfig>> {
@@ -268,26 +330,6 @@ fn prompt_cli(theme: &ColorfulTheme, pack_name: &str) -> Result<Option<CliConfig
         Ok(None)
     } else {
         Ok(Some(cli))
-    }
-}
-
-fn default_loader_version(modloader: &str, mc_version: &str) -> &'static str {
-    match modloader {
-        "forge" => {
-            if mc_version.starts_with("1.20") {
-                "47.2.0"
-            } else {
-                "latest"
-            }
-        }
-        "neoforge" => {
-            if mc_version.starts_with("1.21") {
-                "21.1.0"
-            } else {
-                "latest"
-            }
-        }
-        _ => "0.15.11",
     }
 }
 

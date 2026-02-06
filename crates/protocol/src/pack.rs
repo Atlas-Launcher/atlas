@@ -1,4 +1,4 @@
-use crate::{config::atlas, encode_blob, Manifest, PackBlob, PackMetadata, ProtocolError};
+use crate::{Manifest, PackBlob, PackMetadata, ProtocolError, config::atlas, encode_blob};
 use std::collections::BTreeMap;
 
 pub struct BuildInput {

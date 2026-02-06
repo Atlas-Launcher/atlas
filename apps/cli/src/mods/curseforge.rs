@@ -3,7 +3,7 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 use url::form_urlencoded::Serializer;
 
-use super::{ModEntry, ModHashes};
+use super::{ModEntry, ModHashes, ModMetadata};
 
 const GAME_ID_MINECRAFT: i32 = 432;
 
@@ -16,7 +16,6 @@ struct CfResponse<T> {
 struct CfMod {
     id: i64,
     name: String,
-    slug: String,
 }
 
 #[derive(Deserialize)]
@@ -100,6 +99,9 @@ pub fn resolve(
         .map(|h| h.value.clone());
 
     Ok(ModEntry {
+        metadata: Some(ModMetadata {
+            name: mod_entry.name.clone(),
+        }),
         source: "curseforge".to_string(),
         project_id: mod_entry.id.to_string(),
         version: file.display_name.clone(),
