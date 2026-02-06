@@ -3,5 +3,6 @@ resolver = "2"
 members = [
   "apps/cli",
   "apps/launcher/src-tauri",
+  "crates/mod-resolver",
   "crates/protocol"
 ]
