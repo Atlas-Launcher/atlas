@@ -1,7 +1,8 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { oauthAccessTokens, packMembers, packs, users } from "@/lib/db/schema";
+import { packMembers, packs, users } from "@/lib/db/schema";
+import { getAuthenticatedUserIdFromBearerToken } from "@/lib/auth/request-user";
 import { toRepositorySlug } from "@/lib/github";
 import { verifyGithubOidcToken, type GithubOidcClaims } from "@/lib/ci/oidc";
 
@@ -58,20 +59,8 @@ async function authorizeLauncherUserToken(
     throw new Error("packId is required when using user credentials.");
   }
 
-  const [token] = await db
-    .select({
-      userId: oauthAccessTokens.userId,
-    })
-    .from(oauthAccessTokens)
-    .where(
-      and(
-        eq(oauthAccessTokens.accessToken, bearerToken),
-        gt(oauthAccessTokens.accessTokenExpiresAt, new Date())
-      )
-    )
-    .limit(1);
-
-  if (!token?.userId) {
+  const userId = await getAuthenticatedUserIdFromBearerToken(bearerToken);
+  if (!userId) {
     throw new Error("Invalid bearer token.");
   }
 
@@ -80,14 +69,14 @@ async function authorizeLauncherUserToken(
       role: users.role,
     })
     .from(users)
-    .where(eq(users.id, token.userId))
+    .where(eq(users.id, userId))
     .limit(1);
 
   if (user?.role === "admin") {
     return {
       packId,
       method: "launcher_user",
-      userId: token.userId,
+      userId,
     };
   }
 
@@ -96,7 +85,7 @@ async function authorizeLauncherUserToken(
       role: packMembers.role,
     })
     .from(packMembers)
-    .where(and(eq(packMembers.packId, packId), eq(packMembers.userId, token.userId)))
+    .where(and(eq(packMembers.packId, packId), eq(packMembers.userId, userId)))
     .limit(1);
 
   if (membership?.role !== "admin" && membership?.role !== "creator") {
@@ -106,7 +95,7 @@ async function authorizeLauncherUserToken(
   return {
     packId,
     method: "launcher_user",
-    userId: token.userId,
+    userId,
   };
 }
 

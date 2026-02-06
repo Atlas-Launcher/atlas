@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { accounts, oauthAccessTokens, packMembers, packs } from "@/lib/db/schema";
+import { accounts, packMembers, packs } from "@/lib/db/schema";
+import { getAuthenticatedUserId } from "@/lib/auth/request-user";
 import { toRepositorySlug } from "@/lib/github";
 
 type WorkflowSyncAction = "init" | "update";
@@ -21,20 +22,6 @@ type GithubWorkflow = {
 type GithubWorkflowListResponse = {
   workflows?: GithubWorkflow[];
 };
-
-function parseBearerToken(request: Request): string | null {
-  const header = request.headers.get("authorization")?.trim();
-  if (!header) {
-    return null;
-  }
-
-  const [scheme, token] = header.split(/\s+/, 2);
-  if (!scheme || !token || scheme.toLowerCase() !== "bearer") {
-    return null;
-  }
-
-  return token.trim() || null;
-}
 
 function getTemplateRepo() {
   const value = process.env.ATLAS_GITHUB_TEMPLATE_REPO?.trim();
@@ -243,25 +230,8 @@ async function enableRepositoryWorkflows({
 }
 
 export async function POST(request: Request) {
-  const bearer = parseBearerToken(request);
-  if (!bearer) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const [oauthToken] = await db
-    .select({
-      userId: oauthAccessTokens.userId,
-    })
-    .from(oauthAccessTokens)
-    .where(
-      and(
-        eq(oauthAccessTokens.accessToken, bearer),
-        gt(oauthAccessTokens.accessTokenExpiresAt, new Date())
-      )
-    )
-    .limit(1);
-
-  if (!oauthToken?.userId) {
+  const userId = await getAuthenticatedUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -284,7 +254,7 @@ export async function POST(request: Request) {
     })
     .from(packMembers)
     .innerJoin(packs, eq(packMembers.packId, packs.id))
-    .where(and(eq(packMembers.userId, oauthToken.userId), eq(packMembers.packId, packId)))
+    .where(and(eq(packMembers.userId, userId), eq(packMembers.packId, packId)))
     .limit(1);
 
   if (!membership) {
@@ -312,7 +282,7 @@ export async function POST(request: Request) {
       accessToken: accounts.accessToken,
     })
     .from(accounts)
-    .where(and(eq(accounts.userId, oauthToken.userId), eq(accounts.providerId, "github")))
+    .where(and(eq(accounts.userId, userId), eq(accounts.providerId, "github")))
     .orderBy(desc(accounts.updatedAt))
     .limit(1);
 

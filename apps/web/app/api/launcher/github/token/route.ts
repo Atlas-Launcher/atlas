@@ -1,41 +1,13 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { accounts, oauthAccessTokens } from "@/lib/db/schema";
-
-function parseBearerToken(request: Request): string | null {
-  const header = request.headers.get("authorization")?.trim();
-  if (!header) {
-    return null;
-  }
-  const [scheme, token] = header.split(/\s+/, 2);
-  if (!scheme || !token || scheme.toLowerCase() !== "bearer") {
-    return null;
-  }
-  return token.trim() || null;
-}
+import { accounts } from "@/lib/db/schema";
+import { getAuthenticatedUserId } from "@/lib/auth/request-user";
 
 export async function GET(request: Request) {
-  const bearer = parseBearerToken(request);
-  if (!bearer) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const [token] = await db
-    .select({
-      userId: oauthAccessTokens.userId,
-    })
-    .from(oauthAccessTokens)
-    .where(
-      and(
-        eq(oauthAccessTokens.accessToken, bearer),
-        gt(oauthAccessTokens.accessTokenExpiresAt, new Date())
-      )
-    )
-    .limit(1);
-
-  if (!token?.userId) {
+  const userId = await getAuthenticatedUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -45,7 +17,7 @@ export async function GET(request: Request) {
       accessTokenExpiresAt: accounts.accessTokenExpiresAt,
     })
     .from(accounts)
-    .where(and(eq(accounts.userId, token.userId), eq(accounts.providerId, "github")))
+    .where(and(eq(accounts.userId, userId), eq(accounts.providerId, "github")))
     .orderBy(desc(accounts.updatedAt))
     .limit(1);
 
