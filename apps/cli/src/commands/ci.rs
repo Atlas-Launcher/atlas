@@ -1,13 +1,13 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::auth_store;
-use crate::config;
 
 #[derive(Subcommand)]
 pub enum CiCommand {
@@ -19,26 +19,10 @@ pub enum CiCommand {
 pub struct CiSyncArgs {
     #[arg(long, default_value = ".")]
     input: PathBuf,
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pack_id: Option<String>,
     #[arg(long)]
     hub_url: Option<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WorkflowSyncRequest<'a> {
-    action: &'a str,
-    pack_id: &'a str,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WorkflowSyncResponse {
-    repository: String,
-    workflow_path: String,
-    workflow_updated: bool,
-    actions_enabled: bool,
 }
 
 pub fn run(command: CiCommand) -> Result<()> {
@@ -53,47 +37,350 @@ fn run_sync(action: &str, args: CiSyncArgs) -> Result<()> {
         .input
         .canonicalize()
         .context("Failed to resolve input path")?;
-    let settings = config::resolve_cli_settings(&root, args.pack_id, args.hub_url, None)?;
-    let pack_id = settings
-        .pack_id
-        .clone()
-        .context("pack_id is required (use --pack-id or set pack_id in atlas.toml)")?;
-    let token = auth_store::require_access_token_for_hub(&settings.hub_url)?;
+    let hub_url = auth_store::resolve_hub_url(args.hub_url);
 
     let client = Client::builder()
         .timeout(Duration::from_secs(20))
         .build()
         .context("Failed to create HTTP client")?;
-    let endpoint = format!("{}/api/launcher/ci/workflow", settings.hub_url);
-    let response = client
-        .post(endpoint)
-        .bearer_auth(token)
-        .json(&WorkflowSyncRequest {
-            action,
-            pack_id: &pack_id,
-        })
-        .send()
-        .context("Failed to sync CI workflow")?;
+    let endpoint = format!("{}/download/ci/workflow", hub_url);
+    let mut request = client.get(endpoint);
+    if let Ok(token) = auth_store::require_access_token_for_hub(&hub_url) {
+        request = request.bearer_auth(token);
+    }
+    let response = request.send().context("Failed to download CI workflow")?;
 
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().unwrap_or_default();
-        anyhow::bail!("CI workflow sync failed (HTTP {}): {}", status, body);
+        anyhow::bail!("CI workflow download failed (HTTP {}): {}", status, body);
     }
 
-    let payload = response
-        .json::<WorkflowSyncResponse>()
-        .context("Failed to parse CI workflow sync response")?;
+    let workflow_path = response
+        .headers()
+        .get("x-atlas-workflow-path")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(".github/workflows/atlas-build.yml");
+    let relative_path = sanitize_relative_path(workflow_path)?;
+    let target_path = root.join(relative_path);
+    let content = response
+        .text()
+        .context("Failed to read CI workflow download response")?;
+
+    let updated = std::fs::read_to_string(&target_path)
+        .map(|existing| existing != content)
+        .unwrap_or(true);
+    if updated {
+        if let Some(parent) = target_path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create {}", parent.display()))?;
+        }
+        std::fs::write(&target_path, content)
+            .with_context(|| format!("Failed to write {}", target_path.display()))?;
+    }
+
+    if action == "init" {
+        if let Err(error) = enable_github_workflows_if_needed(&client, &root, &hub_url) {
+            println!("Skipped GitHub workflow auto-enable: {error}");
+        }
+    }
 
     let action_label = if action == "init" {
         "Initialized"
     } else {
         "Updated"
     };
-    println!("{action_label} Atlas CI workflow.");
-    println!("Repository: {}", payload.repository);
-    println!("Workflow path: {}", payload.workflow_path);
-    println!("Workflow updated: {}", payload.workflow_updated);
-    println!("Actions enabled: {}", payload.actions_enabled);
+    println!("{action_label} Atlas CI workflow file.");
+    println!("Workflow path: {}", target_path.display());
+    println!("Workflow updated: {}", updated);
+    println!(
+        "Next: run `atlas pack commit \"{} Atlas CI workflow\"` and `atlas pack push`.",
+        action_label
+    );
+    Ok(())
+}
+
+fn sanitize_relative_path(value: &str) -> Result<std::path::PathBuf> {
+    let normalized = value.replace('\\', "/");
+    if normalized.trim().is_empty() {
+        anyhow::bail!("Invalid empty workflow path from download endpoint.");
+    }
+
+    let mut out = std::path::PathBuf::new();
+    for component in std::path::Path::new(&normalized).components() {
+        match component {
+            std::path::Component::Normal(part) => out.push(part),
+            _ => anyhow::bail!("Invalid workflow path from download endpoint: {}", value),
+        }
+    }
+
+    if out.as_os_str().is_empty() {
+        anyhow::bail!("Invalid workflow path from download endpoint: {}", value);
+    }
+
+    Ok(out)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GithubTokenResponse {
+    access_token: String,
+}
+
+#[derive(Deserialize)]
+struct GithubWorkflowListResponse {
+    workflows: Vec<GithubWorkflow>,
+}
+
+#[derive(Deserialize)]
+struct GithubWorkflow {
+    id: u64,
+    state: Option<String>,
+}
+
+fn enable_github_workflows_if_needed(client: &Client, root: &Path, hub_url: &str) -> Result<()> {
+    let remote_url = resolve_origin_remote_url(root)?;
+    let (owner, repo) = parse_github_owner_repo(&remote_url).with_context(|| {
+        format!(
+            "Git remote origin is not a supported GitHub URL: {}",
+            remote_url
+        )
+    })?;
+
+    let hub_token = auth_store::require_access_token_for_hub(hub_url).with_context(
+        || "Atlas auth is required to enable workflows. Run `atlas auth signin` and retry.",
+    )?;
+    let github_token = request_linked_github_access_token(client, hub_url, &hub_token)?.context(
+        "No linked GitHub token found. Link your GitHub account in Atlas Hub and retry.",
+    )?;
+
+    set_repository_actions_permissions(client, &github_token, &owner, &repo)?;
+    let workflows = list_repository_workflows(client, &github_token, &owner, &repo)?;
+    if workflows.is_empty() {
+        println!(
+            "No GitHub workflows found for {}/{}. Push this repository, then run `atlas ci init` again to auto-enable workflows if needed.",
+            owner, repo
+        );
+        return Ok(());
+    }
+
+    let mut enabled_count = 0usize;
+    for workflow in workflows {
+        if workflow
+            .state
+            .as_deref()
+            .map(|value| value.eq_ignore_ascii_case("active"))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+
+        enable_repository_workflow(client, &github_token, &owner, &repo, workflow.id)?;
+        enabled_count += 1;
+    }
+
+    if enabled_count > 0 {
+        println!(
+            "Enabled {} GitHub workflow(s) for {}/{}.",
+            enabled_count, owner, repo
+        );
+    } else {
+        println!("GitHub workflows already active for {}/{}.", owner, repo);
+    }
+    Ok(())
+}
+
+fn resolve_origin_remote_url(root: &Path) -> Result<String> {
+    let output = Command::new("git")
+        .arg("remote")
+        .arg("get-url")
+        .arg("origin")
+        .current_dir(root)
+        .output()
+        .context("Failed to run `git remote get-url origin`")?;
+    if !output.status.success() {
+        bail!(
+            "Unable to resolve git remote 'origin'. Set a GitHub origin before running `atlas ci init`."
+        );
+    }
+
+    let remote_url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if remote_url.is_empty() {
+        bail!("Git remote 'origin' does not have a URL configured.");
+    }
+
+    Ok(remote_url)
+}
+
+fn parse_github_owner_repo(remote_url: &str) -> Option<(String, String)> {
+    if let Some(path) = remote_url.strip_prefix("git@github.com:") {
+        return parse_owner_repo_path(path);
+    }
+    if let Some(path) = remote_url.strip_prefix("ssh://git@github.com/") {
+        return parse_owner_repo_path(path);
+    }
+
+    if let Ok(parsed) = reqwest::Url::parse(remote_url) {
+        let host = parsed.host_str()?.to_ascii_lowercase();
+        if host == "github.com" || host == "www.github.com" {
+            return parse_owner_repo_path(parsed.path());
+        }
+    }
+
+    None
+}
+
+fn parse_owner_repo_path(path: &str) -> Option<(String, String)> {
+    let clean = path.trim().trim_start_matches('/').trim_end_matches('/');
+    let clean = clean.strip_suffix(".git").unwrap_or(clean);
+    let mut parts = clean.split('/');
+    let owner = parts.next()?.trim();
+    let repo = parts.next()?.trim();
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some((owner.to_string(), repo.to_string()))
+}
+
+fn request_linked_github_access_token(
+    client: &Client,
+    hub_url: &str,
+    access_token: &str,
+) -> Result<Option<String>> {
+    let endpoint = format!("{}/api/launcher/github/token", hub_url);
+    let response = client
+        .get(endpoint)
+        .bearer_auth(access_token)
+        .send()
+        .context("Failed to request linked GitHub credentials")?;
+
+    let status = response.status().as_u16();
+    if status == 404 || status == 409 {
+        return Ok(None);
+    }
+    if status == 401 {
+        bail!(
+            "Atlas Hub rejected your saved token. Run `atlas auth signout` then `atlas auth signin --hub-url {}`.",
+            hub_url
+        );
+    }
+    if !(200..300).contains(&status) {
+        let body = response.text().unwrap_or_default();
+        bail!(
+            "Failed to fetch linked GitHub credentials (HTTP {}): {}",
+            status,
+            body
+        );
+    }
+
+    let payload = response
+        .json::<GithubTokenResponse>()
+        .context("Failed to parse linked GitHub credentials response")?;
+    Ok(Some(payload.access_token))
+}
+
+fn set_repository_actions_permissions(
+    client: &Client,
+    github_token: &str,
+    owner: &str,
+    repo: &str,
+) -> Result<()> {
+    let endpoint = format!(
+        "https://api.github.com/repos/{}/{}/actions/permissions",
+        owner, repo
+    );
+    let response = client
+        .put(endpoint)
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "atlas-cli")
+        .bearer_auth(github_token)
+        .json(&serde_json::json!({
+            "enabled": true,
+            "allowed_actions": "all",
+        }))
+        .send()
+        .context("Failed to configure GitHub Actions permissions")?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        bail!(
+            "GitHub Actions permissions update failed for {}/{} (HTTP {}): {}",
+            owner,
+            repo,
+            status,
+            body
+        );
+    }
+
+    Ok(())
+}
+
+fn list_repository_workflows(
+    client: &Client,
+    github_token: &str,
+    owner: &str,
+    repo: &str,
+) -> Result<Vec<GithubWorkflow>> {
+    let endpoint = format!(
+        "https://api.github.com/repos/{}/{}/actions/workflows?per_page=100",
+        owner, repo
+    );
+    let response = client
+        .get(endpoint)
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "atlas-cli")
+        .bearer_auth(github_token)
+        .send()
+        .context("Failed to list GitHub workflows")?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        bail!(
+            "GitHub workflow list failed for {}/{} (HTTP {}): {}",
+            owner,
+            repo,
+            status,
+            body
+        );
+    }
+
+    let payload = response
+        .json::<GithubWorkflowListResponse>()
+        .context("Failed to parse GitHub workflow list response")?;
+    Ok(payload.workflows)
+}
+
+fn enable_repository_workflow(
+    client: &Client,
+    github_token: &str,
+    owner: &str,
+    repo: &str,
+    workflow_id: u64,
+) -> Result<()> {
+    let endpoint = format!(
+        "https://api.github.com/repos/{}/{}/actions/workflows/{}/enable",
+        owner, repo, workflow_id
+    );
+    let response = client
+        .put(endpoint)
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "atlas-cli")
+        .bearer_auth(github_token)
+        .send()
+        .context("Failed to enable GitHub workflow")?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        bail!(
+            "Failed enabling workflow {} for {}/{} (HTTP {}): {}",
+            workflow_id,
+            owner,
+            repo,
+            status,
+            body
+        );
+    }
+
     Ok(())
 }
