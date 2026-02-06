@@ -51,7 +51,7 @@ export default function DashboardHeader({
             </div>
             {identifier ? (
               <div className="mt-1">
-                <Badge variant="outline" className="text-[10px] uppercase tracking-[0.2em]">
+                <Badge variant="outline" className="text-[10px] tracking-[0.16em] font-mono">
                   {identifier}
                 </Badge>
               </div>
