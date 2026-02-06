@@ -236,6 +236,60 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
     setMembers((prev) => prev.filter((member) => member.userId !== userId));
   };
 
+  const handlePromoteMember = async (userId: string) => {
+    setLoading(true);
+    setError(null);
+    const response = await fetch(`/api/packs/${packId}/members/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "creator" }),
+    });
+    const data = await response
+      .json()
+      .catch(() => ({ error: "Unable to promote member." }));
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data?.error ?? "Unable to promote member.");
+      return;
+    }
+
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.userId === userId
+          ? { ...member, role: "creator", accessLevel: "all" }
+          : member
+      )
+    );
+  };
+
+  const handleDemoteMember = async (userId: string) => {
+    setLoading(true);
+    setError(null);
+    const response = await fetch(`/api/packs/${packId}/members/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "player" }),
+    });
+    const data = await response
+      .json()
+      .catch(() => ({ error: "Unable to demote member." }));
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data?.error ?? "Unable to demote member.");
+      return;
+    }
+
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.userId === userId
+          ? { ...member, role: "player", accessLevel: "production" }
+          : member
+      )
+    );
+  };
+
   const handleDeletePack = async () => {
     if (!canDeletePack) {
       return;
@@ -364,6 +418,8 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
               onCloseInviteLinkModal={() => setInviteLinkModal(null)}
               members={members}
               onRevokeMember={handleRevokeMember}
+              onPromoteMember={handlePromoteMember}
+              onDemoteMember={handleDemoteMember}
               canManageApiKeys={canManageApiKeys}
               apiKeyRecords={apiKeyRecords}
               apiKeyLabel={apiKeyLabel}
