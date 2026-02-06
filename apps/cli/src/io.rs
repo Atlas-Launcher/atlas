@@ -58,8 +58,12 @@ pub fn write_mod_entry(root: &Path, entry: &protocol::config::mods::ModEntry) ->
     write_pointer_entry(root, entry, "mods", ".mod.toml")
 }
 
-pub fn write_resource_entry(root: &Path, entry: &protocol::config::mods::ModEntry) -> Result<()> {
-    write_pointer_entry(root, entry, "resources", ".res.toml")
+pub fn write_resource_entry(
+    root: &Path,
+    entry: &protocol::config::mods::ModEntry,
+    directory: &str,
+) -> Result<()> {
+    write_pointer_entry(root, entry, directory, ".res.toml")
 }
 
 fn write_pointer_entry(

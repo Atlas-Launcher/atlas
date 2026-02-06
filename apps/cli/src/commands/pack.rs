@@ -236,7 +236,7 @@ fn add(args: AddArgs) -> Result<()> {
             if asset_kind == AssetKind::Mod {
                 io::write_mod_entry(&root, &entry)?;
             } else {
-                io::write_resource_entry(&root, &entry)?;
+                io::write_resource_entry(&root, &entry, asset_kind.resource_pointer_directory())?;
             }
             added_count += 1;
             println!("Added {}", mod_reference_for_entry(&entry));
@@ -1059,6 +1059,15 @@ impl AssetKind {
             Self::Other => "other",
         }
     }
+
+    fn resource_pointer_directory(self) -> &'static str {
+        match self {
+            Self::Shader => "shaderpacks",
+            Self::Resourcepack => "resourcepacks",
+            Self::Other => "resources",
+            Self::Mod => "mods",
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1066,4 +1075,22 @@ enum NavigationAction {
     Previous,
     Next,
     Cancel,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AssetKind;
+
+    #[test]
+    fn resource_pointer_directories_match_asset_type() {
+        assert_eq!(
+            AssetKind::Shader.resource_pointer_directory(),
+            "shaderpacks"
+        );
+        assert_eq!(
+            AssetKind::Resourcepack.resource_pointer_directory(),
+            "resourcepacks"
+        );
+        assert_eq!(AssetKind::Other.resource_pointer_directory(), "resources");
+    }
 }
