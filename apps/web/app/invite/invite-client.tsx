@@ -15,17 +15,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 interface InviteClientProps {
-  packId: string | null;
+  code: string | null;
   signedIn: boolean;
 }
 
-export default function InviteClient({ packId, signedIn }: InviteClientProps) {
+export default function InviteClient({ code, signedIn }: InviteClientProps) {
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!signedIn || !packId) {
+    if (!signedIn || !code) {
       return;
     }
 
@@ -34,7 +34,7 @@ export default function InviteClient({ packId, signedIn }: InviteClientProps) {
       const response = await fetch("/api/invites/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packId }),
+        body: JSON.stringify({ code }),
       });
       const data = await response.json();
 
@@ -44,22 +44,29 @@ export default function InviteClient({ packId, signedIn }: InviteClientProps) {
         return;
       }
 
-      router.push(`/dashboard/${packId}`);
+      const nextPackId = data?.packId?.toString();
+      if (!nextPackId) {
+        setError("Invite accepted, but destination pack was missing.");
+        setStatus("error");
+        return;
+      }
+
+      router.push(`/dashboard/${nextPackId}`);
     };
 
     acceptInvite().catch(() => {
       setError("Unable to accept invite.");
       setStatus("error");
     });
-  }, [packId, signedIn, router]);
+  }, [code, signedIn, router]);
 
-  if (!packId) {
+  if (!code) {
     return (
       <Card>
         <CardHeader>
           <Badge variant="secondary">Invite</Badge>
-          <CardTitle>Missing pack</CardTitle>
-          <CardDescription>Invite links require a pack id.</CardDescription>
+          <CardTitle>Missing invite code</CardTitle>
+          <CardDescription>Invite links require a code.</CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/dashboard">
@@ -71,7 +78,7 @@ export default function InviteClient({ packId, signedIn }: InviteClientProps) {
   }
 
   if (!signedIn) {
-    const redirect = encodeURIComponent(`/invite?pack=${packId}`);
+    const redirect = encodeURIComponent(`/invite?code=${code}`);
     return (
       <Card>
         <CardHeader>

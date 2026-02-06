@@ -1,4 +1,5 @@
 export type Role = "admin" | "creator" | "player";
+export type AccessLevel = "dev" | "beta" | "production" | "all";
 
 export interface Pack {
   id: string;
@@ -15,6 +16,7 @@ export interface Build {
   version: string;
   commitHash?: string | null;
   artifactKey: string;
+  artifactProvider?: "r2" | "vercel_blob" | null;
   createdAt?: string;
 }
 
@@ -31,9 +33,11 @@ export interface Invite {
   id: string;
   email?: string | null;
   code: string;
+  inviteUrl?: string;
   packId?: string | null;
   role: Role;
-  accessLevel: "dev" | "beta" | "production";
+  accessLevel: AccessLevel;
+  expiresAt?: string | null;
   usedAt?: string | null;
   createdAt?: string;
 }
@@ -63,7 +67,7 @@ export interface PackMember {
   name: string;
   email: string;
   role: Role;
-  accessLevel: "dev" | "beta" | "production";
+  accessLevel: AccessLevel;
   joinedAt?: string;
 }
 
@@ -72,6 +76,6 @@ export interface UserMembership {
   packName: string;
   packSlug: string;
   role: Role;
-  accessLevel: "dev" | "beta" | "production";
+  accessLevel: AccessLevel;
   joinedAt?: string;
 }

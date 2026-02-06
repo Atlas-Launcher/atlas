@@ -21,23 +21,26 @@ export async function GET(request: Request, { params }: RouteParams) {
   }
 
   const isAdmin = hasRole(session, ["admin"]);
-  if (!isAdmin) {
-    const [membership] = await db
-      .select({ userId: packMembers.userId })
-      .from(packMembers)
-      .where(
-        and(
-          eq(packMembers.packId, packId),
-          eq(packMembers.userId, session.user.id)
-        )
-      );
+  const [selfMembership] = await db
+    .select({
+      userId: packMembers.userId,
+      role: packMembers.role,
+      accessLevel: packMembers.accessLevel,
+      joinedAt: packMembers.createdAt,
+    })
+    .from(packMembers)
+    .where(
+      and(
+        eq(packMembers.packId, packId),
+        eq(packMembers.userId, session.user.id)
+      )
+    );
 
-    if (!membership) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  if (!isAdmin && !selfMembership) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const result = await db
+  const members = await db
     .select({
       userId: users.id,
       name: users.name,
@@ -51,5 +54,25 @@ export async function GET(request: Request, { params }: RouteParams) {
     .where(eq(packMembers.packId, packId))
     .orderBy(asc(users.name));
 
-  return NextResponse.json({ members: result });
+  const includesCurrentUser = members.some((member) => member.userId === session.user.id);
+  if (!includesCurrentUser) {
+    const fallbackRole =
+      session.user.role === "admin" ||
+      session.user.role === "creator" ||
+      session.user.role === "player"
+        ? session.user.role
+        : "player";
+    const fallbackAccess = fallbackRole === "player" ? "production" : "all";
+
+    members.push({
+      userId: session.user.id,
+      name: session.user.name ?? session.user.email ?? "You",
+      email: session.user.email ?? "",
+      role: selfMembership?.role ?? fallbackRole,
+      accessLevel: selfMembership?.accessLevel ?? fallbackAccess,
+      joinedAt: selfMembership?.joinedAt ?? new Date(),
+    });
+  }
+
+  return NextResponse.json({ members });
 }

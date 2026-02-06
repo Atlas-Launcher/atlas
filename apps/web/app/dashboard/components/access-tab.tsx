@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo, useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,7 +12,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import PackAccessDialog from "@/app/dashboard/components/pack-access-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -19,18 +28,29 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ApiKey, Invite, PackMember } from "@/app/dashboard/types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { AccessLevel, ApiKey, Invite, PackMember } from "@/app/dashboard/types";
+
+function accessLabel(level: AccessLevel) {
+  if (level === "all") {
+    return "Dev + Beta + Prod";
+  }
+  if (level === "dev") {
+    return "Dev + Prod";
+  }
+  if (level === "beta") {
+    return "Beta + Prod";
+  }
+  return "Prod only";
+}
 
 interface AccessTabProps {
   canManageInvites: boolean;
   invites: Invite[];
-  inviteEmail: string;
-  inviteRole: string;
-  inviteAccess: string;
-  onInviteEmailChange: (value: string) => void;
-  onInviteRoleChange: (value: string) => void;
-  onInviteAccessChange: (value: string) => void;
   onCreateInvite: () => void;
+  onDeleteInvite: (inviteId: string) => void;
+  inviteLinkModal: string | null;
+  onCloseInviteLinkModal: () => void;
   members: PackMember[];
   onRevokeMember: (userId: string) => void;
   canManageApiKeys: boolean;
@@ -40,20 +60,17 @@ interface AccessTabProps {
   onApiKeyLabelChange: (value: string) => void;
   onCreateApiKey: () => void;
   loading: boolean;
-  selectedPackId: string;
   currentUserId: string;
+  canManageMembers: boolean;
 }
 
 export default function AccessTab({
   canManageInvites,
   invites,
-  inviteEmail,
-  inviteRole,
-  inviteAccess,
-  onInviteEmailChange,
-  onInviteRoleChange,
-  onInviteAccessChange,
   onCreateInvite,
+  onDeleteInvite,
+  inviteLinkModal,
+  onCloseInviteLinkModal,
   members,
   onRevokeMember,
   canManageApiKeys,
@@ -63,120 +80,225 @@ export default function AccessTab({
   onApiKeyLabelChange,
   onCreateApiKey,
   loading,
-  selectedPackId,
   currentUserId,
+  canManageMembers,
 }: AccessTabProps) {
-  const inviteLink = `/invite?pack=${selectedPackId}`;
+  const sortedMembers = useMemo(
+    () => [...members].sort((a, b) => a.name.localeCompare(b.name)),
+    [members]
+  );
+  const [copied, setCopied] = useState(false);
+  const activeInvites = useMemo(
+    () => invites.filter((invite) => !invite.usedAt),
+    [invites]
+  );
 
+  const formatCreatedAt = (value?: string | null) => {
+    if (!value) {
+      return "—";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "—";
+    }
+    return date.toLocaleString();
+  };
+
+  const handleCopyInviteLink = async () => {
+    if (!inviteLinkModal) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(inviteLinkModal);
+    setCopied(true);
+  };
+
+  const handleModalOpenChange = (open: boolean) => {
+    if (!open) {
+      setCopied(false);
+      onCloseInviteLinkModal();
+    }
+  };
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      {canManageInvites ? (
+    <>
+      <Dialog open={Boolean(inviteLinkModal)} onOpenChange={handleModalOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite Link Ready</DialogTitle>
+            <DialogDescription>Copy and share this full invite URL.</DialogDescription>
+          </DialogHeader>
+          <Input readOnly value={inviteLinkModal ?? ""} />
+          <DialogFooter className="pt-2">
+            <Button onClick={handleCopyInviteLink}>{copied ? "Copied" : "Copy Link"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <div className="grid gap-6 md:grid-cols-2">
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Invite Ledger</CardTitle>
-            <CardDescription>Share access links with players or creators.</CardDescription>
+            <CardTitle>Access</CardTitle>
+            <CardDescription>Manage collaborators and pending invites.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Link</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Access</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invites.map((invite) => (
-                  <TableRow key={invite.id}>
-                    <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
-                      {invite.packId ? `/invite?pack=${invite.packId}` : "—"}
-                    </TableCell>
-                    <TableCell>{invite.role}</TableCell>
-                    <TableCell>{invite.accessLevel}</TableCell>
-                    <TableCell>
-                      {invite.usedAt ? (
-                        <Badge variant="outline">Used</Badge>
-                      ) : (
-                        <Badge variant="secondary">Active</Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {canManageInvites ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Access Controls</CardTitle>
-            <CardDescription>Invite teammates or revoke access.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
-              Share this link: <span className="font-semibold text-[var(--atlas-ink)]">{inviteLink}</span>
-            </div>
-            <PackAccessDialog
-              canManage={canManageInvites}
-              inviteEmail={inviteEmail}
-              inviteRole={inviteRole}
-              inviteAccess={inviteAccess}
-              onInviteEmailChange={onInviteEmailChange}
-              onInviteRoleChange={onInviteRoleChange}
-              onInviteAccessChange={onInviteAccessChange}
-              onCreateInvite={onCreateInvite}
-              members={members}
-              onRevokeMember={onRevokeMember}
-              loading={loading}
-              currentUserId={currentUserId}
-            />
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {canManageApiKeys ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Deploy API Keys</CardTitle>
-            <CardDescription>Used by CI to upload new builds.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {newApiKey ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                Copy this key now: {newApiKey}
+            <Tabs defaultValue="users">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <TabsList>
+                  <TabsTrigger value="users">Users</TabsTrigger>
+                  <TabsTrigger value="invites">Active Invites</TabsTrigger>
+                </TabsList>
+                {canManageInvites ? (
+                  <Button onClick={onCreateInvite} disabled={loading}>
+                    {loading ? "Creating..." : "Create Invite"}
+                  </Button>
+                ) : null}
               </div>
-            ) : null}
-            <Input
-              placeholder="Label (optional)"
-              value={apiKeyLabel}
-              onChange={(event) => onApiKeyLabelChange(event.target.value)}
-            />
-            <Button onClick={onCreateApiKey} disabled={loading || !selectedPackId}>
-              Generate Key
-            </Button>
-            <div className="space-y-2 text-xs text-[var(--atlas-ink-muted)]">
-              {apiKeyRecords.length ? (
-                apiKeyRecords.map((key) => (
-                  <div
-                    key={key.id}
-                    className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/60 px-3 py-2"
-                  >
-                    <span>{key.name || "Deploy key"}</span>
-                    <Badge variant={key.enabled ? "secondary" : "outline"}>
-                      {key.enabled ? "Active" : "Disabled"}
-                    </Badge>
-                  </div>
-                ))
-              ) : (
-                <span>No deploy keys yet.</span>
-              )}
-            </div>
+
+              <TabsContent value="users">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Access</TableHead>
+                      <TableHead className="w-[120px] text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedMembers.length ? (
+                      sortedMembers.map((member) => (
+                        <TableRow key={member.userId}>
+                          <TableCell className="font-medium">{member.name}</TableCell>
+                          <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
+                            {member.email}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{member.role}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{accessLabel(member.accessLevel)}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {canManageMembers && member.userId !== currentUserId ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onRevokeMember(member.userId)}
+                                disabled={loading}
+                              >
+                                Remove
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-[var(--atlas-ink-muted)]">
+                                {member.userId === currentUserId ? "You" : "—"}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-sm text-[var(--atlas-ink-muted)]">
+                          No users found for this pack.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TabsContent>
+
+              <TabsContent value="invites">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Link</TableHead>
+                      <TableHead>Created At</TableHead>
+                      <TableHead className="w-[120px] text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeInvites.length ? (
+                      activeInvites.map((invite) => (
+                        <TableRow key={invite.id}>
+                          <TableCell className="max-w-[680px] text-xs text-[var(--atlas-ink-muted)]">
+                            <span className="break-all">
+                              {invite.inviteUrl ?? `/invite?code=${invite.code}`}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
+                            {formatCreatedAt(invite.createdAt)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {canManageInvites ? (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => onDeleteInvite(invite.id)}
+                                disabled={loading}
+                              >
+                                Delete
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-[var(--atlas-ink-muted)]">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-sm text-[var(--atlas-ink-muted)]">
+                          No active invites.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
-      ) : null}
-    </div>
+
+        {canManageApiKeys ? (
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>Deploy API Keys</CardTitle>
+              <CardDescription>Used by CI to upload new builds.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {newApiKey ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                  Copy this key now: {newApiKey}
+                </div>
+              ) : null}
+              <Input
+                placeholder="Label (optional)"
+                value={apiKeyLabel}
+                onChange={(event) => onApiKeyLabelChange(event.target.value)}
+              />
+              <Button onClick={onCreateApiKey} disabled={loading}>
+                Generate Key
+              </Button>
+              <div className="space-y-2 text-xs text-[var(--atlas-ink-muted)]">
+                {apiKeyRecords.length ? (
+                  apiKeyRecords.map((key) => (
+                    <div
+                      key={key.id}
+                      className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/60 px-3 py-2"
+                    >
+                      <span>{key.name || "Deploy key"}</span>
+                      <Badge variant={key.enabled ? "secondary" : "outline"}>
+                        {key.enabled ? "Active" : "Disabled"}
+                      </Badge>
+                    </div>
+                  ))
+                ) : (
+                  <span>No deploy keys yet.</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+    </>
   );
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { builds, channels } from "@/lib/db/schema";
+import { decodeArtifactRef, isStorageProviderEnabled } from "@/lib/storage/harness";
 
 function getApiKey(request: Request) {
   const header = request.headers.get("authorization");
@@ -49,6 +50,16 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "buildId, artifactKey, and version are required" },
       { status: 400 }
+    );
+  }
+
+  const artifactRef = decodeArtifactRef(artifactKey);
+  if (!isStorageProviderEnabled(artifactRef.provider)) {
+    return NextResponse.json(
+      {
+        error: `Storage provider '${artifactRef.provider}' is not enabled for this deployment.`,
+      },
+      { status: 503 }
     );
   }
 
