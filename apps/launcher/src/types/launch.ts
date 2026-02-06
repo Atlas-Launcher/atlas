@@ -8,6 +8,11 @@ export interface LaunchEvent {
   percent?: number;
 }
 
+export interface LaunchLogEvent {
+  stream: string;
+  message: string;
+}
+
 export interface LaunchOptions {
   gameDir: string;
   javaPath?: string;

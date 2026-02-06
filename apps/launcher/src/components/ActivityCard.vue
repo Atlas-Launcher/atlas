@@ -19,10 +19,12 @@ const props = defineProps<{
       <CardDescription>{{ props.description }}</CardDescription>
     </CardHeader>
     <CardContent>
-      <ul class="space-y-2 text-sm text-muted-foreground">
-        <li v-for="(entry, index) in props.logs" :key="index">{{ entry }}</li>
-        <li v-if="props.logs.length === 0">Nothing to show yet.</li>
-      </ul>
+      <div class="max-h-56 overflow-y-auto pr-1">
+        <ul class="space-y-2 text-sm text-muted-foreground">
+          <li v-for="(entry, index) in props.logs" :key="index">{{ entry }}</li>
+          <li v-if="props.logs.length === 0">Nothing to show yet.</li>
+        </ul>
+      </div>
     </CardContent>
   </Card>
 </template>

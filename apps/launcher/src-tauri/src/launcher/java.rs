@@ -3,7 +3,10 @@ use crate::net::http::shared_client;
 use crate::paths::ensure_dir;
 use futures::stream::{self, StreamExt};
 use serde::Deserialize;
+use sha1::{Digest, Sha1};
 use std::collections::HashMap;
+use std::ffi::OsStr;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::download::{download_if_needed, DOWNLOAD_CONCURRENCY};
@@ -14,6 +17,7 @@ use crate::net::http::fetch_json;
 
 const JAVA_RUNTIME_MANIFEST_URL: &str =
   "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
+const RUNTIME_MANIFEST_MARKER_FILE: &str = "runtime_manifest_url.txt";
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct JavaRuntimeFiles {
@@ -36,6 +40,25 @@ pub(crate) struct JavaRuntimeFile {
 pub(crate) struct JavaRuntimeDownloads {
     #[serde(default)]
     pub raw: Option<super::manifest::Download>,
+}
+
+#[derive(Debug, Deserialize)]
+struct JavaRuntimeCatalogEntry {
+    #[serde(default)]
+    manifest: Option<JavaRuntimeCatalogManifest>,
+    #[serde(default)]
+    version: Option<JavaRuntimeCatalogVersion>,
+}
+
+#[derive(Debug, Deserialize)]
+struct JavaRuntimeCatalogManifest {
+    url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct JavaRuntimeCatalogVersion {
+    #[serde(default)]
+    name: Option<String>,
 }
 
 pub async fn resolve_java_path(
@@ -89,32 +112,49 @@ async fn ensure_java_runtime(
         )?;
     }
 
-    let entry_list = platform
-        .get(&chosen_component)
-        .and_then(|value| value.as_array())
-        .ok_or_else(|| "No Java runtime components available for this platform.".to_string())?;
-    let entry = entry_list
-        .iter()
-        .find_map(|value| value.as_object())
-        .ok_or_else(|| "No Java runtime entries available for this platform.".to_string())?;
+    let entry = select_runtime_entry(platform, &chosen_component)?;
     let manifest_url = entry
-        .get("manifest")
-        .and_then(|value| value.get("url"))
-        .and_then(|value| value.as_str())
+        .manifest
+        .as_ref()
+        .map(|manifest| manifest.url.trim())
+        .filter(|url| !url.is_empty())
         .ok_or_else(|| format!("Java runtime manifest url missing for {chosen_component}"))?;
+    let runtime_manifest: JavaRuntimeFiles = fetch_json(&client, manifest_url).await?;
+
+    let runtime_id = runtime_identifier(
+        entry
+            .version
+            .as_ref()
+            .and_then(|version| version.name.as_deref()),
+        manifest_url,
+    );
+    let runtime_base = resolve_runtimes_root(game_dir)
+        .join(os_key)
+        .join(&chosen_component)
+        .join(runtime_id);
+    let runtime_home = runtime_base.join(&chosen_component);
+    ensure_dir(&runtime_home)?;
+    let marker_path = runtime_base.join(RUNTIME_MANIFEST_MARKER_FILE);
+
+    let java_path = locate_java_binary(&runtime_home, &runtime_manifest);
+    if runtime_is_latest(&java_path, &marker_path, manifest_url) {
+        emit(
+            window,
+            "java",
+            format!("Using latest Java runtime ({chosen_component})"),
+            None,
+            None,
+        )?;
+        return Ok(java_path.to_string_lossy().to_string());
+    }
 
     emit(
         window,
         "java",
-        format!("Downloading Java runtime ({component})"),
+        format!("Downloading Java runtime ({chosen_component})"),
         None,
         None,
     )?;
-
-    let runtime_manifest: JavaRuntimeFiles = fetch_json(&client, manifest_url).await?;
-    let runtime_base = game_dir.join("runtime").join(component).join(os_key);
-    let runtime_home = runtime_base.join(component);
-    ensure_dir(&runtime_home)?;
 
     let mut downloads: Vec<(super::manifest::Download, PathBuf, bool)> = Vec::new();
     let mut links: Vec<(PathBuf, PathBuf)> = Vec::new();
@@ -189,8 +229,33 @@ async fn ensure_java_runtime(
                 .into(),
         );
     }
+    fs::write(&marker_path, manifest_url)
+        .map_err(|err| format!("Failed to write runtime marker: {err}"))?;
 
     Ok(java_path.to_string_lossy().to_string())
+}
+
+fn resolve_runtimes_root(game_dir: &Path) -> PathBuf {
+    if let Some(instances_dir) = game_dir
+        .ancestors()
+        .find(|path| path.file_name() == Some(OsStr::new("instances")))
+    {
+        if let Some(root) = instances_dir.parent() {
+            return root.join("runtimes");
+        }
+    }
+    game_dir.join("runtimes")
+}
+
+fn runtime_is_latest(java_path: &Path, marker_path: &Path, manifest_url: &str) -> bool {
+    if !java_path.exists() {
+        return false;
+    }
+    let marker = match fs::read_to_string(marker_path) {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
+    marker.trim() == manifest_url.trim()
 }
 
 fn runtime_os_key() -> Result<&'static str, String> {
@@ -259,6 +324,63 @@ pub(crate) fn select_java_component(
         .next()
         .cloned()
         .unwrap_or_else(|| desired.to_string())
+}
+
+fn select_runtime_entry(
+    platform: &serde_json::Map<String, serde_json::Value>,
+    component: &str,
+) -> Result<JavaRuntimeCatalogEntry, String> {
+    let entries = platform
+        .get(component)
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| "No Java runtime components available for this platform.".to_string())?;
+
+    for value in entries {
+        let Ok(entry) = serde_json::from_value::<JavaRuntimeCatalogEntry>(value.clone()) else {
+            continue;
+        };
+        if entry
+            .manifest
+            .as_ref()
+            .map(|manifest| !manifest.url.trim().is_empty())
+            .unwrap_or(false)
+        {
+            return Ok(entry);
+        }
+    }
+
+    Err("No Java runtime entries available for this platform.".to_string())
+}
+
+fn runtime_identifier(version_name: Option<&str>, manifest_url: &str) -> String {
+    let mut sanitized = String::new();
+    for ch in version_name
+        .unwrap_or("runtime")
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+    {
+        if ch.is_ascii_alphanumeric() {
+            sanitized.push(ch);
+            continue;
+        }
+        if ch == '.' || ch == '_' || ch == '-' {
+            sanitized.push('-');
+        }
+    }
+    while sanitized.contains("--") {
+        sanitized = sanitized.replace("--", "-");
+    }
+    sanitized = sanitized.trim_matches('-').to_string();
+    if sanitized.is_empty() {
+        sanitized = "runtime".to_string();
+    }
+
+    let mut hasher = Sha1::new();
+    hasher.update(manifest_url.as_bytes());
+    let digest = hex::encode(hasher.finalize());
+    let hash = &digest[..12];
+    format!("{sanitized}-{hash}")
 }
 
 pub(crate) fn locate_java_binary(runtime_home: &Path, manifest: &JavaRuntimeFiles) -> PathBuf {

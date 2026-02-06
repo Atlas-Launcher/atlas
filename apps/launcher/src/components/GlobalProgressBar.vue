@@ -6,6 +6,7 @@ import type { ActiveTask } from "@/lib/useStatus";
 
 const props = defineProps<{
   tasks: ActiveTask[];
+  packName?: string | null;
 }>();
 
 const activeTasks = computed(() => {
@@ -22,6 +23,14 @@ const secondaryTasks = computed(() => activeTasks.value.slice(1, 4));
 const hiddenSecondaryCount = computed(() => {
   return Math.max(0, activeTasks.value.length - 1 - secondaryTasks.value.length);
 });
+const primaryTaskHeadline = computed(() => {
+  if (!primaryTask.value) {
+    return "Working";
+  }
+  const verb = primaryTask.value.phase.toLowerCase() === "launch" ? "Launching" : "Installing";
+  const packName = props.packName?.trim() || "pack";
+  return `${verb} ${packName}`;
+});
 
 </script>
 
@@ -34,7 +43,7 @@ const hiddenSecondaryCount = computed(() => {
             <div>
               <div class="text-xs uppercase tracking-widest text-muted-foreground">Active tasks</div>
               <div class="text-sm font-semibold text-foreground">
-                {{ primaryTask?.message ?? "Working" }}
+                {{ primaryTaskHeadline }}
               </div>
             </div>
             <div v-if="hasMultipleTasks" class="text-xs text-muted-foreground">
@@ -52,7 +61,10 @@ const hiddenSecondaryCount = computed(() => {
               :style="{ width: `${primaryPercent}%` }"
             />
           </div>
-          <div v-if="hasMultipleTasks" class="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <div v-if="primaryTask" class="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span class="rounded-full border border-border/60 bg-card/70 px-2 py-1">
+              {{ primaryTask.message }}
+            </span>
             <span
               v-for="task in secondaryTasks"
               :key="task.id"

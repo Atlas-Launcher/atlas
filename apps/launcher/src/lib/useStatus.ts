@@ -19,7 +19,7 @@ export function useStatus() {
   const ACTIVE_LAUNCH_TASK_STALE_MS = 300000;
 
   function pushLog(entry: string) {
-    logs.value = [entry, ...logs.value].slice(0, 8);
+    logs.value = [entry, ...logs.value].slice(0, 200);
   }
 
   function setStatus(message: string) {
@@ -106,14 +106,13 @@ export function useStatus() {
     }
 
     const doneMessage = event.message.toLowerCase();
-    if (
-      percent >= 100 ||
-      doneMessage.includes("ready") ||
-      doneMessage.includes("started") ||
-      doneMessage.includes("complete") ||
-      doneMessage.includes("failed") ||
-      doneMessage.includes("error")
-    ) {
+    const isLaunchPhase = event.phase.toLowerCase() === "launch";
+    const isLaunchComplete = isLaunchPhase && percent >= 100;
+    const isFailure = doneMessage.includes("failed") || doneMessage.includes("error");
+    const isNonLaunchComplete =
+      !isLaunchPhase && (doneMessage.includes("ready") || doneMessage.includes("complete"));
+
+    if (isLaunchComplete || isFailure || isNonLaunchComplete) {
       tasks.value = tasks.value.filter((task) => task.id !== id);
     }
 

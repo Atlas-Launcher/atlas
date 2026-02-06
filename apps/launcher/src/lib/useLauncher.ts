@@ -70,10 +70,10 @@ export function useLauncher({
       return;
     }
     setProgress(0);
+    setStatus("Launching Minecraft...");
     await run(async () => {
       try {
         await invoke("launch_minecraft", { options });
-        setStatus("Minecraft launched.");
       } catch (err) {
         setStatus(`Launch failed: ${String(err)}`);
       }

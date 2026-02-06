@@ -93,11 +93,11 @@ const TASKS_PANEL_AUTO_MINIMIZE_MS = 5000;
 let tasksPanelAutoMinimizeTimer: ReturnType<typeof setTimeout> | null = null;
 
 const modsDir = computed(() => {
-  const base = resolveInstanceGameDir(activeInstance.value) || defaultGameDir.value || "";
+  const base = resolveInstanceGameDir(activeInstance.value);
   if (!base) {
     return "";
   }
-  return `${base.replace(/[\\/]+$/, "")}/mods`;
+  return `${base.replace(/[\\/]+$/, "")}/.minecraft/mods`;
 });
 
 function openInstance(id: string) {
@@ -159,7 +159,7 @@ function resolveInstanceGameDir(instance: InstanceConfig | null): string {
     return base;
   }
   const channel = resolveAtlasChannel(instance.atlasPack?.channel);
-  return `${base}/channels/${channel}`;
+  return `${base}/${channel}`;
 }
 
 function normalizeVersion(value: string | null | undefined): string {
@@ -414,7 +414,7 @@ async function uninstallInstanceData() {
   await runTask("Uninstalling profile files", async () => {
     try {
       await invoke("uninstall_instance_data", {
-        gameDir: instance.gameDir ?? ""
+        gameDir: resolveInstanceGameDir(instance)
       });
       await loadInstalledVersions();
       await refreshInstanceInstallStates();
@@ -685,6 +685,10 @@ onBeforeUnmount(() => {
         </main>
       </div>
     </div>
-    <GlobalProgressBar v-if="tasks.length > 0 && tasksPanelOpen" :tasks="tasks" />
+    <GlobalProgressBar
+      v-if="tasks.length > 0 && tasksPanelOpen"
+      :tasks="tasks"
+      :pack-name="activeInstance?.name ?? null"
+    />
   </div>
 </template>

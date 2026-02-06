@@ -7,7 +7,7 @@ pub(crate) mod loaders;
 pub(crate) mod manifest;
 mod versions;
 
-use crate::models::{AuthSession, LaunchEvent, LaunchOptions};
+use crate::models::{AuthSession, LaunchEvent, LaunchOptions, ModLoaderKind};
 use crate::net::http::{fetch_json, shared_client};
 use crate::paths::{ensure_dir, file_exists, normalize_path};
 use download::{download_if_needed, download_raw, DOWNLOAD_CONCURRENCY};
@@ -16,13 +16,22 @@ use futures::stream::{self, StreamExt};
 use java::resolve_java_path;
 use libraries::{build_classpath, extract_natives, sync_libraries};
 use manifest::{AssetIndexData, Download, VersionManifest, VERSION_MANIFEST_URL};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{Emitter, Window};
 
+const WINDOW_DETECTION_TIMEOUT: Duration = Duration::from_secs(120);
+type LaunchLogSink = Arc<Mutex<std::fs::File>>;
+
 struct PreparedMinecraft {
+    instance_dir: PathBuf,
     game_dir: PathBuf,
     assets_dir: PathBuf,
     version_data: manifest::VersionData,
@@ -38,6 +47,7 @@ pub async fn launch_minecraft(
     session: &AuthSession,
 ) -> Result<(), LauncherError> {
     let prepared = prepare_minecraft(window, options).await?;
+    let instance_dir = prepared.instance_dir;
     let game_dir = prepared.game_dir;
     let assets_dir = prepared.assets_dir;
     let version_data = prepared.version_data;
@@ -95,15 +105,75 @@ pub async fn launch_minecraft(
     let mut command = Command::new(java_path);
     command
         .current_dir(&game_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .args(&jvm_args)
         .arg(&version_data.main_class)
         .args(&game_args);
 
-    command
+    let mut child = command
         .spawn()
         .map_err(|err| format!("Failed to launch Minecraft: {err}"))?;
 
-    emit(window, "launch", "Minecraft process started", None, None)?;
+    let window_visible = Arc::new(AtomicBool::new(false));
+    let launch_terminal = Arc::new(AtomicBool::new(false));
+    let launch_log_sink = init_launch_log_sink(&instance_dir);
+    if launch_log_sink.is_none() {
+        let _ = emit_log(
+            window,
+            "system",
+            "Failed to initialize latest_launch.log; continuing without file logging.",
+        );
+    } else {
+        append_launch_log(
+            &launch_log_sink,
+            "system",
+            "Launch started. Streaming Minecraft logs.",
+        );
+    }
+
+    if let Some(stdout) = child.stdout.take() {
+        spawn_minecraft_log_forwarder(
+            window.clone(),
+            stdout,
+            "stdout",
+            window_visible.clone(),
+            launch_terminal.clone(),
+            launch_log_sink.clone(),
+        );
+    }
+    if let Some(stderr) = child.stderr.take() {
+        spawn_minecraft_log_forwarder(
+            window.clone(),
+            stderr,
+            "stderr",
+            window_visible.clone(),
+            launch_terminal.clone(),
+            launch_log_sink.clone(),
+        );
+    }
+
+    spawn_minecraft_process_watcher(
+        window.clone(),
+        child,
+        window_visible.clone(),
+        launch_terminal.clone(),
+        launch_log_sink.clone(),
+    );
+    spawn_window_visible_timeout_failure(
+        window.clone(),
+        window_visible,
+        launch_terminal,
+        launch_log_sink,
+    );
+
+    emit(
+        window,
+        "launch",
+        "Minecraft process started; waiting for game window",
+        None,
+        None,
+    )?;
     Ok(())
 }
 
@@ -121,7 +191,10 @@ async fn prepare_minecraft(
     options: &LaunchOptions,
 ) -> Result<PreparedMinecraft, LauncherError> {
     let client = shared_client().clone();
-    let game_dir = normalize_path(&options.game_dir);
+    let instance_dir = normalize_path(&options.game_dir);
+    ensure_dir(&instance_dir)?;
+    let game_dir = instance_dir.join(".minecraft");
+    ensure_dir(&game_dir)?;
     let versions_dir = game_dir.join("versions");
     let libraries_dir = game_dir.join("libraries");
     let assets_dir = game_dir.join("assets");
@@ -135,6 +208,9 @@ async fn prepare_minecraft(
 
     let version_data =
         versions::resolve_version_data(window, &client, &manifest, options, &game_dir).await?;
+    let java_path =
+        resolve_java_path(window, &instance_dir, &version_data, &options.java_path).await?;
+
     let version_folder = versions_dir.join(&version_data.id);
     ensure_dir(&version_folder)?;
 
@@ -239,9 +315,48 @@ async fn prepare_minecraft(
         }
     }
 
-    let java_path = resolve_java_path(window, &game_dir, &version_data, &options.java_path).await?;
+    if matches!(options.loader.kind, ModLoaderKind::Fabric) {
+        let minecraft_version = options
+            .version
+            .clone()
+            .unwrap_or_else(|| manifest.latest.release.clone());
+        emit(
+            window,
+            "setup",
+            format!("Installing Fabric loader ({minecraft_version})"),
+            None,
+            None,
+        )?;
+        loaders::fabric::ensure_installed(
+            window,
+            &game_dir,
+            &minecraft_version,
+            options.loader.loader_version.clone(),
+            &java_path,
+        )
+        .await?;
+    }
+
+    if matches!(options.loader.kind, ModLoaderKind::NeoForge) {
+        let loader_version = options
+            .loader
+            .loader_version
+            .clone()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "NeoForge loader version is required.".to_string())?;
+        emit(
+            window,
+            "setup",
+            format!("Installing NeoForge loader ({loader_version})"),
+            None,
+            None,
+        )?;
+        loaders::neoforge::ensure_installed(window, &game_dir, &loader_version, &java_path).await?;
+    }
 
     Ok(PreparedMinecraft {
+        instance_dir,
         game_dir,
         assets_dir,
         version_data,
@@ -259,6 +374,17 @@ pub(crate) fn emit(
     current: Option<u64>,
     total: Option<u64>,
 ) -> Result<(), LauncherError> {
+    emit_with_percent(window, phase, message, current, total, None)
+}
+
+fn emit_with_percent(
+    window: &Window,
+    phase: &str,
+    message: impl Into<String>,
+    current: Option<u64>,
+    total: Option<u64>,
+    percent: Option<u64>,
+) -> Result<(), LauncherError> {
     window
         .emit(
             "launch://status",
@@ -267,10 +393,177 @@ pub(crate) fn emit(
                 message: message.into(),
                 current,
                 total,
-                percent: None,
+                percent,
             },
         )
         .map_err(|err| format!("Emit failed: {err}").into())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LaunchLogEvent {
+    stream: String,
+    message: String,
+}
+
+fn emit_log(
+    window: &Window,
+    stream: &str,
+    message: impl Into<String>,
+) -> Result<(), LauncherError> {
+    window
+        .emit(
+            "launch://log",
+            LaunchLogEvent {
+                stream: stream.to_string(),
+                message: message.into(),
+            },
+        )
+        .map_err(|err| format!("Emit failed: {err}").into())
+}
+
+fn init_launch_log_sink(game_dir: &std::path::Path) -> Option<LaunchLogSink> {
+    let path = game_dir.join("latest_launch.log");
+    if let Some(parent) = path.parent() {
+        if ensure_dir(parent).is_err() {
+            return None;
+        }
+    }
+
+    match std::fs::File::create(path) {
+        Ok(file) => Some(Arc::new(Mutex::new(file))),
+        Err(_) => None,
+    }
+}
+
+fn append_launch_log(log_sink: &Option<LaunchLogSink>, stream: &str, message: &str) {
+    let Some(log_sink) = log_sink else {
+        return;
+    };
+
+    let mut file = match log_sink.lock() {
+        Ok(handle) => handle,
+        Err(_) => return,
+    };
+    let _ = writeln!(file, "[{stream}] {message}");
+    let _ = file.flush();
+}
+
+fn spawn_minecraft_log_forwarder<R: Read + Send + 'static>(
+    window: Window,
+    reader: R,
+    stream: &'static str,
+    window_visible: Arc<AtomicBool>,
+    launch_terminal: Arc<AtomicBool>,
+    launch_log_sink: Option<LaunchLogSink>,
+) {
+    std::thread::spawn(move || {
+        let buffered = BufReader::new(reader);
+        for line in buffered.lines() {
+            let line = match line {
+                Ok(value) => value,
+                Err(err) => {
+                    let message = format!("Minecraft {stream} read error: {err}");
+                    let _ = emit_log(&window, "system", message.clone());
+                    append_launch_log(&launch_log_sink, "system", &message);
+                    break;
+                }
+            };
+            if line.trim().is_empty() {
+                continue;
+            }
+            let _ = emit_log(&window, stream, line.clone());
+            append_launch_log(&launch_log_sink, stream, &line);
+            if indicates_window_visible(&line) && !window_visible.swap(true, Ordering::SeqCst) {
+                if !launch_terminal.swap(true, Ordering::SeqCst) {
+                    let _ = emit_with_percent(
+                        &window,
+                        "launch",
+                        "Minecraft window is on-screen",
+                        None,
+                        None,
+                        Some(100),
+                    );
+                }
+            }
+        }
+    });
+}
+
+fn spawn_minecraft_process_watcher(
+    window: Window,
+    mut child: std::process::Child,
+    window_visible: Arc<AtomicBool>,
+    launch_terminal: Arc<AtomicBool>,
+    launch_log_sink: Option<LaunchLogSink>,
+) {
+    std::thread::spawn(move || match child.wait() {
+        Ok(status) => {
+            let status_line = if let Some(code) = status.code() {
+                format!("Minecraft process exited with code {code}.")
+            } else {
+                "Minecraft process exited.".to_string()
+            };
+            let _ = emit_log(&window, "system", status_line.clone());
+            append_launch_log(&launch_log_sink, "system", &status_line);
+
+            if !window_visible.load(Ordering::SeqCst)
+                && !launch_terminal.swap(true, Ordering::SeqCst)
+            {
+                let message = format!("Launch failed: {status_line}");
+                let _ =
+                    emit_with_percent(&window, "launch", message.clone(), None, None, Some(100));
+                append_launch_log(&launch_log_sink, "system", &message);
+            }
+        }
+        Err(err) => {
+            let message = format!("Failed to monitor Minecraft process: {err}");
+            let _ = emit_log(&window, "system", message.clone());
+            append_launch_log(&launch_log_sink, "system", &message);
+            if !window_visible.load(Ordering::SeqCst)
+                && !launch_terminal.swap(true, Ordering::SeqCst)
+            {
+                let launch_message = format!("Launch failed: {message}");
+                let _ = emit_with_percent(
+                    &window,
+                    "launch",
+                    launch_message.clone(),
+                    None,
+                    None,
+                    Some(100),
+                );
+                append_launch_log(&launch_log_sink, "system", &launch_message);
+            }
+        }
+    });
+}
+
+fn spawn_window_visible_timeout_failure(
+    window: Window,
+    window_visible: Arc<AtomicBool>,
+    launch_terminal: Arc<AtomicBool>,
+    launch_log_sink: Option<LaunchLogSink>,
+) {
+    std::thread::spawn(move || {
+        std::thread::sleep(WINDOW_DETECTION_TIMEOUT);
+        if !window_visible.load(Ordering::SeqCst) && !launch_terminal.swap(true, Ordering::SeqCst) {
+            let message = format!(
+                "Launch failed: Minecraft window was not detected within {} seconds.",
+                WINDOW_DETECTION_TIMEOUT.as_secs()
+            );
+            let _ = emit_log(&window, "system", message.clone());
+            append_launch_log(&launch_log_sink, "system", &message);
+            let _ = emit_with_percent(&window, "launch", message, None, None, Some(100));
+        }
+    });
+}
+
+fn indicates_window_visible(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    lower.contains("render thread")
+        || (lower.contains("window") && lower.contains("created"))
+        || (lower.contains("display")
+            && (lower.contains("initialized") || lower.contains("created")))
 }
 
 #[cfg(test)]
