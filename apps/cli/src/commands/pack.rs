@@ -1,4 +1,5 @@
 use std::collections::{HashSet, VecDeque};
+use std::fs;
 use std::io::{self as stdio, IsTerminal};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -20,6 +21,7 @@ const SEARCH_PAGE_SIZE: usize = 5;
 pub enum PackCommand {
     Init(init::InitArgs),
     Reinit(init::ReinitArgs),
+    Channel(ChannelArgs),
     Build(BuildArgs),
     Add(AddArgs),
     #[command(alias = "remove")]
@@ -43,6 +45,14 @@ pub struct BuildArgs {
     output: PathBuf,
     #[arg(long, default_value_t = protocol::DEFAULT_ZSTD_LEVEL)]
     zstd_level: i32,
+}
+
+#[derive(Args)]
+pub struct ChannelArgs {
+    #[arg(long, default_value = ".")]
+    input: PathBuf,
+    #[arg(value_name = "CHANNEL", value_parser = ["dev", "beta", "production"])]
+    channel: String,
 }
 
 #[derive(Args)]
@@ -107,6 +117,7 @@ pub fn run(command: PackCommand) -> Result<()> {
     match command {
         PackCommand::Init(args) => init::run_init(args),
         PackCommand::Reinit(args) => init::run_reinit(args),
+        PackCommand::Channel(args) => set_channel(args),
         PackCommand::Build(args) => build(args),
         PackCommand::Add(args) => add(args),
         PackCommand::Rm(args) => rm(args),
@@ -116,6 +127,35 @@ pub fn run(command: PackCommand) -> Result<()> {
         PackCommand::Commit(args) => commit(args),
         PackCommand::Validate(args) => validate(args),
     }
+}
+
+fn set_channel(args: ChannelArgs) -> Result<()> {
+    let root = args
+        .input
+        .canonicalize()
+        .context("Failed to resolve input path")?;
+    let atlas_path = root.join("atlas.toml");
+    if !atlas_path.exists() {
+        bail!("atlas.toml not found at {}", atlas_path.display());
+    }
+
+    let config_text = io::read_to_string(&atlas_path)?;
+    let mut config = protocol::config::atlas::parse_config(&config_text)
+        .map_err(|_| anyhow::anyhow!("atlas.toml is invalid"))?;
+
+    let cli = config.cli.get_or_insert_with(Default::default);
+    cli.default_channel = Some(args.channel.clone());
+
+    let contents = toml::to_string(&config).context("Failed to serialize atlas config")?;
+    fs::write(&atlas_path, format!("{contents}\n"))
+        .with_context(|| format!("Failed to write {}", atlas_path.display()))?;
+
+    println!(
+        "Set cli.default_channel={} in {}",
+        args.channel,
+        atlas_path.display()
+    );
+    Ok(())
 }
 
 fn build(args: BuildArgs) -> Result<()> {
