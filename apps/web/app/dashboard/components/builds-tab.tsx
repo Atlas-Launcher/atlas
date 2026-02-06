@@ -52,8 +52,8 @@ export default function BuildsTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Version</TableHead>
               <TableHead>Commit</TableHead>
+              <TableHead>Version</TableHead>
               <TableHead>Deployed</TableHead>
               <TableHead>Live Channels</TableHead>
               <TableHead className="w-[340px]">Actions</TableHead>
@@ -68,14 +68,6 @@ export default function BuildsTab({
 
                 return (
                   <TableRow key={build.id}>
-                    <TableCell className="font-semibold">
-                      <div>{build.version}</div>
-                      {runtimeMetadata ? (
-                        <div className="mt-1 text-xs font-normal text-[var(--atlas-ink-muted)]">
-                          {runtimeMetadata}
-                        </div>
-                      ) : null}
-                    </TableCell>
                     <TableCell>
                       {build.commitHash ? (
                         <div className="space-y-1">
@@ -103,6 +95,14 @@ export default function BuildsTab({
                       ) : (
                         "-"
                       )}
+                    </TableCell>
+                    <TableCell className="font-semibold">
+                      {runtimeMetadata ? <div>{runtimeMetadata}</div> : <div>-</div>}
+                      {displayVersionLabel(build) ? (
+                        <div className="mt-1 text-xs font-normal text-[var(--atlas-ink-muted)]">
+                          {displayVersionLabel(build)}
+                        </div>
+                      ) : null}
                     </TableCell>
                     <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
                       {formatDeployDate(build.createdAt)}
@@ -204,6 +204,18 @@ function formatRuntimeMetadata(build: Build): string | null {
     return `MC ${mc}`;
   }
   return loaderText;
+}
+
+function displayVersionLabel(build: Build): string | null {
+  const raw = build.version?.trim();
+  if (!raw || isCommitLike(raw)) {
+    return null;
+  }
+  return raw;
+}
+
+function isCommitLike(value: string): boolean {
+  return /^[0-9a-f]{7,40}$/i.test(value);
 }
 
 function formatDeployDate(value?: string): string {
