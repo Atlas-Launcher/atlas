@@ -30,13 +30,8 @@ pub fn insert_file(files: &mut BTreeMap<String, Vec<u8>>, root: &Path, name: &st
     Ok(())
 }
 
-pub fn insert_config_dir(files: &mut BTreeMap<String, Vec<u8>>, root: &Path) -> Result<()> {
-    let config_dir = root.join("config");
-    if !config_dir.exists() {
-        return Ok(());
-    }
-
-    for entry in WalkDir::new(&config_dir)
+pub fn insert_repo_text_files(files: &mut BTreeMap<String, Vec<u8>>, root: &Path) -> Result<()> {
+    for entry in WalkDir::new(root)
         .follow_links(false)
         .into_iter()
         .filter_map(Result::ok)
@@ -45,37 +40,99 @@ pub fn insert_config_dir(files: &mut BTreeMap<String, Vec<u8>>, root: &Path) -> 
         let path = entry.path();
         let rel = path
             .strip_prefix(root)
-            .context("Failed to compute config relative path")?;
+            .context("Failed to compute repo relative path")?;
         let rel_str = rel.to_string_lossy().replace('\\', "/");
-        let bytes = fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
-        files.insert(rel_str, bytes);
-    }
+        if is_excluded_path(&rel_str) {
+            continue;
+        }
 
+        let bytes = fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
+        if std::str::from_utf8(&bytes).is_ok() {
+            files.insert(rel_str, bytes);
+        }
+    }
     Ok(())
 }
 
 pub fn write_mod_entry(root: &Path, entry: &protocol::config::mods::ModEntry) -> Result<()> {
-    let mods_dir = root.join("mods");
-    fs::create_dir_all(&mods_dir).context("Failed to create mods directory")?;
-    let slug = slugify_mod_name(
-        entry
-            .metadata
-            .as_ref()
-            .map(|metadata| metadata.name.as_str())
-            .unwrap_or(""),
-    );
-    let file_name = if slug.is_empty() {
-        format!("{}.mod.toml", entry.project_id)
+    write_pointer_entry(root, entry, "mods", ".mod.toml")
+}
+
+pub fn write_resource_entry(root: &Path, entry: &protocol::config::mods::ModEntry) -> Result<()> {
+    write_pointer_entry(root, entry, "resources", ".res.toml")
+}
+
+fn write_pointer_entry(
+    root: &Path,
+    entry: &protocol::config::mods::ModEntry,
+    directory: &str,
+    extension: &str,
+) -> Result<()> {
+    let out_dir = root.join(directory);
+    fs::create_dir_all(&out_dir).context("Failed to create pointer directory")?;
+    let name_slug = slugify_mod_name(entry.metadata.name.as_str());
+    let version_slug = short_version_slug(entry);
+    let base = if name_slug.is_empty() {
+        version_slug
     } else {
-        format!("{}-{}.mod.toml", slug, entry.project_id)
+        format!("{}-{}", name_slug, version_slug)
     };
-    let file_path = mods_dir.join(file_name);
+    let file_path = unique_pointer_entry_path(&out_dir, &base, extension);
     let content = entry
         .to_toml_string()
         .context("Failed to serialize mod entry")?;
     fs::write(&file_path, content)
         .with_context(|| format!("Failed to write {}", file_path.display()))?;
     Ok(())
+}
+
+fn unique_pointer_entry_path(directory: &Path, base: &str, extension: &str) -> PathBuf {
+    let normalized = if base.trim().is_empty() {
+        "mod"
+    } else {
+        base.trim()
+    };
+    let candidate = directory.join(format!("{}{}", normalized, extension));
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    let mut index = 2usize;
+    loop {
+        let next = directory.join(format!("{}-{}{}", normalized, index, extension));
+        if !next.exists() {
+            return next;
+        }
+        index += 1;
+    }
+}
+
+fn short_version_slug(entry: &protocol::config::mods::ModEntry) -> String {
+    let from_version = entry
+        .download
+        .version
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .map(|ch| ch.to_ascii_lowercase())
+        .take(3)
+        .collect::<String>();
+    if !from_version.is_empty() {
+        return from_version;
+    }
+
+    let from_project = entry
+        .download
+        .project_id
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .map(|ch| ch.to_ascii_lowercase())
+        .take(3)
+        .collect::<String>();
+    if !from_project.is_empty() {
+        return from_project;
+    }
+
+    "mod".to_string()
 }
 
 fn slugify_mod_name(value: &str) -> String {
@@ -97,4 +154,13 @@ fn slugify_mod_name(value: &str) -> String {
     }
 
     slug.trim_matches('-').to_string()
+}
+
+fn is_excluded_path(rel: &str) -> bool {
+    let lower = rel.to_ascii_lowercase();
+    lower.starts_with(".git/")
+        || lower.starts_with("target/")
+        || lower.starts_with("node_modules/")
+        || lower.starts_with(".next/")
+        || lower.starts_with("dist/")
 }

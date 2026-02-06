@@ -378,10 +378,9 @@ fn write_atlas_config(path: &Path, config: &AtlasConfig) -> Result<()> {
 
 fn ensure_seed_files(root: &Path) -> Result<()> {
     let mods_toml = root.join("mods.toml");
-    if !mods_toml.exists() {
-        let starter = "# Add mod entries with `atlas pack add`.\n";
-        fs::write(&mods_toml, starter)
-            .with_context(|| format!("Failed to write {}", mods_toml.display()))?;
+    if mods_toml.exists() {
+        fs::remove_file(&mods_toml)
+            .with_context(|| format!("Failed to remove deprecated {}", mods_toml.display()))?;
     }
 
     let mods_dir = root.join("mods");
