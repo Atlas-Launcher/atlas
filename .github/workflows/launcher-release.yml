@@ -24,11 +24,6 @@ jobs:
           lfs: true
           fetch-depth: 0
 
-      - name: Pull LFS objects explicitly
-        run: |
-          git lfs pull
-          git lfs checkout
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -68,64 +63,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify pnpm
-        run: pnpm --version
-
-      - name: Verify icon assets
-        shell: bash
-        run: |
-          ls -lah apps/launcher/src-tauri/icons
-          test -f apps/launcher/src-tauri/icons/icon.ico
-          test -f apps/launcher/src-tauri/icons/icon.icns
-          test -f apps/launcher/src-tauri/icons/icon.png
-
-      - name: Prepare updater signing key
-        shell: bash
-        env:
-          RAW_TAURI_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          if [ -z "$RAW_TAURI_KEY" ]; then
-            echo "::error::Missing TAURI_SIGNING_PRIVATE_KEY repository secret."
-            exit 1
-          fi
-          TAURI_KEY_BASE64="$(node <<'NODE'
-          let raw = process.env.RAW_TAURI_KEY || "";
-          raw = raw.replace(/\r/g, "").trim();
-          if (!raw) {
-            process.exit(2);
-          }
-
-          // Handle secrets pasted with literal \n escapes.
-          if (!raw.includes("\n") && raw.includes("\\n")) {
-            raw = raw.replace(/\\n/g, "\n");
-          }
-
-          let keyBase64;
-          if (raw.includes("untrusted comment")) {
-            // Plain minisign key text -> encode for TAURI_SIGNING_PRIVATE_KEY.
-            keyBase64 = Buffer.from(raw, "utf8").toString("base64");
-          } else {
-            // Already base64: remove whitespace and use as-is.
-            keyBase64 = raw.replace(/\s+/g, "");
-          }
-
-          if (!/^[A-Za-z0-9+/=]+$/.test(keyBase64)) {
-            process.exit(3);
-          }
-          process.stdout.write(keyBase64);
-          NODE
-          )"
-          {
-            echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_KEY_BASE64"
-            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD="
-          } >> "$GITHUB_ENV"
-
       - name: Build and upload launcher bundles
         uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/launcher
           tauriScript: pnpm tauri
