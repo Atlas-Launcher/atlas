@@ -184,12 +184,13 @@ pub async fn sync_atlas_pack(
     {
         Ok(result) => Ok(result),
         Err(err) => {
+            let error_text = err.to_string();
             telemetry::error(format!(
                 "atlas pack sync failed pack_id={} game_dir={} channel={}: {}",
                 pack_id,
                 game_dir,
                 channel.as_deref().unwrap_or("-"),
-                err
+                error_text
             ));
             let _ = window.emit(
                 "launch://status",
@@ -201,7 +202,7 @@ pub async fn sync_atlas_pack(
                     percent: Some(100),
                 },
             );
-            Err("Failed to update this Atlas profile. See launcher.log for details.".to_string())
+            Err(error_text)
         }
     }
 }

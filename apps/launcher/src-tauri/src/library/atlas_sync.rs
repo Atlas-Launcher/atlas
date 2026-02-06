@@ -76,13 +76,15 @@ pub async fn sync_atlas_pack(
     channel: Option<&str>,
     game_dir: &str,
 ) -> Result<AtlasPackSyncResult, LibraryError> {
+    let requested_channel = normalize_channel(channel);
     let game_dir = normalize_path(game_dir);
     ensure_dir(&game_dir)?;
     let minecraft_dir = game_dir.join(".minecraft");
     ensure_dir(&minecraft_dir)?;
     emit_sync(window, "Checking for pack updates", None, None)?;
 
-    let artifact = fetch_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
+    let artifact =
+        fetch_artifact_download(atlas_hub_url, access_token, pack_id, requested_channel).await?;
     telemetry::info(format!(
         "sync start pack_id={} channel={} build_id={}",
         artifact.pack_id,
@@ -238,23 +240,37 @@ async fn fetch_artifact_download(
     atlas_hub_url: &str,
     access_token: &str,
     pack_id: &str,
-    channel: Option<&str>,
+    requested_channel: &str,
 ) -> Result<ArtifactResponse, LibraryError> {
     let mut artifact =
-        request_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
+        request_artifact_download(atlas_hub_url, access_token, pack_id, requested_channel).await?;
+    if requested_channel == "production" && artifact.channel.trim().to_lowercase() != "production" {
+        return Err(
+            "No active Production build is available for this pack. Promote a build to Production before installing or launching."
+                .to_string()
+                .into(),
+        );
+    }
     if artifact.has_missing_runtime_metadata() {
         telemetry::warn(format!(
             "artifact metadata missing runtime fields; retrying pack_id={} channel={}",
-            pack_id,
-            channel.unwrap_or("production")
+            pack_id, requested_channel
         ));
         let retry =
-            request_artifact_download(atlas_hub_url, access_token, pack_id, channel).await?;
+            request_artifact_download(atlas_hub_url, access_token, pack_id, requested_channel)
+                .await?;
         artifact.minecraft_version =
             first_non_blank(artifact.minecraft_version, retry.minecraft_version);
         artifact.modloader = first_non_blank(artifact.modloader, retry.modloader);
         artifact.modloader_version =
             first_non_blank(artifact.modloader_version, retry.modloader_version);
+    }
+    if requested_channel == "production" && artifact.channel.trim().to_lowercase() != "production" {
+        return Err(
+            "No active Production build is available for this pack. Promote a build to Production before installing or launching."
+                .to_string()
+                .into(),
+        );
     }
     Ok(artifact)
 }
@@ -263,7 +279,7 @@ async fn request_artifact_download(
     atlas_hub_url: &str,
     access_token: &str,
     pack_id: &str,
-    channel: Option<&str>,
+    channel: &str,
 ) -> Result<ArtifactResponse, LibraryError> {
     let mut endpoint = Url::parse(&format!(
         "{}/api/launcher/packs/{}/artifact",
@@ -271,9 +287,7 @@ async fn request_artifact_download(
         pack_id
     ))
     .map_err(|err| format!("Invalid artifact endpoint URL: {err}"))?;
-    if let Some(value) = channel.map(str::trim).filter(|value| !value.is_empty()) {
-        endpoint.query_pairs_mut().append_pair("channel", value);
-    }
+    endpoint.query_pairs_mut().append_pair("channel", channel);
 
     let response = shared_client()
         .get(endpoint.as_str())
@@ -295,6 +309,20 @@ async fn request_artifact_download(
         let body_text = String::from_utf8_lossy(&body);
         format!("Failed to parse artifact metadata JSON: {err}. Body: {body_text}").into()
     })
+}
+
+fn normalize_channel(channel: Option<&str>) -> &'static str {
+    match channel
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "dev" => "dev",
+        "beta" => "beta",
+        "production" => "production",
+        _ => "production",
+    }
 }
 
 async fn download_blob_bytes(download_url: &str) -> Result<Vec<u8>, LibraryError> {
