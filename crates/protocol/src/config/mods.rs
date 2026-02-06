@@ -2,22 +2,67 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ModEntry {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ModMetadata>,
+    #[serde(default)]
+    pub metadata: ModMetadata,
+    pub download: ModDownload,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModMetadata {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub side: ModSide,
+    #[serde(default)]
+    pub project_url: Option<String>,
+    #[serde(default)]
+    pub disabled_client_oses: Vec<ClientOs>,
+}
+
+impl Default for ModMetadata {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            side: ModSide::Both,
+            project_url: None,
+            disabled_client_oses: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ModSide {
+    Client,
+    Server,
+    Both,
+}
+
+impl Default for ModSide {
+    fn default() -> Self {
+        Self::Both
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ClientOs {
+    Macos,
+    Windows,
+    Linux,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModDownload {
     pub source: String,
     pub project_id: String,
     pub version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub download_url: Option<String>,
+    pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hashes: Option<ModHashes>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ModMetadata {
-    pub name: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -34,6 +79,41 @@ impl ModEntry {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyModEntry {
+    #[serde(default)]
+    metadata: Option<ModMetadata>,
+    source: String,
+    project_id: String,
+    version: String,
+    #[serde(default)]
+    file_id: Option<String>,
+    #[serde(default)]
+    download_url: Option<String>,
+    #[serde(default)]
+    hashes: Option<ModHashes>,
+}
+
 pub fn parse_mod_toml(contents: &str) -> Result<ModEntry, toml::de::Error> {
-    toml::from_str(contents)
+    match toml::from_str::<ModEntry>(contents) {
+        Ok(parsed) => Ok(parsed),
+        Err(_) => {
+            let legacy = toml::from_str::<LegacyModEntry>(contents)?;
+            let mut metadata = legacy.metadata.unwrap_or_default();
+            if metadata.name.trim().is_empty() {
+                metadata.name = legacy.project_id.clone();
+            }
+            Ok(ModEntry {
+                metadata,
+                download: ModDownload {
+                    source: legacy.source,
+                    project_id: legacy.project_id,
+                    version: legacy.version,
+                    file_id: legacy.file_id,
+                    url: legacy.download_url,
+                    hashes: legacy.hashes,
+                },
+            })
+        }
+    }
 }
