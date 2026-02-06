@@ -2,10 +2,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
+use mod_resolver::Provider;
 
+use crate::auth_store;
 use crate::config;
 use crate::io;
-use crate::mods;
 
 #[derive(Subcommand)]
 pub enum PackCommand {
@@ -81,22 +82,29 @@ fn add(args: AddArgs) -> Result<()> {
         bail!("pack type must be one of: mod, shader, resourcepack");
     }
 
-    let entry = match args.source.as_str() {
-        "mr" => mods::modrinth::resolve(
+    let provider = Provider::from_short_code(&args.source).context("source must be cf or mr")?;
+    let entry = match provider {
+        Provider::Modrinth => mod_resolver::resolve_blocking(
+            provider,
             &args.query,
             &loader,
             &minecraft_version,
             desired_version.as_deref(),
             &pack_type,
         )?,
-        "cf" => mods::curseforge::resolve(
-            &args.query,
-            &loader,
-            &minecraft_version,
-            desired_version.as_deref(),
-            &pack_type,
-        )?,
-        _ => bail!("source must be cf or mr"),
+        Provider::CurseForge => {
+            let settings = config::resolve_cli_settings(&root, None, None, None)?;
+            let token = auth_store::require_access_token_for_hub(&settings.hub_url)?;
+            mod_resolver::resolve_curseforge_via_proxy_blocking(
+                &settings.hub_url,
+                &token,
+                &args.query,
+                &loader,
+                &minecraft_version,
+                desired_version.as_deref(),
+                &pack_type,
+            )?
+        }
     };
 
     io::write_mod_entry(&root, &entry)?;

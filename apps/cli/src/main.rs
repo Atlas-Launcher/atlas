@@ -1,13 +1,13 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+mod auth_store;
 mod commands;
 mod config;
 mod io;
-mod mods;
 mod version_catalog;
 
-use commands::{deploy, init, pack};
+use commands::{auth, deploy, init, pack};
 
 #[derive(Parser)]
 #[command(name = "atlas", version, about = "Atlas pack tooling")]
@@ -24,6 +24,10 @@ enum Commands {
         #[command(subcommand)]
         command: pack::PackCommand,
     },
+    Auth {
+        #[command(subcommand)]
+        command: auth::AuthCommand,
+    },
     Deploy(deploy::DeployArgs),
 }
 
@@ -34,6 +38,7 @@ fn main() -> Result<()> {
         Commands::Init(args) => init::run_init(args),
         Commands::Reinit(args) => init::run_reinit(args),
         Commands::Pack { command } => pack::run(command),
+        Commands::Auth { command } => auth::run(command),
         Commands::Deploy(args) => deploy::run(args),
     }
 }

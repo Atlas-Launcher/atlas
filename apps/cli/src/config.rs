@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use atlas_auth::device_code::{DEFAULT_ATLAS_HUB_URL, normalize_hub_url};
 use protocol::config::atlas::AtlasConfig;
 use protocol::pack::{BuildInput, BuildOutput, build_pack_bytes as build_binary};
 
@@ -41,7 +42,7 @@ pub fn resolve_cli_settings(
     let hub_url = normalize_optional(hub_url_override)
         .or_else(|| normalize_optional(std::env::var("ATLAS_HUB_URL").ok()))
         .or_else(|| normalize_optional(cli_config.hub_url))
-        .unwrap_or_else(|| "https://atlas.nathanm.org".to_string());
+        .unwrap_or_else(|| DEFAULT_ATLAS_HUB_URL.to_string());
 
     let channel = normalize_optional(channel_override)
         .or_else(|| normalize_optional(cli_config.default_channel))
@@ -49,7 +50,7 @@ pub fn resolve_cli_settings(
 
     Ok(CliSettings {
         pack_id,
-        hub_url: hub_url.trim_end_matches('/').to_string(),
+        hub_url: normalize_hub_url(&hub_url),
         channel,
     })
 }

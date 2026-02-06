@@ -54,7 +54,7 @@ pub fn insert_config_dir(files: &mut BTreeMap<String, Vec<u8>>, root: &Path) -> 
     Ok(())
 }
 
-pub fn write_mod_entry(root: &Path, entry: &crate::mods::ModEntry) -> Result<()> {
+pub fn write_mod_entry(root: &Path, entry: &protocol::config::mods::ModEntry) -> Result<()> {
     let mods_dir = root.join("mods");
     fs::create_dir_all(&mods_dir).context("Failed to create mods directory")?;
     let slug = slugify_mod_name(
