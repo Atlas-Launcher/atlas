@@ -95,8 +95,6 @@ function selectChannel(
 }
 
 export async function GET(request: Request) {
-  const launcherClientId =
-    process.env.ATLAS_OIDC_LAUNCHER_CLIENT_ID ?? "atlas-launcher";
   const bearer = parseBearerToken(request);
   if (!bearer) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -111,7 +109,6 @@ export async function GET(request: Request) {
     .where(
       and(
         eq(oauthAccessTokens.accessToken, bearer),
-        eq(oauthAccessTokens.clientId, launcherClientId),
         gt(oauthAccessTokens.accessTokenExpiresAt, new Date())
       )
     )

@@ -58,8 +58,6 @@ async function authorizeLauncherUserToken(
     throw new Error("packId is required when using user credentials.");
   }
 
-  const launcherClientId =
-    process.env.ATLAS_OIDC_LAUNCHER_CLIENT_ID ?? "atlas-launcher";
   const [token] = await db
     .select({
       userId: oauthAccessTokens.userId,
@@ -68,7 +66,6 @@ async function authorizeLauncherUserToken(
     .where(
       and(
         eq(oauthAccessTokens.accessToken, bearerToken),
-        eq(oauthAccessTokens.clientId, launcherClientId),
         gt(oauthAccessTokens.accessTokenExpiresAt, new Date())
       )
     )
