@@ -61,3 +61,52 @@ export async function GET(request: Request, { params }: RouteParams) {
 
   return NextResponse.json({ builds: result });
 }
+
+export async function PATCH(request: Request, { params }: RouteParams) {
+  const { packId } = await params;
+  const session = await auth.api.getSession({ headers: request.headers });
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!hasRole(session, ["admin", "creator"])) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const [membership] = await db
+    .select({ role: packMembers.role })
+    .from(packMembers)
+    .where(
+      and(
+        eq(packMembers.packId, packId),
+        eq(packMembers.userId, session.user.id)
+      )
+    )
+    .limit(1);
+  if (!membership && !hasRole(session, ["admin"])) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const buildId = body?.buildId?.toString()?.trim();
+  const forceReinstall = body?.forceReinstall;
+  if (!buildId || typeof forceReinstall !== "boolean") {
+    return NextResponse.json(
+      { error: "buildId and forceReinstall are required." },
+      { status: 400 }
+    );
+  }
+
+  const [build] = await db
+    .update(builds)
+    .set({ forceReinstall })
+    .where(and(eq(builds.id, buildId), eq(builds.packId, packId)))
+    .returning();
+
+  if (!build) {
+    return NextResponse.json({ error: "Build not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({ build });
+}

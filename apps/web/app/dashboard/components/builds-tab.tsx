@@ -26,6 +26,7 @@ interface BuildsTabProps {
   repoUrl?: string | null;
   canPromoteBuilds: boolean;
   onPromote: (channel: Channel["name"], buildId: string) => void;
+  onToggleForceReinstall: (buildId: string, forceReinstall: boolean) => void;
   loading: boolean;
 }
 
@@ -38,6 +39,7 @@ export default function BuildsTab({
   repoUrl,
   canPromoteBuilds,
   onPromote,
+  onToggleForceReinstall,
   loading,
 }: BuildsTabProps) {
   return (
@@ -52,7 +54,7 @@ export default function BuildsTab({
             <TableRow>
               <TableHead>Version</TableHead>
               <TableHead>Commit</TableHead>
-              <TableHead>Artifact</TableHead>
+              <TableHead>Deployed</TableHead>
               <TableHead>Live Channels</TableHead>
               <TableHead className="w-[340px]">Actions</TableHead>
             </TableRow>
@@ -103,7 +105,7 @@ export default function BuildsTab({
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
-                      {build.artifactKey}
+                      {formatDeployDate(build.createdAt)}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
@@ -121,6 +123,18 @@ export default function BuildsTab({
                     <TableCell>
                       {canPromoteBuilds ? (
                         <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant={build.forceReinstall ? "secondary" : "outline"}
+                            disabled={loading}
+                            onClick={() =>
+                              onToggleForceReinstall(build.id, !Boolean(build.forceReinstall))
+                            }
+                          >
+                            {build.forceReinstall
+                              ? "Force Reinstall On"
+                              : "Force Reinstall Off"}
+                          </Button>
                           {channelOrder.map((channelName) => {
                             const isLive = liveChannels.some(
                               (channel) => channel.name === channelName
@@ -190,4 +204,15 @@ function formatRuntimeMetadata(build: Build): string | null {
     return `MC ${mc}`;
   }
   return loaderText;
+}
+
+function formatDeployDate(value?: string): string {
+  if (!value) {
+    return "-";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "-";
+  }
+  return parsed.toLocaleString();
 }

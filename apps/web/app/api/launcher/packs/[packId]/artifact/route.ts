@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray, lte } from "drizzle-orm";
 
 import { getAuthenticatedUserId } from "@/lib/auth/request-user";
 import { allowedChannels } from "@/lib/auth/roles";
@@ -22,6 +22,8 @@ interface ChannelBuildRow {
   minecraftVersion: string | null;
   modloader: string | null;
   modloaderVersion: string | null;
+  forceReinstall: boolean;
+  createdAt: Date | null;
 }
 
 function preferredChannel(accessLevel: AccessLevel): ChannelName {
@@ -76,6 +78,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ packId: string }> }
 ) {
+  const requestUrl = new URL(request.url);
   const userId = await getAuthenticatedUserId(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -104,7 +107,8 @@ export async function GET(
     membership.accessLevel as AccessLevel,
     membership.role as MemberRole
   ) as readonly ChannelName[];
-  const requestedChannel = parseChannelName(new URL(request.url).searchParams.get("channel"));
+  const requestedChannel = parseChannelName(requestUrl.searchParams.get("channel"));
+  const currentBuildId = requestUrl.searchParams.get("currentBuildId")?.trim() || null;
 
   const rows = await db
     .select({
@@ -115,6 +119,8 @@ export async function GET(
       minecraftVersion: builds.minecraftVersion,
       modloader: builds.modloader,
       modloaderVersion: builds.modloaderVersion,
+      forceReinstall: builds.forceReinstall,
+      createdAt: builds.createdAt,
     })
     .from(channels)
     .leftJoin(builds, eq(builds.id, channels.buildId))
@@ -129,6 +135,8 @@ export async function GET(
       minecraftVersion: row.minecraftVersion ?? null,
       modloader: row.modloader ?? null,
       modloaderVersion: row.modloaderVersion ?? null,
+      forceReinstall: row.forceReinstall ?? false,
+      createdAt: row.createdAt ?? null,
     });
   }
 
@@ -157,6 +165,12 @@ export async function GET(
       provider: artifactRef.provider,
       key: resolvedArtifactKey,
     });
+    const requiresFullReinstall = await shouldRequireFullReinstall({
+      packId,
+      targetBuildId: row.buildId,
+      targetBuildCreatedAt: row.createdAt,
+      currentBuildId,
+    });
 
     return NextResponse.json({
       packId,
@@ -169,6 +183,8 @@ export async function GET(
       minecraftVersion: row.minecraftVersion,
       modloader: row.modloader,
       modloaderVersion: row.modloaderVersion,
+      forceReinstall: row.forceReinstall,
+      requiresFullReinstall,
     });
   }
 
@@ -176,4 +192,48 @@ export async function GET(
     { error: "No downloadable build is available for this pack." },
     { status: 404 }
   );
+}
+
+async function shouldRequireFullReinstall({
+  packId,
+  targetBuildId,
+  targetBuildCreatedAt,
+  currentBuildId,
+}: {
+  packId: string;
+  targetBuildId: string;
+  targetBuildCreatedAt: Date | null;
+  currentBuildId: string | null;
+}): Promise<boolean> {
+  if (!currentBuildId || currentBuildId === targetBuildId || !targetBuildCreatedAt) {
+    return false;
+  }
+
+  const [currentBuild] = await db
+    .select({
+      createdAt: builds.createdAt,
+    })
+    .from(builds)
+    .where(and(eq(builds.packId, packId), eq(builds.id, currentBuildId)))
+    .limit(1);
+  if (!currentBuild?.createdAt) {
+    return false;
+  }
+  if (currentBuild.createdAt >= targetBuildCreatedAt) {
+    return false;
+  }
+
+  const [flagged] = await db
+    .select({ id: builds.id })
+    .from(builds)
+    .where(
+      and(
+        eq(builds.packId, packId),
+        eq(builds.forceReinstall, true),
+        gt(builds.createdAt, currentBuild.createdAt),
+        lte(builds.createdAt, targetBuildCreatedAt)
+      )
+    )
+    .limit(1);
+  return Boolean(flagged);
 }

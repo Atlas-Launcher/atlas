@@ -185,6 +185,32 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
     );
   };
 
+  const handleToggleForceReinstall = async (buildId: string, forceReinstall: boolean) => {
+    setLoading(true);
+    setError(null);
+    const response = await fetch(`/api/packs/${packId}/builds`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ buildId, forceReinstall }),
+    });
+    const data = await response
+      .json()
+      .catch(() => ({ error: "Unable to update build settings." }));
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data?.error ?? "Unable to update build settings.");
+      return;
+    }
+
+    const nextValue = Boolean(data?.build?.forceReinstall);
+    setBuilds((prev) =>
+      prev.map((build) =>
+        build.id === buildId ? { ...build, forceReinstall: nextValue } : build
+      )
+    );
+  };
+
   const handleRevokeMember = async (userId: string) => {
     setLoading(true);
     setError(null);
@@ -336,6 +362,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
           <DashboardHeader
             workspaceName={pack?.name ?? packLabel}
             eyebrow="Pack"
+            identifier={`ID: ${pack?.id ?? packId}`}
             leading={
               <Link href="/dashboard" aria-label="Back to all packs">
                 <Button variant="outline" size="icon-sm">
@@ -370,6 +397,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
               repoUrl={pack?.repoUrl}
               canPromoteBuilds={canPromoteBuilds}
               onPromote={handlePromotion}
+              onToggleForceReinstall={handleToggleForceReinstall}
               loading={loading}
             />
           </TabsContent>

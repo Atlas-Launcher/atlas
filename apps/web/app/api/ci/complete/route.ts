@@ -24,6 +24,7 @@ export async function POST(request: Request) {
   const minecraftVersion = normalizeOptionalString(body?.minecraftVersion);
   const modloader = normalizeOptionalString(body?.modloader);
   const modloaderVersion = normalizeOptionalString(body?.modloaderVersion);
+  const forceReinstall = body?.forceReinstall === true;
   const artifactSize = body?.artifactSize ? Number(body.artifactSize) : null;
   const channel = (body?.channel?.toString() ?? "dev") as "dev" | "beta" | "production";
 
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
       minecraftVersion,
       modloader,
       modloaderVersion,
+      forceReinstall,
       artifactKey,
       artifactSize: artifactSize ?? undefined,
     })
@@ -67,6 +69,7 @@ export async function POST(request: Request) {
         minecraftVersion,
         modloader,
         modloaderVersion,
+        forceReinstall,
         artifactKey,
         artifactSize: artifactSize ?? undefined,
       },
