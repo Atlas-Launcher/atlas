@@ -88,11 +88,7 @@ jobs:
             echo "::error::Missing TAURI_SIGNING_PRIVATE_KEY repository secret."
             exit 1
           fi
-          key_file="$RUNNER_TEMP/tauri-signing.key"
-          KEY_FILE="$key_file" node <<'NODE'
-          const fs = require("node:fs");
-
-          const outFile = process.env.KEY_FILE;
+          TAURI_KEY_BASE64="$(node <<'NODE'
           let raw = process.env.RAW_TAURI_KEY || "";
           raw = raw.replace(/\r/g, "").trim();
           if (!raw) {
@@ -104,39 +100,32 @@ jobs:
             raw = raw.replace(/\\n/g, "\n");
           }
 
-          let keyText = raw;
-          const compact = raw.replace(/\s+/g, "");
-          const looksLikeBase64 =
-            /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length % 4 === 0;
-
-          // Handle base64-encoded minisign key blobs.
-          if (!raw.includes("untrusted comment") && looksLikeBase64) {
-            try {
-              const decoded = Buffer.from(compact, "base64")
-                .toString("utf8")
-                .replace(/\r/g, "");
-              if (decoded.includes("untrusted comment")) {
-                keyText = decoded;
-              }
-            } catch {
-              // Fall back to raw content.
-            }
+          let keyBase64;
+          if (raw.includes("untrusted comment")) {
+            // Plain minisign key text -> encode for TAURI_SIGNING_PRIVATE_KEY.
+            keyBase64 = Buffer.from(raw, "utf8").toString("base64");
+          } else {
+            // Already base64: remove whitespace and use as-is.
+            keyBase64 = raw.replace(/\s+/g, "");
           }
 
-          fs.writeFileSync(outFile, keyText, { mode: 0o600 });
+          if (!/^[A-Za-z0-9+/=]+$/.test(keyBase64)) {
+            process.exit(3);
+          }
+          process.stdout.write(keyBase64);
           NODE
-          if ! grep -q 'untrusted comment' "$key_file"; then
-            echo "::warning::Updater key file does not contain 'untrusted comment'. Confirm this is a minisign private key."
-          fi
-          echo "TAURI_SIGNING_PRIVATE_KEY=$key_file" >> "$GITHUB_ENV"
-          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=" >> "$GITHUB_ENV"
+          )"
+          {
+            echo "TAURI_SIGNING_PRIVATE_KEY=$TAURI_KEY_BASE64"
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD="
+          } >> "$GITHUB_ENV"
 
       - name: Build and upload launcher bundles
         uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/launcher
           tauriScript: pnpm tauri
