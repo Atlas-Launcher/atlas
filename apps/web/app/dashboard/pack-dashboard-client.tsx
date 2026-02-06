@@ -347,6 +347,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
             <BuildsTab
               channels={channels}
               builds={builds}
+              repoUrl={pack?.repoUrl}
               canPromoteBuilds={canPromoteBuilds}
               onPromote={handlePromotion}
               loading={loading}

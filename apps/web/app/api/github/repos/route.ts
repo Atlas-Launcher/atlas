@@ -21,11 +21,6 @@ type GithubRepo = {
   };
 };
 
-type GithubRepoPublicKey = {
-  key_id: string;
-  key: string;
-};
-
 type GithubContentFile = {
   sha: string;
   content: string;
@@ -53,10 +48,6 @@ function getTemplateRepo() {
   }
 
   return { owner, repo };
-}
-
-function defaultKeyName(packId: string) {
-  return `Pack ${packId.slice(0, 8)} deploy key`;
 }
 
 function getAtlasHubUrl(request: Request) {
@@ -152,45 +143,6 @@ function sleep(ms: number) {
   });
 }
 
-interface LibsodiumLike {
-  ready: Promise<unknown>;
-  crypto_box_seal(message: Uint8Array, publicKey: Uint8Array): Uint8Array;
-}
-
-type LibsodiumModule = {
-  default?: LibsodiumLike;
-} & Partial<LibsodiumLike>;
-
-let sodiumModulePromise: Promise<LibsodiumModule> | null = null;
-
-async function getSodium() {
-  if (!sodiumModulePromise) {
-    const moduleName = "libsodium-wrappers";
-    sodiumModulePromise = import(moduleName) as Promise<LibsodiumModule>;
-  }
-
-  const sodiumModule = await sodiumModulePromise;
-  const sodium = sodiumModule.default ?? sodiumModule;
-  if (!sodium.ready) {
-    throw new Error("libsodium-wrappers did not expose ready");
-  }
-  await sodium.ready;
-
-  if (typeof sodium.crypto_box_seal !== "function") {
-    throw new Error("libsodium-wrappers did not expose crypto_box_seal");
-  }
-
-  return sodium as LibsodiumLike;
-}
-
-async function encryptSecret(secretValue: string, base64PublicKey: string) {
-  const sodium = await getSodium();
-  const messageBytes = new Uint8Array(Buffer.from(secretValue, "utf8"));
-  const publicKeyBytes = new Uint8Array(Buffer.from(base64PublicKey, "base64"));
-  const encryptedBytes = sodium.crypto_box_seal(messageBytes, publicKeyBytes);
-  return Buffer.from(encryptedBytes).toString("base64");
-}
-
 function quoteTomlString(value: string) {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
@@ -279,38 +231,6 @@ async function setAtlasTomlCliConfig({
         message: "Configure Atlas Hub CLI defaults",
         content: Buffer.from(updatedToml, "utf8").toString("base64"),
         sha: file.sha,
-      }),
-    }
-  );
-}
-
-async function setRepositorySecret({
-  token,
-  owner,
-  repo,
-  name,
-  value,
-}: {
-  token: string;
-  owner: string;
-  repo: string;
-  name: string;
-  value: string;
-}) {
-  const publicKey = await githubRequest<GithubRepoPublicKey>(
-    token,
-    `https://api.github.com/repos/${owner}/${repo}/actions/secrets/public-key`
-  );
-
-  const encryptedValue = await encryptSecret(value, publicKey.key);
-  await githubRequest<null>(
-    token,
-    `https://api.github.com/repos/${owner}/${repo}/actions/secrets/${encodeURIComponent(name)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify({
-        encrypted_value: encryptedValue,
-        key_id: publicKey.key_id,
       }),
     }
   );
@@ -483,7 +403,6 @@ export async function POST(request: Request) {
   }
 
   let createdPackId: string | null = null;
-  let createdApiKeyId: string | null = null;
   let createdRepo: GithubRepo | null = null;
 
   try {
@@ -503,21 +422,6 @@ export async function POST(request: Request) {
     });
     createdRepo = repo;
 
-    const apiKeyRecord = await auth.api.createApiKey({
-      headers: request.headers,
-      body: {
-        name: defaultKeyName(createdPack.id),
-        metadata: { packId: createdPack.id, type: "deploy" },
-      },
-    });
-
-    const atlasApiKey = apiKeyRecord?.key?.toString().trim();
-    if (!atlasApiKey) {
-      throw new Error("Failed to create Atlas API key.");
-    }
-    createdApiKeyId =
-      typeof apiKeyRecord?.id === "string" ? apiKeyRecord.id : null;
-
     const resolvedOwner = repo?.owner?.login ?? owner;
     const hubUrl = getAtlasHubUrl(request);
 
@@ -534,16 +438,6 @@ export async function POST(request: Request) {
       packId: createdPack.id,
       hubUrl,
     });
-
-    await Promise.all([
-      setRepositorySecret({
-        token,
-        owner: resolvedOwner,
-        repo: repo.name,
-        name: "ATLAS_API_KEY",
-        value: atlasApiKey,
-      }),
-    ]);
 
     const [updatedPack] = await db
       .update(packs)
@@ -568,15 +462,6 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
-    if (createdApiKeyId) {
-      await auth.api
-        .deleteApiKey({
-          headers: request.headers,
-          body: { keyId: createdApiKeyId },
-        })
-        .catch(() => null);
-    }
-
     if (createdRepo) {
       const repoOwner = createdRepo?.owner?.login ?? owner;
       if (repoOwner) {

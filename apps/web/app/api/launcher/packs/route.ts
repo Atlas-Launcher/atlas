@@ -20,6 +20,7 @@ interface LauncherRemotePack {
   packId: string;
   packName: string;
   packSlug: string;
+  repoUrl: string | null;
   accessLevel: AccessLevel;
   channel: ChannelName;
   buildId: string | null;
@@ -125,6 +126,7 @@ export async function GET(request: Request) {
       packId: packs.id,
       packName: packs.name,
       packSlug: packs.slug,
+      repoUrl: packs.repoUrl,
       role: packMembers.role,
       accessLevel: packMembers.accessLevel,
     })
@@ -185,6 +187,7 @@ export async function GET(request: Request) {
         packId: membership.packId,
         packName: membership.packName,
         packSlug: membership.packSlug,
+        repoUrl: membership.repoUrl,
         accessLevel: membership.accessLevel,
         channel: selected.channel,
         buildId: selected.buildId,
