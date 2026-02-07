@@ -351,9 +351,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const token = await getGithubToken(session.user.id);
-  if (!token) {
-    return NextResponse.json({ error: "No GitHub account linked." }, { status: 404 });
+  // Get the user's GitHub username from their linked account
+  const [account] = await db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.userId, session.user.id), eq(accounts.providerId, "github")))
+    .orderBy(desc(accounts.updatedAt))
+    .limit(1);
+
+  if (!account?.accountId) {
+    return NextResponse.json(
+      {
+        error: "No GitHub account linked.",
+        code: "GITHUB_NOT_LINKED",
+      },
+      { status: 404 }
+    );
   }
 
   const { searchParams } = new URL(request.url);
@@ -361,78 +374,107 @@ export async function GET(request: Request) {
   const perPage = parseInt(searchParams.get("per_page") ?? "10", 10);
   const search = searchParams.get("search")?.trim();
 
+  // Import the GitHub App utilities
+  const {
+    getInstallationTokenForUser,
+    listInstallationRepos,
+    GitHubAppNotInstalledError,
+    GitHubAppNotConfiguredError,
+  } = await import("@/lib/github/app");
+
   try {
-    // If search is provided, use the search API
-    // Otherwise list user repos
-    // We only want repos where the user is an owner or member of the organization
-    // This filters out repos where the user is just a collaborator
+    // Get the user's GitHub username first
+    // We need to fetch it since we only store the accountId (numeric ID)
+    const userToken = account.accessToken;
+    let githubUsername: string | null = null;
 
-    let url: string;
-
-    if (search) {
-      // For search, we need to explicitly scope to user and orgs
-      const [user, orgs] = await Promise.all([
-        githubRequest<GithubOwner>(token, "https://api.github.com/user"),
-        githubRequest<GithubOwner[]>(token, "https://api.github.com/user/orgs?per_page=100"),
-      ]);
-
-      const qualifiers = [
-        `user:${user.login}`,
-        ...orgs.map(org => `org:${org.login}`)
-      ].join(" OR ");
-
-      url = `https://api.github.com/search/repositories?q=${encodeURIComponent(
-        `${search} in:name ${qualifiers}`
-      )}&per_page=${perPage}&page=${page}`;
-    } else {
-      // For listing, we can use the affiliation parameter
-      url = `https://api.github.com/user/repos?sort=updated&per_page=${perPage}&page=${page}&type=all&affiliation=owner,organization_member`;
-    }
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-      },
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body?.message ?? "GitHub request failed");
-    }
-
-    const linkHeader = response.headers.get("link");
-    let nextPage: number | null = null;
-    if (linkHeader) {
-      const match = linkHeader.match(/[?&]page=(\d+)[^>]*>; rel="next"/);
-      if (match) {
-        nextPage = parseInt(match[1], 10);
+    if (userToken) {
+      try {
+        const userInfo = await githubRequest<GithubOwner>(
+          userToken,
+          "https://api.github.com/user"
+        );
+        githubUsername = userInfo.login;
+      } catch {
+        // Token might be expired, we'll try to look up by ID below
       }
     }
 
-    const data = await response.json();
-    const repos = (search ? data.items : data) as GithubRepo[];
+    // If we couldn't get the username from the token, we need to look it up
+    // Using the GitHub API's user lookup by ID
+    if (!githubUsername) {
+      const GITHUB_APP_ID = process.env.GITHUB_APP_ID;
+      const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY;
+
+      if (!GITHUB_APP_ID || !GITHUB_APP_PRIVATE_KEY) {
+        throw new GitHubAppNotConfiguredError();
+      }
+
+      // We'll need to get username from another source or throw an error
+      // For now, use the accountId as a fallback (it's the GitHub user ID)
+      // This won't work directly - we need to get the installation by user ID
+      // Let's use a different approach: get all app installations and find the one matching this user
+      return NextResponse.json(
+        {
+          error: "Unable to determine your GitHub username. Please re-link your GitHub account.",
+          code: "GITHUB_USERNAME_UNKNOWN",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Get an installation access token for this user
+    const installationToken = await getInstallationTokenForUser(githubUsername);
+
+    // List repositories from the installation
+    const result = await listInstallationRepos(installationToken, page, perPage);
+
+    // If search is provided, filter the results client-side
+    // (GitHub's installation repos endpoint doesn't support search)
+    let repos = result.repos;
+    if (search) {
+      const searchLower = search.toLowerCase();
+      repos = repos.filter(
+        (repo) =>
+          repo.name.toLowerCase().includes(searchLower) ||
+          repo.full_name.toLowerCase().includes(searchLower)
+      );
+    }
 
     return NextResponse.json({
-      repos: repos.map((repo) => ({
-        name: repo.name,
-        full_name: repo.full_name,
-        html_url: repo.html_url,
-        clone_url: repo.clone_url,
-        owner: {
-          login: repo.owner?.login,
-        },
-      })),
-      nextPage,
+      repos,
+      nextPage: result.hasNextPage ? page + 1 : null,
+      totalCount: result.totalCount,
     });
   } catch (error) {
+    // Handle specific error types with helpful guidance
+    if (error instanceof GitHubAppNotInstalledError) {
+      const appSlug = process.env.GITHUB_APP_SLUG || process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || "atlas-launcher";
+      return NextResponse.json(
+        {
+          error: "The Atlas Launcher GitHub App is not installed on your account. Install it to access your repositories.",
+          code: "GITHUB_APP_NOT_INSTALLED",
+          installUrl: `https://github.com/apps/${appSlug}/installations/new`,
+        },
+        { status: 403 }
+      );
+    }
+
+    if (error instanceof GitHubAppNotConfiguredError) {
+      return NextResponse.json(
+        {
+          error: "GitHub App is not configured on this server. Please contact the administrator.",
+          code: "GITHUB_APP_NOT_CONFIGURED",
+        },
+        { status: 500 }
+      );
+    }
+
+    const errorMessage = error instanceof Error ? error.message : "Unable to load repositories.";
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to load repositories.",
+        error: errorMessage,
+        code: "GITHUB_ERROR",
       },
       { status: 502 }
     );

@@ -66,9 +66,12 @@ export function RepositorySelector({
         }
     }, [open, debouncedSearch]);
 
+    const [installUrl, setInstallUrl] = useState<string | null>(null);
+
     const loadRepos = async (pageToLoad: number, searchQuery: string) => {
         setLoading(true);
         setError(null);
+        setInstallUrl(null);
         try {
             const params = new URLSearchParams({
                 page: pageToLoad.toString(),
@@ -79,16 +82,22 @@ export function RepositorySelector({
             }
 
             const response = await fetch(`/api/github/repos?${params.toString()}`);
+            const data = await response.json();
+
             if (!response.ok) {
-                throw new Error("Failed to load repositories");
+                // Check for installation URL in the error response
+                if (data.installUrl) {
+                    setInstallUrl(data.installUrl);
+                }
+                throw new Error(data.error || "Failed to load repositories");
             }
 
-            const data = await response.json();
             setRepos(data.repos || []);
             setHasNextPage(!!data.nextPage);
             setPage(pageToLoad);
         } catch (err) {
-            setError("Unable to load repositories. Please try again.");
+            const message = err instanceof Error ? err.message : "Unable to load repositories. Please try again.";
+            setError(message);
         } finally {
             setLoading(false);
         }
@@ -130,15 +139,28 @@ export function RepositorySelector({
                                 <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
                             </div>
                         ) : error ? (
-                            <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-center">
+                            <div className="flex h-[300px] flex-col items-center justify-center gap-3 text-center px-4">
                                 <p className="text-sm text-red-500">{error}</p>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => loadRepos(page, debouncedSearch)}
-                                >
-                                    Try Again
-                                </Button>
+                                <div className="flex gap-2">
+                                    {installUrl && (
+                                        <a
+                                            href={installUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            <Button size="sm">
+                                                Install GitHub App
+                                            </Button>
+                                        </a>
+                                    )}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => loadRepos(page, debouncedSearch)}
+                                    >
+                                        Try Again
+                                    </Button>
+                                </div>
                             </div>
                         ) : repos.length === 0 ? (
                             <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-center">
