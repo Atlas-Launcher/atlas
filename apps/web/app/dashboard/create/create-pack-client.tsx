@@ -63,6 +63,8 @@ export default function CreatePackClient() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("import");
   const [githubOwners, setGithubOwners] = useState<GithubOwner[]>([]);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
@@ -98,11 +100,13 @@ export default function CreatePackClient() {
 
     setLoading(true);
     setError(null);
+    setErrorCode(null);
     const result = await createPack(payload);
     setLoading(false);
 
     if (!result.ok) {
       setError(result.data?.error ?? "Unable to create pack.");
+      setErrorCode(result.data?.code ?? null);
       return;
     }
 
@@ -219,12 +223,30 @@ export default function CreatePackClient() {
       </div>
 
       {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
-          {error}
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 space-y-2">
+          <p>{error}</p>
+          {errorCode === "MISSING_ATLAS_TOML" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs bg-white/50 hover:bg-white/80 border-red-200 text-red-700 hover:text-red-800"
+              onClick={() => {
+                setError(null);
+                setErrorCode(null);
+                setActiveTab("initialize");
+              }}
+            >
+              Create a New Repository Instead
+            </Button>
+          )}
         </div>
       ) : null}
 
-      <Tabs defaultValue="import" className="space-y-6">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="space-y-6"
+      >
         <TabsList className="inline-flex justify-start">
           <TabsTrigger value="import">Import From GitHub Repository</TabsTrigger>
           <TabsTrigger value="initialize">New GitHub Repository</TabsTrigger>
