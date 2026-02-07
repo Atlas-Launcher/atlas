@@ -182,12 +182,18 @@ async function addCreatorToRepository({
   repoSlug,
   managerToken,
   targetToken,
+  accountId,
 }: {
   repoSlug: string;
   managerToken: string;
-  targetToken: string;
+  targetToken?: string | null;
+  accountId?: string | null;
 }): Promise<{ inviteAccepted: boolean }> {
-  const login = await resolveGithubLogin(targetToken);
+  const login = await resolveGithubLoginForMember({
+    managerToken,
+    accountId,
+    targetToken,
+  });
   const inviteResponse = await githubRequest(
     managerToken,
     `https://api.github.com/repos/${repoSlug}/collaborators/${encodeURIComponent(login)}`,
@@ -208,7 +214,7 @@ async function addCreatorToRepository({
   }
 
   let inviteAccepted = false;
-  if (inviteResponse.status === 201) {
+  if (inviteResponse.status === 201 && targetToken) {
     const payload = (await inviteResponse.json().catch(() => null)) as
       | GithubRepositoryInvitation
       | null;
@@ -284,9 +290,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   const accessInput = body?.accessLevel?.toString().trim().toLowerCase();
   const accessLevel =
     accessInput === "dev" ||
-    accessInput === "beta" ||
-    accessInput === "production" ||
-    accessInput === "all"
+      accessInput === "beta" ||
+      accessInput === "production" ||
+      accessInput === "all"
       ? accessInput
       : undefined;
   if (!role && !accessLevel) {
@@ -333,23 +339,17 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     const targetGithub = await getTargetGithubAccount(userId);
-    const targetToken = targetGithub?.accessToken?.trim();
-    if (!targetToken) {
+    if (!targetGithub?.accountId) {
       return NextResponse.json(
         { error: "User must link a GitHub account before being promoted to creator." },
         { status: 400 }
       );
     }
 
-    if (
+    const targetToken = targetGithub?.accessToken?.trim() || null;
+    const isTokenExpired =
       targetGithub?.accessTokenExpiresAt &&
-      targetGithub.accessTokenExpiresAt <= new Date()
-    ) {
-      return NextResponse.json(
-        { error: "User's linked GitHub token is expired. Ask them to re-link GitHub first." },
-        { status: 400 }
-      );
-    }
+      targetGithub.accessTokenExpiresAt <= new Date();
 
     const managerToken = await getPackManagerGithubToken(session.user.id);
     if (!managerToken) {
@@ -366,7 +366,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       const syncResult = await addCreatorToRepository({
         repoSlug,
         managerToken,
-        targetToken,
+        targetToken: isTokenExpired ? null : targetToken,
+        accountId: targetGithub.accountId,
       });
       inviteAccepted = syncResult.inviteAccepted;
     } catch (error) {
