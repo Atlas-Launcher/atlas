@@ -364,11 +364,29 @@ export async function GET(request: Request) {
   try {
     // If search is provided, use the search API
     // Otherwise list user repos
-    let url = `https://api.github.com/user/repos?sort=updated&per_page=${perPage}&page=${page}&type=all`;
+    // We only want repos where the user is an owner or member of the organization
+    // This filters out repos where the user is just a collaborator
+
+    let url: string;
+
     if (search) {
+      // For search, we need to explicitly scope to user and orgs
+      const [user, orgs] = await Promise.all([
+        githubRequest<GithubOwner>(token, "https://api.github.com/user"),
+        githubRequest<GithubOwner[]>(token, "https://api.github.com/user/orgs?per_page=100"),
+      ]);
+
+      const qualifiers = [
+        `user:${user.login}`,
+        ...orgs.map(org => `org:${org.login}`)
+      ].join(" OR ");
+
       url = `https://api.github.com/search/repositories?q=${encodeURIComponent(
-        `${search} in:name`
+        `${search} in:name ${qualifiers}`
       )}&per_page=${perPage}&page=${page}`;
+    } else {
+      // For listing, we can use the affiliation parameter
+      url = `https://api.github.com/user/repos?sort=updated&per_page=${perPage}&page=${page}&type=all&affiliation=owner,organization_member`;
     }
 
     const response = await fetch(url, {

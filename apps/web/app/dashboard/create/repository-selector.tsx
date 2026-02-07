@@ -207,6 +207,19 @@ export function RepositorySelector({
                             <ChevronRight className="ml-2 h-4 w-4" />
                         </Button>
                     </div>
+
+                    {githubAppSlug && (
+                        <div className="text-center text-xs pt-2">
+                            <a
+                                href={`https://github.com/apps/${githubAppSlug}/installations/new`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-gray-500 hover:text-blue-600 hover:underline transition-colors"
+                            >
+                                Don&apos;t see your repository? Configure access.
+                            </a>
+                        </div>
+                    )}
                 </div>
             </DialogContent>
         </Dialog>
