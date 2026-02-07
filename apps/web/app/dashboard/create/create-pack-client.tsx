@@ -506,6 +506,19 @@ export default function CreatePackClient() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <RepositorySelector
+        open={repoSelectorOpen}
+        onOpenChange={setRepoSelectorOpen}
+        onSelect={(repo) => {
+          importForm.setFieldValue("repoUrl", repo.html_url);
+          if (!importForm.state.values.name) {
+            importForm.setFieldValue("name", deriveNameFromRepoUrl(repo.html_url));
+          }
+          setRepoSelectorOpen(false);
+        }}
+        githubAppSlug={GITHUB_APP_SLUG}
+      />
     </div>
   );
 }
