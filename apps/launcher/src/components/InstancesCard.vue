@@ -134,9 +134,9 @@ function onQuickAction(instance: InstanceConfig) {
 </script>
 
 <template>
-  <Card class="glass">
-    <CardContent class="space-y-5">
-      <div class="flex flex-wrap items-center pt-5 gap-3">
+  <Card class="glass rounded-2xl">
+    <CardContent class="space-y-6 pt-6">
+      <div class="flex flex-wrap items-center gap-4">
         <Tabs v-model="filter">
           <TabsList>
             <TabsTrigger value="all">All Profiles</TabsTrigger>

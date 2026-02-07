@@ -3,11 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import ActivityCard from "./components/ActivityCard.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
-import HeaderBar from "./components/HeaderBar.vue";
 import InstanceView from "./components/InstanceView.vue";
 import LibraryView from "./components/LibraryView.vue";
 import SettingsCard from "./components/SettingsCard.vue";
 import SidebarNav from "./components/SidebarNav.vue";
+import TitleBar from "./components/TitleBar.vue";
 import { initLaunchEvents } from "./lib/useLaunchEvents";
 import { useAuth } from "./lib/useAuth";
 import { useLibrary } from "./lib/useLibrary";
@@ -57,7 +57,8 @@ const {
   duplicateInstance,
   updateInstance,
   removeInstance,
-  syncAtlasRemotePacks
+  syncAtlasRemotePacks,
+  settingsThemeMode
 } = useSettings({ setStatus, pushLog, run });
 const {
   availableVersions,
@@ -592,10 +593,20 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="h-screen overflow-hidden p-4">
-    <div class="mx-auto grid h-full min-h-0 max-w-6xl gap-6 md:grid-cols-[72px_1fr] items-start">
+  <div class="h-screen bg-transparent text-foreground overflow-hidden relative p-3">
+    <!-- TitleBar overlays everything, but its internal elements will align with the p-3 grid below -->
+    <TitleBar 
+      :profile="profile"
+      :atlas-profile="atlasProfile"
+      @sign-in-microsoft="startMicrosoftSignIn"
+      @sign-out-microsoft="signOutMicrosoft"
+      @sign-in-atlas="startAtlasLogin"
+      @sign-out-atlas="signOutAtlasFromMenu"
+    />
+    
+    <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-8">
+      <!-- SidebarNav: Floating Aside -->
       <SidebarNav
-        class="max-h-full sticky top-0 self-start"
         :active-tab="activeTab"
         :tasks-count="tasks.length"
         :tasks-open="tasksPanelOpen"
@@ -603,90 +614,78 @@ onBeforeUnmount(() => {
         @toggle-tasks="toggleTasksPanel"
       />
 
-      <div class="flex h-full min-h-0 flex-col gap-6">
-        <HeaderBar
-          :active-tab="activeTab"
-          :profile="profile"
-          :atlas-profile="atlasProfile"
-          @sign-in-microsoft="startMicrosoftSignIn"
-          @sign-out-microsoft="signOutMicrosoft"
-          @sign-in-atlas="startAtlasLogin"
-          @sign-out-atlas="signOutAtlasFromMenu"
-        />
-
-        <main class="flex-1 min-h-0 flex flex-col overflow-hidden gap-6">
-          <section
-            v-if="activeTab === 'library'"
-            class="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden"
+      <!-- Main Content: Floating Pane -->
+      <main class="flex flex-col min-h-0 overflow-hidden">
+        <section
+          v-if="activeTab === 'library'"
+          class="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden"
+        >
+          <div
+            v-if="libraryView === 'grid'"
+            class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1"
           >
-            <div
-              v-if="libraryView === 'grid'"
-              class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1"
-            >
-              <LibraryView
-                :instances="instances"
-                :active-instance-id="activeInstance?.id ?? null"
-                :instance-install-state-by-id="instanceInstallStateById"
-                :working="working"
-                @select="openInstance"
-                @play="launchInstanceFromLibrary"
-                @install="installInstanceFromLibrary"
-                @create="addInstance"
-                @refresh-packs="refreshAtlasPacksFromLibrary"
-              />
-            </div>
-
-            <InstanceView
-              v-else
-              class="flex-1 min-h-0"
-              :instance="activeInstance"
-              :profile="profile"
+            <LibraryView
+              :instances="instances"
+              :active-instance-id="activeInstance?.id ?? null"
+              :instance-install-state-by-id="instanceInstallStateById"
               :working="working"
-              :mods="mods"
-              :mods-dir="modsDir"
-              :available-versions="availableVersions"
-              :latest-release="latestRelease"
-              :installed-versions="installedVersions"
-              :fabric-loader-versions="fabricLoaderVersions"
-              :neoforge-loader-versions="neoforgeLoaderVersions"
-              :instances-count="instances.length"
-              :default-memory-mb="settingsDefaultMemoryMb"
-              :default-jvm-args="settingsDefaultJvmArgs"
-              @back="backToLibrary"
-              @launch="launchActiveInstance"
-              @update-files="installSelectedVersion"
-              @go-to-settings="startMicrosoftSignIn"
-              @toggle-mod="toggleMod"
-              @delete-mod="deleteMod"
-              @refresh-mods="refreshMods"
-              @open-mods-folder="openModsFolder"
-              @update-instance="({ id, patch }) => updateInstance(id, patch)"
-              @install-version="installSelectedVersion"
-              @refresh-versions="refreshVersions"
-              @duplicate-instance="duplicateInstance"
-              @remove-instance="removeInstance"
-              @uninstall-instance="uninstallInstanceData"
-              @update-channel="updateAtlasChannel"
+              @select="openInstance"
+              @play="launchInstanceFromLibrary"
+              @install="installInstanceFromLibrary"
+              @create="addInstance"
+              @refresh-packs="refreshAtlasPacksFromLibrary"
             />
-          </section>
-
-          <section v-else class="flex-1 min-h-0 overflow-auto space-y-6 pr-1">
-            <SettingsCard
-              v-model:settingsClientId="settingsClientId"
-              v-model:settingsAtlasHubUrl="settingsAtlasHubUrl"
-              v-model:settingsDefaultMemoryMb="settingsDefaultMemoryMb"
-              v-model:settingsDefaultJvmArgs="settingsDefaultJvmArgs"
-              :working="working"
-              @save-settings="saveSettings"
-            />
-            <ActivityCard
-              title="Recent activity"
-              description="Helpful signals while tuning Atlas."
-              :logs="logs"
-            />
-          </section>
-        </main>
-      </div>
+          </div>
+          <InstanceView
+            v-else
+            class="flex-1 min-h-0"
+            :instance="activeInstance"
+            :profile="profile"
+            :working="working"
+            :mods="mods"
+            :mods-dir="modsDir"
+            :available-versions="availableVersions"
+            :latest-release="latestRelease"
+            :installed-versions="installedVersions"
+            :fabric-loader-versions="fabricLoaderVersions"
+            :neoforge-loader-versions="neoforgeLoaderVersions"
+            :instances-count="instances.length"
+            :default-memory-mb="settingsDefaultMemoryMb"
+            :default-jvm-args="settingsDefaultJvmArgs"
+            @back="backToLibrary"
+            @launch="launchActiveInstance"
+            @update-files="installSelectedVersion"
+            @go-to-settings="startMicrosoftSignIn"
+            @toggle-mod="toggleMod"
+            @delete-mod="deleteMod"
+            @refresh-mods="refreshMods"
+            @open-mods-folder="openModsFolder"
+            @update-instance="({ id, patch }) => updateInstance(id, patch)"
+            @install-version="installSelectedVersion"
+            @refresh-versions="refreshVersions"
+            @duplicate-instance="duplicateInstance"
+            @remove-instance="removeInstance"
+            @uninstall-instance="uninstallInstanceData"
+            @update-channel="updateAtlasChannel"
+          />
+        </section>
+        <section v-else class="flex-1 min-h-0 overflow-auto space-y-6 pr-1">
+          <SettingsCard
+            v-model:settingsClientId="settingsClientId"
+            v-model:settingsAtlasHubUrl="settingsAtlasHubUrl"
+            v-model:settingsDefaultMemoryMb="settingsDefaultMemoryMb"
+            v-model:settingsDefaultJvmArgs="settingsDefaultJvmArgs"
+            v-model:settingsThemeMode="settingsThemeMode"
+            :working="working"
+            @save-settings="saveSettings"
+          />
+          <ActivityCard
+            title="Recent activity"
+            description="Helpful signals while tuning Atlas."
+            :logs="logs"
+          />
+        </section>
+      </main>
     </div>
     <GlobalProgressBar
       v-if="tasks.length > 0 && tasksPanelOpen"

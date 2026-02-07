@@ -25,6 +25,36 @@
   --radius: 18px;
 }
 
+.dark {
+  --background: 224 71% 4%;
+  --foreground: 213 31% 91%;
+
+  --card: 224 71% 4%;
+  --card-foreground: 213 31% 91%;
+
+  --popover: 224 71% 4%;
+  --popover-foreground: 215 20.2% 65.1%;
+
+  --primary: 210 40% 98%;
+  --primary-foreground: 222 47.4% 11.2%;
+
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 212.7 26.8% 83.9%;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -44,14 +74,24 @@ body {
     radial-gradient(circle at 15% 12%, rgba(255, 180, 120, 0.35), transparent 45%),
     radial-gradient(circle at 85% 8%, rgba(90, 160, 255, 0.25), transparent 38%),
     radial-gradient(circle at 90% 78%, rgba(120, 210, 180, 0.22), transparent 42%),
-    repeating-linear-gradient(
-      135deg,
+    repeating-linear-gradient(135deg,
       rgba(15, 20, 32, 0.04),
       rgba(15, 20, 32, 0.04) 1px,
       transparent 1px,
-      transparent 7px
-    );
+      transparent 7px);
   min-height: 100vh;
+}
+
+.dark body {
+  background-image:
+    radial-gradient(circle at 15% 12%, rgba(255, 180, 120, 0.15), transparent 45%),
+    radial-gradient(circle at 85% 8%, rgba(90, 160, 255, 0.15), transparent 38%),
+    radial-gradient(circle at 90% 78%, rgba(120, 210, 180, 0.1), transparent 42%),
+    repeating-linear-gradient(135deg,
+      rgba(255, 255, 255, 0.03),
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px,
+      transparent 7px);
 }
 
 #app {
@@ -66,12 +106,20 @@ pre,
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(20, 25, 38, 0.08);
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow:
-    0 20px 40px rgba(18, 24, 38, 0.08),
-    0 6px 18px rgba(18, 24, 38, 0.06);
+    0 20px 40px rgba(0, 0, 0, 0.04),
+    0 6px 18px rgba(0, 0, 0, 0.02);
   backdrop-filter: blur(14px);
+}
+
+.dark .glass {
+  background: rgba(10, 12, 18, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.4),
+    0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
 .status-pill {
@@ -86,6 +134,12 @@ pre,
   color: hsl(var(--muted-foreground));
   font-size: 0.95rem;
   line-height: 1.2;
+}
+
+.dark .status-pill {
+  background: rgba(20, 25, 40, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: hsl(var(--muted-foreground));
 }
 
 .status-pill--accounts {
@@ -153,6 +207,7 @@ pre,
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -163,6 +218,7 @@ pre,
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }

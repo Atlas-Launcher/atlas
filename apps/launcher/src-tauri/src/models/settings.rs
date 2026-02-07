@@ -17,6 +17,8 @@ pub struct AppSettings {
     pub instances: Vec<InstanceConfig>,
     #[serde(default)]
     pub selected_instance_id: Option<String>,
+    #[serde(default)]
+    pub theme_mode: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -41,6 +43,7 @@ impl Default for AppSettings {
             default_jvm_args: None,
             instances: vec![instance],
             selected_instance_id: Some("default".to_string()),
+            theme_mode: Some("system".to_string()),
         }
     }
 }

@@ -17,7 +17,13 @@
         "height": 720,
         "minWidth": 900,
         "minHeight": 640,
-        "resizable": true
+        "resizable": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 20,
+          "y": 24
+        }
       }
     ],
     "security": {
@@ -39,12 +45,16 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["atlas"]
+        "schemes": [
+          "atlas"
+        ]
       }
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ0NjU5NjIzMTUxQTk1RDUKUldUVmxSb1ZJNVpsUkp4UjVtcTNaTG1Pb2tka0JFalJiMUFpQUtNTjE4dFM1SnpPMm84NWQrdTcK",
-      "endpoints": ["https://atlas.nathanm.com/download/app/update/{{target}}/{{arch}}/{{current_version}}"]
+      "endpoints": [
+        "https://atlas.nathanm.com/download/app/update/{{target}}/{{arch}}/{{current_version}}"
+      ]
     }
   }
 }
