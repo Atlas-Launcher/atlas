@@ -91,6 +91,12 @@ export default async function LauncherDownloadPage() {
           </p>
           <div className="flex flex-wrap gap-4">
             <Link
+              href="/download/app/installer/latest"
+              className="rounded-full bg-[var(--atlas-ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
+            >
+              Download for my platform
+            </Link>
+            <Link
               href="/download"
               className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
             >
@@ -144,7 +150,7 @@ export default async function LauncherDownloadPage() {
                     key={asset.name}
                     href={
                       releaseTagParam
-                        ? `/download/app/file/${releaseTagParam}/${encodeURIComponent(asset.name)}`
+                        ? `/download/app/installer/file/${releaseTagParam}/${encodeURIComponent(asset.name)}`
                         : asset.browser_download_url
                     }
                     className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"

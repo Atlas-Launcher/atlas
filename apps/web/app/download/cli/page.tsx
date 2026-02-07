@@ -32,6 +32,15 @@ const platformTargets = [
   },
 ];
 
+function isCliInstallerAsset(asset: ReleaseAsset) {
+  const name = asset.name.toLowerCase();
+  if (name.endsWith(".sig") || name.startsWith("source code")) {
+    return false;
+  }
+
+  return name.includes("atlas-cli-installer") || name.includes("installer");
+}
+
 function formatDate(value?: string) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
@@ -55,9 +64,11 @@ function formatBytes(bytes: number) {
 }
 
 function groupAssets(assets: ReleaseAsset[]) {
+  const installerAssets = assets.filter((asset) => isCliInstallerAsset(asset));
+  const activeAssets = installerAssets.length ? installerAssets : assets;
   const claimed = new Set<string>();
   const grouped = platformTargets.map((platform) => {
-    const matches = assets.filter((asset) => {
+    const matches = activeAssets.filter((asset) => {
       const name = asset.name.toLowerCase();
       const nameMatch = platform.nameNeedles.some((needle) => name.includes(needle));
       if (nameMatch) {
@@ -98,6 +109,12 @@ export default async function CliDownloadPage() {
             Build and publish modpack blobs with a fast Rust CLI designed for automation.
           </p>
           <div className="flex flex-wrap gap-4">
+            <Link
+              href="/download/cli/installer/latest"
+              className="rounded-full bg-[var(--atlas-ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
+            >
+              Download for my platform
+            </Link>
             <Link
               href="/download"
               className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
@@ -150,7 +167,7 @@ export default async function CliDownloadPage() {
                     key={asset.name}
                     href={
                       releaseTagParam
-                        ? `/download/cli/file/${releaseTagParam}/${encodeURIComponent(asset.name)}`
+                        ? `/download/cli/installer/file/${releaseTagParam}/${encodeURIComponent(asset.name)}`
                         : asset.browser_download_url
                     }
                     className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"
