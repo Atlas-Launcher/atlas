@@ -35,19 +35,19 @@ const launcherRedirectUrls =
 const launcherTrustedClients =
   launcherRedirectUrls.length > 0
     ? [
-        {
-          clientId: launcherClientId,
-          name: "Atlas Launcher",
-          // Launcher uses PKCE without a client secret, so it must be a public client.
-          type: "public" as const,
-          disabled: false,
-          redirectUrls: launcherRedirectUrls,
-          skipConsent: true,
-          metadata: {
-            app: "atlas-launcher",
-          },
+      {
+        clientId: launcherClientId,
+        name: "Atlas Launcher",
+        // Launcher uses PKCE without a client secret, so it must be a public client.
+        type: "public" as const,
+        disabled: false,
+        redirectUrls: launcherRedirectUrls,
+        skipConsent: true,
+        metadata: {
+          app: "atlas-launcher",
         },
-      ]
+      },
+    ]
     : [];
 
 export const auth = betterAuth({
@@ -57,7 +57,7 @@ export const auth = betterAuth({
     github: {
       clientId: process.env.GITHUB_CLIENT_ID ?? "",
       clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
-      scope: ["repo", "workflow", "read:org", "user:email"],
+      scope: ["user:email"],
     },
   },
   database: drizzleAdapter(db, {

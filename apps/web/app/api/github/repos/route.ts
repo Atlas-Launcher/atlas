@@ -481,8 +481,8 @@ export async function POST(request: Request) {
       {
         error:
           error instanceof Error
-            ? error.message
-            : "Unable to create GitHub repository.",
+            ? `${error.message}. Ensure the GitHub App is installed and has access to the target owner.`
+            : "Unable to create GitHub repository. Check your GitHub App installation and permissions.",
       },
       { status: 502 }
     );

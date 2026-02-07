@@ -84,8 +84,8 @@ export async function GET(request: Request) {
       {
         error:
           error instanceof Error
-            ? error.message
-            : "Unable to load GitHub owners.",
+            ? `${error.message}. Ensure the GitHub App is installed on your account or organization.`
+            : "Unable to load GitHub owners. Check your GitHub App installation.",
       },
       { status: 502 }
     );
