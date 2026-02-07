@@ -53,8 +53,10 @@ type GithubOwner = {
 
 const requireValue =
   (label: string) =>
-  ({ value }: { value: string }) =>
-    value?.trim() ? undefined : `${label} is required.`;
+    ({ value }: { value: string }) =>
+      value?.trim() ? undefined : `${label} is required.`;
+
+const GITHUB_APP_SLUG = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || "my-atlas-app";
 
 export default function CreatePackClient() {
   const router = useRouter();
@@ -340,7 +342,42 @@ export default function CreatePackClient() {
 
           {githubError ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-              {githubError}
+              <div className="flex flex-col space-y-2">
+                <p>{githubError}</p>
+                <div>
+                  <a
+                    href={`https://github.com/apps/${GITHUB_APP_SLUG}/installations/new`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button variant="outline" size="sm" className="h-8 text-[10px]">
+                      Install GitHub App
+                    </Button>
+                  </a>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {githubOwners.length === 0 && !githubLoading && !githubError ? (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700">
+              <div className="flex flex-col space-y-2">
+                <p>
+                  No GitHub accounts found. You need to install the GitHub App to create
+                  repositories.
+                </p>
+                <div>
+                  <a
+                    href={`https://github.com/apps/${GITHUB_APP_SLUG}/installations/new`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button variant="outline" size="sm" className="h-8 text-[10px]">
+                      Install GitHub App
+                    </Button>
+                  </a>
+                </div>
+              </div>
             </div>
           ) : null}
 
