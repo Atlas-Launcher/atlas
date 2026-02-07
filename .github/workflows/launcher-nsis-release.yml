@@ -89,6 +89,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Set Version
+        run: node .release-tools/set-version.js ${{ github.ref_name }}
+
       - name: Build and upload bundles
         uses: tauri-apps/tauri-action@5c73698991aa26946b2d232c344ea4d54b880ff7
         env:
@@ -137,6 +140,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Set Version
+        run: node .release-tools/set-version.js ${{ github.ref_name }}
 
       - name: Build and upload macOS bundles
         uses: tauri-apps/tauri-action@5c73698991aa26946b2d232c344ea4d54b880ff7
