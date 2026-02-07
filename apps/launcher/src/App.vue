@@ -90,8 +90,6 @@ const libraryView = ref<"grid" | "detail">("grid");
 const syncingRemotePacks = ref(false);
 const instanceInstallStateById = ref<Record<string, boolean>>({});
 const tasksPanelOpen = ref(false);
-const TASKS_PANEL_AUTO_MINIMIZE_MS = 5000;
-let tasksPanelAutoMinimizeTimer: ReturnType<typeof setTimeout> | null = null;
 
 const modsDir = computed(() => {
   const base = resolveInstanceGameDir(activeInstance.value);
@@ -367,27 +365,9 @@ async function openModsFolder() {
 }
 
 function toggleTasksPanel() {
-  if (!tasks.value.length) {
-    return;
-  }
   tasksPanelOpen.value = !tasksPanelOpen.value;
 }
 
-function clearTasksPanelAutoMinimizeTimer() {
-  if (!tasksPanelAutoMinimizeTimer) {
-    return;
-  }
-  clearTimeout(tasksPanelAutoMinimizeTimer);
-  tasksPanelAutoMinimizeTimer = null;
-}
-
-function scheduleTasksPanelAutoMinimize() {
-  clearTasksPanelAutoMinimizeTimer();
-  tasksPanelAutoMinimizeTimer = setTimeout(() => {
-    tasksPanelOpen.value = false;
-    tasksPanelAutoMinimizeTimer = null;
-  }, TASKS_PANEL_AUTO_MINIMIZE_MS);
-}
 
 async function updateAtlasChannel(channel: "dev" | "beta" | "production") {
   const instance = activeInstance.value;
@@ -565,31 +545,13 @@ watch(
 watch(
   () => tasks.value.length,
   (count, previousCount) => {
-    if (count === 0) {
-      tasksPanelOpen.value = false;
-      clearTasksPanelAutoMinimizeTimer();
-      return;
-    }
-    if (previousCount === 0) {
+    // Only auto-open when first task starts
+    if (count > 0 && previousCount === 0) {
       tasksPanelOpen.value = true;
     }
   }
 );
 
-watch(
-  () => tasksPanelOpen.value,
-  (open) => {
-    if (open && tasks.value.length > 0) {
-      scheduleTasksPanelAutoMinimize();
-      return;
-    }
-    clearTasksPanelAutoMinimizeTimer();
-  }
-);
-
-onBeforeUnmount(() => {
-  clearTasksPanelAutoMinimizeTimer();
-});
 </script>
 
 <template>
@@ -615,14 +577,14 @@ onBeforeUnmount(() => {
       />
 
       <!-- Main Content: Floating Pane -->
-      <main class="flex flex-col min-h-0 overflow-hidden">
+      <main class="flex flex-col min-h-0 overflow-visible">
         <section
           v-if="activeTab === 'library'"
-          class="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden"
+          class="flex-1 min-h-0 flex flex-col gap-6 overflow-visible"
         >
           <div
             v-if="libraryView === 'grid'"
-            class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1"
+            class="flex-1 min-h-0 overflow-y-auto px-4 pr-1"
           >
             <LibraryView
               :instances="instances"
@@ -669,7 +631,7 @@ onBeforeUnmount(() => {
             @update-channel="updateAtlasChannel"
           />
         </section>
-        <section v-else class="flex-1 min-h-0 overflow-auto space-y-6 pr-1">
+        <section v-else class="flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-6">
           <SettingsCard
             v-model:settingsClientId="settingsClientId"
             v-model:settingsAtlasHubUrl="settingsAtlasHubUrl"
@@ -688,7 +650,7 @@ onBeforeUnmount(() => {
       </main>
     </div>
     <GlobalProgressBar
-      v-if="tasks.length > 0 && tasksPanelOpen"
+      v-if="tasksPanelOpen"
       :tasks="tasks"
       :pack-name="activeInstance?.name ?? null"
     />
