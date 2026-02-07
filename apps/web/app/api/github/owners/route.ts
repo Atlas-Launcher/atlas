@@ -62,7 +62,7 @@ export async function GET(request: Request) {
       githubRequest<Array<{ login: string; avatar_url?: string }>>(
         token,
         "https://api.github.com/user/orgs?per_page=100"
-      ),
+      ).catch(() => []),
     ]);
 
     const owners = [

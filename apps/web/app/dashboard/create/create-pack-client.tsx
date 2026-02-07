@@ -31,6 +31,7 @@ import {
   InputGroupText,
 } from "@/components/ui/input-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RepositorySelector } from "./repository-selector";
 
 function deriveNameFromRepoUrl(value: string) {
   const trimmed = value.trim().replace(/\.git$/, "");
@@ -65,6 +66,7 @@ export default function CreatePackClient() {
   const [githubOwners, setGithubOwners] = useState<GithubOwner[]>([]);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
+  const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
 
   const createPack = async (payload: {
     name: string;
@@ -253,29 +255,26 @@ export default function CreatePackClient() {
                   {(field) => (
                     <FormField field={field}>
                       <FormItem>
-                        <FormLabel>Repository URL</FormLabel>
-                        <InputGroup>
-                          <InputGroupAddon>
-                            <InputGroupText>
-                              <Github className="h-4 w-4" />
-                            </InputGroupText>
-                          </InputGroupAddon>
-                          <FormControl>
-                            <InputGroupInput
-                              placeholder="https://github.com/org/repo"
+                        <FormLabel>Repository</FormLabel>
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <Github className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
                               value={field.state.value}
-                              onChange={(event) => field.handleChange(event.target.value)}
-                              onBlur={() => {
-                                field.handleBlur();
-                                const derived = deriveNameFromRepoUrl(field.state.value);
-                                if (derived && !importForm.state.values.name.trim()) {
-                                  importForm.setFieldValue("name", derived);
-                                }
-                              }}
-                              disabled={loading}
+                              readOnly
+                              placeholder="Select a repository..."
+                              className="pl-9 cursor-pointer"
+                              onClick={() => setRepoSelectorOpen(true)}
                             />
-                          </FormControl>
-                        </InputGroup>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setRepoSelectorOpen(true)}
+                          >
+                            Select
+                          </Button>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     </FormField>
@@ -363,7 +362,8 @@ export default function CreatePackClient() {
             <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700">
               <div className="flex flex-col space-y-2">
                 <p>
-                  No GitHub accounts found. You need to install the GitHub App to create
+                  Atlas Launcher has not been installed on any GitHub accounts you have
+                  access to. You need to install the app to create or import
                   repositories.
                 </p>
                 <div>
@@ -373,7 +373,7 @@ export default function CreatePackClient() {
                     rel="noopener noreferrer"
                   >
                     <Button variant="outline" size="sm" className="h-8 text-[10px]">
-                      Install GitHub App
+                      Install Atlas Launcher
                     </Button>
                   </a>
                 </div>
