@@ -25,7 +25,7 @@ const hiddenSecondaryCount = computed(() => {
 });
 const primaryTaskHeadline = computed(() => {
   if (!primaryTask.value) {
-    return "Working";
+    return "System Idle";
   }
   const verb = primaryTask.value.phase.toLowerCase() === "launch" ? "Launching" : "Installing";
   const packName = props.packName?.trim() || "pack";
@@ -35,46 +35,57 @@ const primaryTaskHeadline = computed(() => {
 </script>
 
 <template>
-  <div v-if="activeTasks.length" class="fixed bottom-4 left-0 right-0 z-30">
+  <div class="fixed bottom-4 left-0 right-0 z-30 transition-all duration-500 ease-in-out translate-y-0">
     <div class="mx-auto w-full max-w-4xl px-6">
-      <Card class="glass">
+      <Card class="glass rounded-2xl border-none bg-transparent shadow-none">
         <CardContent class="space-y-3 py-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div class="text-xs uppercase tracking-widest text-muted-foreground">Active tasks</div>
+              <div class="text-xs uppercase tracking-widest text-muted-foreground/60">Task Center</div>
               <div class="text-sm font-semibold text-foreground">
                 {{ primaryTaskHeadline }}
               </div>
             </div>
             <div v-if="hasMultipleTasks" class="text-xs text-muted-foreground">
-              {{ activeTasks.length }} task{{ activeTasks.length === 1 ? "" : "s" }} running
+              {{ activeTasks.length }} tasks running
+            </div>
+            <div v-else-if="!activeTasks.length" class="text-xs text-muted-foreground/40 italic">
+              Ready
             </div>
           </div>
-          <div class="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
-            <div
-              v-if="showIndeterminateProgress"
-              class="progress-stripe absolute inset-y-0 w-1/3 rounded-full"
-            />
-            <div
-              v-else
-              class="h-full rounded-full bg-primary transition-all"
-              :style="{ width: `${primaryPercent}%` }"
-            />
+          
+          <div class="relative h-1.5 w-full overflow-hidden rounded-full bg-secondary/30">
+            <template v-if="activeTasks.length">
+              <div
+                v-if="showIndeterminateProgress"
+                class="progress-stripe absolute inset-y-0 w-1/3 rounded-full"
+              />
+              <div
+                v-else
+                class="h-full rounded-full bg-primary transition-all duration-300"
+                :style="{ width: `${primaryPercent}%` }"
+              />
+            </template>
+            <div v-else class="h-full w-0 bg-primary/20 transition-all duration-300" />
           </div>
-          <div v-if="primaryTask" class="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span class="rounded-full border border-border/60 bg-card/70 px-2 py-1">
+
+          <div v-if="activeTasks.length" class="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span class="glass rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider">
               {{ primaryTask.message }}
             </span>
             <span
               v-for="task in secondaryTasks"
               :key="task.id"
-              class="rounded-full border border-border/60 bg-card/70 px-2 py-1"
+              class="glass rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider"
             >
               {{ task.message }}
             </span>
-            <span v-if="hiddenSecondaryCount > 0">
+            <span v-if="hiddenSecondaryCount > 0" class="self-center px-1">
               +{{ hiddenSecondaryCount }} more
             </span>
+          </div>
+          <div v-else class="text-xs text-muted-foreground/40">
+            All systems nominal.
           </div>
         </CardContent>
       </Card>

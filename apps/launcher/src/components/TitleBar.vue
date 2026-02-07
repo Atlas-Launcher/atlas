@@ -87,7 +87,7 @@ const statusDotClass = computed(() => {
     <!-- Left Section: Compact spacer for traffic lights -->
     <div class="flex items-center h-full" data-tauri-drag-region>
       <div 
-        class="glass flex items-center h-8 rounded-2xl bg-foreground/[0.04] border border-foreground/[0.08] backdrop-blur-xl transition-all"
+        class="glass flex items-center h-8 rounded-2xl transition-all"
         :class="isMac ? 'w-[76px] justify-center' : 'pl-3 pr-4'"
         data-tauri-drag-region
       >
@@ -107,7 +107,7 @@ const statusDotClass = computed(() => {
     <!-- Right Section: Auth & Controls -->
     <div class="flex items-center gap-2.5 h-full pr-0.5" data-tauri-drag-region>
       <DropdownMenu>
-        <DropdownMenuTrigger class="glass group flex items-center h-8 px-4 rounded-2xl bg-foreground/[0.05] border border-foreground/[0.1] hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300 backdrop-blur-2xl shadow-sm">
+        <DropdownMenuTrigger class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300">
           <span 
             class="w-2 h-2 rounded-full mr-2.5 transition-all duration-300 group-hover:scale-110" 
             :class="statusDotClass"
@@ -117,7 +117,7 @@ const statusDotClass = computed(() => {
           </div>
           <ChevronDown class="ml-2 h-3 w-3 opacity-20 group-hover:opacity-60 transition-all duration-300" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent class="w-64 p-2 select-none glass bg-background/95 border-foreground/10 shadow-2xl rounded-2xl" align="end">
+        <DropdownMenuContent class="glass w-64 p-2 select-none rounded-2xl" align="end">
           <DropdownMenuLabel class="px-2.5 py-1.5 text-xs font-black uppercase tracking-[0.15em] text-foreground/30">
             Atlas
             <Check v-if="atlasSignedIn" class="inline h-3.5 w-3.5 ml-1" />
@@ -142,7 +142,7 @@ const statusDotClass = computed(() => {
           </DropdownMenuItem>
           <DropdownMenuSeparator class="bg-foreground/5 mx-1" />
           <DropdownMenuLabel class="px-2.5 py-1.5 text-xs font-black uppercase tracking-[0.15em] text-foreground/30">Mojang
-            <Check v-if="atlasSignedIn" class="inline h-3.5 w-3.5 ml-1" />
+            <Check v-if="mojangSignedIn" class="inline h-3.5 w-3.5 ml-1" />
             <X v-else class="inline h-3.5 w-3.5 ml-1" /> </DropdownMenuLabel>
           <div class="px-2.5 pb-2 text-sm font-bold tracking-tight">
             {{ props.profile ? props.profile.name : "Not signed in" }}

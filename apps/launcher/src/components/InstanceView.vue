@@ -72,7 +72,7 @@ const contentTabLabel = computed(() =>
 <template>
   <!-- Fill available height so the tabs area can scroll internally -->
   <section class="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
-    <div class="rounded-3xl border border-border/60 bg-card/70 p-4">
+    <div class="glass rounded-2xl px-6 py-4">
       <div class="flex flex-wrap items-center gap-4">
         <Button size="icon-sm" variant="ghost" @click="emit('back')"><ChevronLeftIcon /></Button>
         <div class="flex items-center gap-3">

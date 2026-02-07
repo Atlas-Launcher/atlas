@@ -33,7 +33,7 @@ const tasksBadge = computed(() => (props.tasksCount > 9 ? "9+" : String(props.ta
 </script>
 
 <template>
-  <aside class="flex h-full flex-col items-center gap-6 rounded-2xl border border-white/[0.08] bg-card/40 px-3 py-4 backdrop-blur-3xl shadow-xl shadow-black/20">
+  <aside class="glass flex h-full flex-col items-center gap-6 rounded-2xl px-3 py-4">
     <TooltipProvider>
       <div class="flex flex-col gap-4">
         <Tooltip>

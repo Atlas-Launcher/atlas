@@ -134,7 +134,7 @@ function onQuickAction(instance: InstanceConfig) {
 </script>
 
 <template>
-  <Card class="glass rounded-2xl">
+  <Card class="glass rounded-2xl border-none bg-transparent shadow-none">
     <CardContent class="space-y-6 pt-6">
       <div class="flex flex-wrap items-center gap-4">
         <Tabs v-model="filter">
