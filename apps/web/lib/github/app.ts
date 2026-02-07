@@ -5,10 +5,8 @@
  * generate installation access tokens for accessing repositories.
  */
 
-import { SignJWT, importPKCS8 } from "jose";
-
-const GITHUB_APP_ID = process.env.GITHUB_APP_ID;
-const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY;
+import { SignJWT } from "jose";
+import { createPrivateKey } from "crypto";
 
 export class GitHubAppNotInstalledError extends Error {
     constructor(message: string = "GitHub App is not installed for this user.") {
@@ -29,13 +27,18 @@ export class GitHubAppNotConfiguredError extends Error {
  * The JWT is valid for 10 minutes (GitHub's maximum).
  */
 async function generateAppJWT(): Promise<string> {
+    const GITHUB_APP_ID = process.env.GITHUB_APP_ID;
+    const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY;
+
     if (!GITHUB_APP_ID || !GITHUB_APP_PRIVATE_KEY) {
         throw new GitHubAppNotConfiguredError();
     }
 
     // Handle newlines in the private key (env vars often escape \n)
     const privateKeyPem = GITHUB_APP_PRIVATE_KEY.replace(/\\n/g, "\n");
-    const privateKey = await importPKCS8(privateKeyPem, "RS256");
+
+    // Use Node's crypto module which handles both PKCS#1 and PKCS#8 formats
+    const privateKey = createPrivateKey(privateKeyPem);
 
     const now = Math.floor(Date.now() / 1000);
 
