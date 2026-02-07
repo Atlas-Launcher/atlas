@@ -1,3 +1,8 @@
+#![cfg_attr(
+all(not(debug_assertions), target_os = "windows"),
+windows_subsystem = "windows"
+)]
+
 mod auth;
 mod commands;
 mod config;
