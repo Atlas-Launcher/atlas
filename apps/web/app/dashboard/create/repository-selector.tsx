@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ChevronLeft, ChevronRight, Loader2, GitFork, Book } from "lucide-react";
-import { useDebounce } from "use-debounce";
+import { Search, ChevronLeft, ChevronRight, Loader2, Book } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +12,22 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+function useDebounce<T>(value: T, delay: number): T {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [value, delay]);
+
+    return debouncedValue;
+}
 
 type GithubRepo = {
     name: string;
@@ -43,7 +58,7 @@ export function RepositorySelector({
     const [page, setPage] = useState(1);
     const [hasNextPage, setHasNextPage] = useState(false);
     const [search, setSearch] = useState("");
-    const [debouncedSearch] = useDebounce(search, 500);
+    const debouncedSearch = useDebounce(search, 500);
 
     useEffect(() => {
         if (open) {
