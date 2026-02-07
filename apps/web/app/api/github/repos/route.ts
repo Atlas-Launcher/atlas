@@ -6,6 +6,16 @@ import { hasRole } from "@/lib/auth/roles";
 import { db } from "@/lib/db";
 import { accounts, packs } from "@/lib/db/schema";
 import { createPackWithDefaults } from "@/lib/packs/create-pack";
+import {
+  configureRepoForAtlas,
+  githubRequest,
+  type GithubContentFile,
+} from "@/lib/github/repo-config";
+import {
+  getInstallationTokenForUser,
+  GitHubAppNotInstalledError,
+  GitHubAppNotConfiguredError,
+} from "@/lib/github/app";
 
 type GithubOwner = {
   login: string;
@@ -19,21 +29,6 @@ type GithubRepo = {
   owner?: {
     login?: string;
   };
-};
-
-type GithubContentFile = {
-  sha: string;
-  content: string;
-  encoding: string;
-};
-
-type GithubWorkflow = {
-  id: number;
-  state: string;
-};
-
-type GithubWorkflowListResponse = {
-  workflows?: GithubWorkflow[];
 };
 
 function getTemplateRepo() {
@@ -56,54 +51,6 @@ function getAtlasHubUrl(request: Request) {
     process.env.BETTER_AUTH_URL?.trim() ??
     new URL(request.url).origin
   );
-}
-
-async function getGithubToken(userId: string) {
-  const [account] = await db
-    .select()
-    .from(accounts)
-    .where(and(eq(accounts.userId, userId), eq(accounts.providerId, "github")))
-    .orderBy(desc(accounts.updatedAt))
-    .limit(1);
-
-  if (!account?.accessToken) {
-    return null;
-  }
-
-  return account.accessToken;
-}
-
-async function githubRequest<T>(
-  token: string,
-  url: string,
-  init?: RequestInit
-): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body?.message ?? "GitHub request failed");
-  }
-
-  if (response.status === 204) {
-    return null as T;
-  }
-
-  const text = await response.text();
-  if (!text) {
-    return null as T;
-  }
-
-  return JSON.parse(text) as T;
 }
 
 async function createRepositoryFromTemplate({
@@ -135,199 +82,6 @@ async function createRepositoryFromTemplate({
       }),
     }
   );
-}
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function quoteTomlString(value: string) {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function upsertCliTomlField(toml: string, key: string, value: string) {
-  const newline = toml.includes("\r\n") ? "\r\n" : "\n";
-  const lines = toml.split(/\r?\n/);
-  const hasTrailingNewline = /(?:\r?\n)$/.test(toml);
-  const cliHeaderPattern = /^\s*\[cli\]\s*$/;
-  const sectionPattern = /^\s*\[[^\]]+\]\s*$/;
-  const fieldPattern = new RegExp(`^\\s*${key}\\s*=`);
-  const replacement = `${key} = ${quoteTomlString(value)}`;
-
-  const cliStart = lines.findIndex((line) => cliHeaderPattern.test(line));
-  if (cliStart === -1) {
-    if (lines.length && lines[lines.length - 1].trim().length !== 0) {
-      lines.push("");
-    }
-    lines.push("[cli]");
-    lines.push(replacement);
-  } else {
-    let cliEnd = lines.length;
-    for (let i = cliStart + 1; i < lines.length; i += 1) {
-      if (sectionPattern.test(lines[i])) {
-        cliEnd = i;
-        break;
-      }
-    }
-
-    const fieldIndex = lines.findIndex(
-      (line, index) => index > cliStart && index < cliEnd && fieldPattern.test(line)
-    );
-
-    if (fieldIndex >= 0) {
-      lines[fieldIndex] = replacement;
-    } else {
-      lines.splice(cliStart + 1, 0, replacement);
-    }
-  }
-
-  const output = lines.join(newline);
-  return hasTrailingNewline ? `${output}${newline}` : output;
-}
-
-function decodeBase64Content(content: string) {
-  return Buffer.from(content.replace(/\n/g, ""), "base64").toString("utf8");
-}
-
-async function setAtlasTomlCliConfig({
-  token,
-  owner,
-  repo,
-  packId,
-  hubUrl,
-}: {
-  token: string;
-  owner: string;
-  repo: string;
-  packId: string;
-  hubUrl: string;
-}) {
-  const atlasTomlPath = "atlas.toml";
-  const file = await githubRequest<GithubContentFile>(
-    token,
-    `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(atlasTomlPath)}`
-  );
-
-  if (file.encoding !== "base64") {
-    throw new Error("Unexpected atlas.toml encoding from GitHub API.");
-  }
-
-  const currentToml = decodeBase64Content(file.content);
-  let updatedToml = upsertCliTomlField(currentToml, "pack_id", packId);
-  updatedToml = upsertCliTomlField(updatedToml, "hub_url", hubUrl);
-
-  if (updatedToml === currentToml) {
-    return;
-  }
-
-  await githubRequest<null>(
-    token,
-    `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(atlasTomlPath)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify({
-        message: "Configure Atlas Hub CLI defaults",
-        content: Buffer.from(updatedToml, "utf8").toString("base64"),
-        sha: file.sha,
-      }),
-    }
-  );
-}
-
-async function setRepositoryActionsPermissions({
-  token,
-  owner,
-  repo,
-}: {
-  token: string;
-  owner: string;
-  repo: string;
-}) {
-  await githubRequest<null>(
-    token,
-    `https://api.github.com/repos/${owner}/${repo}/actions/permissions`,
-    {
-      method: "PUT",
-      body: JSON.stringify({
-        enabled: true,
-        allowed_actions: "all",
-      }),
-    }
-  );
-}
-
-async function listRepositoryWorkflows({
-  token,
-  owner,
-  repo,
-}: {
-  token: string;
-  owner: string;
-  repo: string;
-}) {
-  const response = await githubRequest<GithubWorkflowListResponse>(
-    token,
-    `https://api.github.com/repos/${owner}/${repo}/actions/workflows?per_page=100`
-  );
-  return Array.isArray(response.workflows) ? response.workflows : [];
-}
-
-async function enableRepositoryWorkflows({
-  token,
-  owner,
-  repo,
-}: {
-  token: string;
-  owner: string;
-  repo: string;
-}) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const workflows = await listRepositoryWorkflows({ token, owner, repo });
-    if (workflows.length === 0) {
-      if (attempt === 4) {
-        throw new Error(
-          "No workflows were found in the generated repository. Ensure the template includes .github/workflows files."
-        );
-      }
-      await sleep(750 * (attempt + 1));
-      continue;
-    }
-
-    await Promise.all(
-      workflows.map(async (workflow) => {
-        if (workflow.state === "active") {
-          return;
-        }
-
-        await githubRequest<null>(
-          token,
-          `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${encodeURIComponent(
-            String(workflow.id)
-          )}/enable`,
-          {
-            method: "PUT",
-          }
-        );
-      })
-    );
-
-    return;
-  }
-}
-
-async function enableRepositoryActionsAndWorkflows({
-  token,
-  owner,
-  repo,
-}: {
-  token: string;
-  owner: string;
-  repo: string;
-}) {
-  await setRepositoryActionsPermissions({ token, owner, repo });
-  await enableRepositoryWorkflows({ token, owner, repo });
 }
 
 async function deleteRepository({
@@ -375,12 +129,7 @@ export async function GET(request: Request) {
   const search = searchParams.get("search")?.trim();
 
   // Import the GitHub App utilities
-  const {
-    getInstallationTokenForUser,
-    listInstallationRepos,
-    GitHubAppNotInstalledError,
-    GitHubAppNotConfiguredError,
-  } = await import("@/lib/github/app");
+  const { listInstallationRepos } = await import("@/lib/github/app");
 
   try {
     // Get the user's GitHub username first
@@ -411,9 +160,6 @@ export async function GET(request: Request) {
       }
 
       // We'll need to get username from another source or throw an error
-      // For now, use the accountId as a fallback (it's the GitHub user ID)
-      // This won't work directly - we need to get the installation by user ID
-      // Let's use a different approach: get all app installations and find the one matching this user
       return NextResponse.json(
         {
           error: "Unable to determine your GitHub username. Please re-link your GitHub account.",
@@ -492,8 +238,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const token = await getGithubToken(session.user.id);
-  if (!token) {
+  // Get the user's GitHub Linked Account
+  const [account] = await db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.userId, session.user.id), eq(accounts.providerId, "github")))
+    .orderBy(desc(accounts.updatedAt))
+    .limit(1);
+
+  if (!account?.accessToken) {
     return NextResponse.json({ error: "No GitHub account linked." }, { status: 404 });
   }
 
@@ -524,25 +277,57 @@ export async function POST(request: Request) {
     );
   }
 
-  const [user, orgs] = await Promise.all([
-    githubRequest<GithubOwner>(token, "https://api.github.com/user"),
-    githubRequest<GithubOwner[]>(token, "https://api.github.com/user/orgs?per_page=100"),
-  ]);
+  // Verify access to the requested owner using user token
+  try {
+    const user = await githubRequest<GithubOwner>(account.accessToken, "https://api.github.com/user");
+    const githubUsername = user.login;
 
-  const ownerIsUser = owner.toLowerCase() === user.login.toLowerCase();
-  const ownerIsOrg = orgs.some((org) => org.login.toLowerCase() === owner.toLowerCase());
-
-  if (!ownerIsUser && !ownerIsOrg) {
+    if (owner.toLowerCase() !== githubUsername.toLowerCase()) {
+      const orgs = await githubRequest<GithubOwner[]>(account.accessToken, "https://api.github.com/user/orgs?per_page=100");
+      const isMember = orgs.some((org) => org.login.toLowerCase() === owner.toLowerCase());
+      if (!isMember) {
+        return NextResponse.json(
+          { error: "Selected owner is not available to this account." },
+          { status: 400 }
+        );
+      }
+    }
+  } catch {
     return NextResponse.json(
-      { error: "Selected owner is not available to this account." },
+      { error: "Unable to verify GitHub account. Please re-link your GitHub account." },
       { status: 400 }
     );
+  }
+
+  // Get installation token for the OWNER
+  // For now we use getInstallationTokenForUser(owner). 
+  // If owner is an org, this might need adjustment if getInstallationTokenForUser relies on user-specific endpoints.
+  // But since we successfully use it for listing repos (which lists user and org repos), it might be robust enough
+  // IF the user has installed the app on the org.
+
+  let installationToken: string;
+  try {
+    installationToken = await getInstallationTokenForUser(owner);
+  } catch (error) {
+    if (error instanceof GitHubAppNotInstalledError) {
+      const appSlug = process.env.GITHUB_APP_SLUG || process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || "atlas-launcher";
+      return NextResponse.json(
+        {
+          error: `The Atlas Launcher GitHub App is not installed on '${owner}'. Install it to allow repository creation.`,
+          code: "GITHUB_APP_NOT_INSTALLED",
+          installUrl: `https://github.com/apps/${appSlug}/installations/new`,
+        },
+        { status: 403 }
+      );
+    }
+    throw error;
   }
 
   let createdPackId: string | null = null;
   let createdRepo: GithubRepo | null = null;
 
   try {
+    // 1. Create the Pack in DB
     const packName = name.replace(/[-_]+/g, " ").trim() || name;
     const createdPack = await createPackWithDefaults({
       ownerId: session.user.id,
@@ -550,8 +335,9 @@ export async function POST(request: Request) {
     });
     createdPackId = createdPack.id;
 
+    // 2. Create Repository from Template using INSTALLATION TOKEN
     const repo = await createRepositoryFromTemplate({
-      token,
+      token: installationToken,
       owner,
       name,
       description,
@@ -562,20 +348,39 @@ export async function POST(request: Request) {
     const resolvedOwner = repo?.owner?.login ?? owner;
     const hubUrl = getAtlasHubUrl(request);
 
-    await enableRepositoryActionsAndWorkflows({
-      token,
-      owner: resolvedOwner,
-      repo: repo.name,
-    });
+    // 3. Configure the Repo (workflows, atlas.toml) using SHARED LOGIC
+    // First, check if atlas.toml exists (it should, from template)
+    const { checkAtlasTomlExists, ensureAtlasBuildWorkflow, setRepositoryActionsPermissions, enableRepositoryWorkflows } = await import("@/lib/github/repo-config");
 
-    await setAtlasTomlCliConfig({
-      token,
-      owner: resolvedOwner,
-      repo: repo.name,
-      packId: createdPack.id,
-      hubUrl,
-    });
+    // We add a small retry loop for searching the file, just in case of propagation delay
+    let atlasToml: GithubContentFile | null = null;
+    for (let i = 0; i < 3; i++) {
+      atlasToml = await checkAtlasTomlExists({
+        token: installationToken,
+        owner: resolvedOwner,
+        repo: repo.name,
+      });
+      if (atlasToml) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
 
+    if (atlasToml) {
+      await configureRepoForAtlas({
+        token: installationToken,
+        owner: resolvedOwner,
+        repo: repo.name,
+        packId: createdPack.id,
+        hubUrl,
+        existingAtlasToml: atlasToml,
+      });
+    } else {
+      // Fallback if atlas.toml missing in template: just ensure workflow and permissions
+      await ensureAtlasBuildWorkflow({ token: installationToken, owner: resolvedOwner, repo: repo.name });
+      await setRepositoryActionsPermissions({ token: installationToken, owner: resolvedOwner, repo: repo.name });
+      await enableRepositoryWorkflows({ token: installationToken, owner: resolvedOwner, repo: repo.name });
+    }
+
+    // 4. Update Pack with Repo URL
     const [updatedPack] = await db
       .update(packs)
       .set({
@@ -599,11 +404,13 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
+    // Cleanup on failure
     if (createdRepo) {
       const repoOwner = createdRepo?.owner?.login ?? owner;
       if (repoOwner) {
+        // Delete using installation token
         await deleteRepository({
-          token,
+          token: installationToken,
           owner: repoOwner,
           repo: createdRepo.name,
         }).catch(() => null);
