@@ -36,4 +36,5 @@ export interface AppSettings {
   defaultJvmArgs?: string | null;
   instances?: InstanceConfig[];
   selectedInstanceId?: string | null;
+  themeMode?: "light" | "dark" | "system" | null;
 }

@@ -17,7 +17,8 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     defaultMemoryMb: 4096,
     defaultJvmArgs: null,
     instances: [],
-    selectedInstanceId: null
+    selectedInstanceId: null,
+    themeMode: "system"
   });
   const defaultGameDir = ref("");
 
@@ -34,6 +35,15 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     set: (value: string) => {
       const trimmed = value.trim().replace(/\/+$/, "");
       settings.value.atlasHubUrl = trimmed.length > 0 ? trimmed : null;
+    }
+  });
+
+  const settingsThemeMode = computed({
+    get: () => settings.value.themeMode ?? "system",
+    set: (value: "light" | "dark" | "system") => {
+      settings.value.themeMode = value;
+      applyTheme(value);
+      queueSave();
     }
   });
 
@@ -123,13 +133,13 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     const atlasPack =
       source === "atlas" && instance.atlasPack
         ? {
-            packId: instance.atlasPack.packId,
-            packSlug: instance.atlasPack.packSlug,
-            channel: normalizeAtlasChannel(instance.atlasPack.channel),
-            buildId: instance.atlasPack.buildId ?? null,
-            buildVersion: instance.atlasPack.buildVersion ?? null,
-            artifactKey: instance.atlasPack.artifactKey ?? null
-          }
+          packId: instance.atlasPack.packId,
+          packSlug: instance.atlasPack.packSlug,
+          channel: normalizeAtlasChannel(instance.atlasPack.channel),
+          buildId: instance.atlasPack.buildId ?? null,
+          buildVersion: instance.atlasPack.buildVersion ?? null,
+          artifactKey: instance.atlasPack.artifactKey ?? null
+        }
         : null;
     return {
       id: instance.id || `instance-${fallbackIndex}`,
@@ -162,11 +172,13 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
         instances: (loaded.instances ?? []).map((instance, index) =>
           normalizeInstance(instance, index)
         ),
-        selectedInstanceId: loaded.selectedInstanceId ?? null
+        selectedInstanceId: loaded.selectedInstanceId ?? null,
+        themeMode: (loaded.themeMode as "light" | "dark" | "system") ?? null
       };
       if (ensureDefaults()) {
         await saveSettings(true);
       }
+      applyTheme(settings.value.themeMode ?? "system");
     } catch (err) {
       pushLog(`Failed to load settings: ${String(err)}`);
     }
@@ -318,7 +330,7 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     const nextLoaderKind = remoteLoaderKind ?? existing?.loader?.kind ?? "vanilla";
     const nextLoaderVersion = canApplyRemoteRuntime
       ? remote.modloaderVersion ??
-        (nextLoaderKind === "vanilla" ? null : existing?.loader?.loaderVersion ?? null)
+      (nextLoaderKind === "vanilla" ? null : existing?.loader?.loaderVersion ?? null)
       : existing?.loader?.loaderVersion ?? null;
     const nextMinecraftVersion = canApplyRemoteRuntime
       ? remote.minecraftVersion ?? existing?.version ?? null
@@ -413,6 +425,20 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     duplicateInstance,
     updateInstance,
     removeInstance,
-    syncAtlasRemotePacks
+    syncAtlasRemotePacks,
+    settingsThemeMode
   };
+}
+
+function applyTheme(mode: "light" | "dark" | "system") {
+  const root = document.documentElement;
+  const isDark =
+    mode === "dark" ||
+    (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+  if (isDark) {
+    root.classList.add("dark");
+  } else {
+    root.classList.remove("dark");
+  }
 }

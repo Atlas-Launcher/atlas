@@ -15,6 +15,7 @@ const props = defineProps<{
   settingsAtlasHubUrl: string;
   settingsDefaultMemoryMb: number;
   settingsDefaultJvmArgs: string;
+  settingsThemeMode: "light" | "dark" | "system";
   working: boolean;
 }>();
 
@@ -23,10 +24,11 @@ const emit = defineEmits<{
   (event: "update:settingsAtlasHubUrl", value: string): void;
   (event: "update:settingsDefaultMemoryMb", value: number): void;
   (event: "update:settingsDefaultJvmArgs", value: string): void;
+  (event: "update:settingsThemeMode", value: "light" | "dark" | "system"): void;
   (event: "save-settings"): void;
 }>();
 
-const settingsTab = ref<"runtime" | "advanced">("runtime");
+const settingsTab = ref<"runtime" | "appearance" | "advanced">("runtime");
 
 function updateClientId(value: string | number) {
   emit("update:settingsClientId", String(value ?? ""));
@@ -44,6 +46,10 @@ function updateDefaultJvmArgs(event: Event) {
   const target = event.target as HTMLTextAreaElement | null;
   emit("update:settingsDefaultJvmArgs", target?.value ?? "");
 }
+
+function updateThemeMode(value: string) {
+  emit("update:settingsThemeMode", value as "light" | "dark" | "system");
+}
 </script>
 
 <template>
@@ -54,9 +60,10 @@ function updateDefaultJvmArgs(event: Event) {
     </CardHeader>
     <CardContent class="space-y-4">
       <Tabs v-model="settingsTab" class="space-y-4">
-        <TabsList class="grid w-full grid-cols-2">
-          <TabsTrigger value="runtime">Runtime options</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced options</TabsTrigger>
+        <TabsList class="grid w-full grid-cols-3">
+          <TabsTrigger value="runtime">Runtime</TabsTrigger>
+          <TabsTrigger value="appearance">Appearance</TabsTrigger>
+          <TabsTrigger value="advanced">Advanced</TabsTrigger>
         </TabsList>
 
         <TabsContent value="runtime" class="space-y-4">
@@ -84,6 +91,41 @@ function updateDefaultJvmArgs(event: Event) {
             />
             <p class="text-xs text-muted-foreground">
               Applied when a profile does not override runtime settings.
+            </p>
+          </div>
+        </TabsContent>
+
+
+        <TabsContent value="appearance" class="space-y-4">
+          <div class="space-y-2">
+            <label class="text-xs uppercase tracking-widest text-muted-foreground">
+              Theme
+            </label>
+            <div class="grid grid-cols-3 gap-2">
+              <Button
+                variant="outline"
+                :class="{ 'border-primary ring-1 ring-primary': props.settingsThemeMode === 'light' }"
+                @click="updateThemeMode('light')"
+              >
+                Light
+              </Button>
+              <Button
+                variant="outline"
+                :class="{ 'border-primary ring-1 ring-primary': props.settingsThemeMode === 'dark' }"
+                @click="updateThemeMode('dark')"
+              >
+                Dark
+              </Button>
+              <Button
+                variant="outline"
+                :class="{ 'border-primary ring-1 ring-primary': props.settingsThemeMode === 'system' }"
+                @click="updateThemeMode('system')"
+              >
+                System
+              </Button>
+            </div>
+            <p class="text-xs text-muted-foreground">
+              Choose your preferred appearance or match system settings.
             </p>
           </div>
         </TabsContent>
