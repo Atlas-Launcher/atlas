@@ -235,7 +235,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       body: JSON.stringify({
         provider: "github",
         callbackURL,
-        scopes: ["repo", "workflow", "read:org", "user:email"],
+        scopes: ["user:email"],
         disableRedirect: true,
       }),
     });
@@ -315,12 +315,12 @@ export default function DashboardClient({ session }: DashboardClientProps) {
               passkeys={
                 Array.isArray(passkeysData)
                   ? passkeysData.map((passkey) => ({
-                      id: passkey.id,
-                      name: passkey.name,
-                      createdAt: passkey.createdAt,
-                      deviceType: passkey.deviceType,
-                      backedUp: passkey.backedUp,
-                    }))
+                    id: passkey.id,
+                    name: passkey.name,
+                    createdAt: passkey.createdAt,
+                    deviceType: passkey.deviceType,
+                    backedUp: passkey.backedUp,
+                  }))
                   : []
               }
               passkeysLoading={passkeysLoading}

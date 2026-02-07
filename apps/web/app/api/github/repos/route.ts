@@ -344,6 +344,83 @@ async function deleteRepository({
   });
 }
 
+export async function GET(request: Request) {
+  const session = await auth.api.getSession({ headers: request.headers });
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const token = await getGithubToken(session.user.id);
+  if (!token) {
+    return NextResponse.json({ error: "No GitHub account linked." }, { status: 404 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const page = parseInt(searchParams.get("page") ?? "1", 10);
+  const perPage = parseInt(searchParams.get("per_page") ?? "10", 10);
+  const search = searchParams.get("search")?.trim();
+
+  try {
+    // If search is provided, use the search API
+    // Otherwise list user repos
+    let url = `https://api.github.com/user/repos?sort=updated&per_page=${perPage}&page=${page}&type=all`;
+    if (search) {
+      url = `https://api.github.com/search/repositories?q=${encodeURIComponent(
+        `${search} in:name`
+      )}&per_page=${perPage}&page=${page}`;
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body?.message ?? "GitHub request failed");
+    }
+
+    const linkHeader = response.headers.get("link");
+    let nextPage: number | null = null;
+    if (linkHeader) {
+      const match = linkHeader.match(/[?&]page=(\d+)[^>]*>; rel="next"/);
+      if (match) {
+        nextPage = parseInt(match[1], 10);
+      }
+    }
+
+    const data = await response.json();
+    const repos = (search ? data.items : data) as GithubRepo[];
+
+    return NextResponse.json({
+      repos: repos.map((repo) => ({
+        name: repo.name,
+        full_name: repo.full_name,
+        html_url: repo.html_url,
+        clone_url: repo.clone_url,
+        owner: {
+          login: repo.owner?.login,
+        },
+      })),
+      nextPage,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to load repositories.",
+      },
+      { status: 502 }
+    );
+  }
+}
+
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
 
