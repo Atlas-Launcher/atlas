@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,6 +35,8 @@ interface AccountTabProps {
   focus: "github" | null;
   nextPath: string | null;
 }
+
+const GITHUB_APP_SLUG = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || "my-atlas-app";
 
 export default function AccountTab({
   onAddPasskey,
@@ -170,75 +171,75 @@ export default function AccountTab({
               ) : null}
               {!passkeysLoading && passkeys.length > 0
                 ? passkeys.map((passkey) => (
-                    <div
-                      key={passkey.id}
-                      className="rounded-2xl border border-[var(--atlas-border)] bg-[var(--atlas-cream)] px-3 py-2"
-                    >
-                      {editingPasskeyId === passkey.id ? (
-                        <div className="space-y-2">
-                          <Input
-                            value={editingPasskeyName}
-                            onChange={(event) => setEditingPasskeyName(event.target.value)}
-                            placeholder="Passkey name"
-                            maxLength={64}
-                          />
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => saveRename(passkey.id)}
-                              disabled={mutatingPasskeyId === passkey.id}
-                            >
-                              {mutatingPasskeyId === passkey.id ? "Saving…" : "Save"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={cancelRename}
-                              disabled={mutatingPasskeyId === passkey.id}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
+                  <div
+                    key={passkey.id}
+                    className="rounded-2xl border border-[var(--atlas-border)] bg-[var(--atlas-cream)] px-3 py-2"
+                  >
+                    {editingPasskeyId === passkey.id ? (
+                      <div className="space-y-2">
+                        <Input
+                          value={editingPasskeyName}
+                          onChange={(event) => setEditingPasskeyName(event.target.value)}
+                          placeholder="Passkey name"
+                          maxLength={64}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => saveRename(passkey.id)}
+                            disabled={mutatingPasskeyId === passkey.id}
+                          >
+                            {mutatingPasskeyId === passkey.id ? "Saving…" : "Save"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={cancelRename}
+                            disabled={mutatingPasskeyId === passkey.id}
+                          >
+                            Cancel
+                          </Button>
                         </div>
-                      ) : (
-                        <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm font-semibold text-[var(--atlas-ink)]">
-                            {passkey.name?.trim() || "Unnamed passkey"}
-                          </p>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => startRename(passkey.id, passkey.name)}
-                              disabled={mutatingPasskeyId === passkey.id}
-                            >
-                              Rename
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => removePasskey(passkey.id)}
-                              disabled={mutatingPasskeyId === passkey.id}
-                            >
-                              {mutatingPasskeyId === passkey.id ? "Deleting…" : "Delete"}
-                            </Button>
-                          </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-semibold text-[var(--atlas-ink)]">
+                          {passkey.name?.trim() || "Unnamed passkey"}
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startRename(passkey.id, passkey.name)}
+                            disabled={mutatingPasskeyId === passkey.id}
+                          >
+                            Rename
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => removePasskey(passkey.id)}
+                            disabled={mutatingPasskeyId === passkey.id}
+                          >
+                            {mutatingPasskeyId === passkey.id ? "Deleting…" : "Delete"}
+                          </Button>
                         </div>
-                      )}
-                      <p className="text-xs text-[var(--atlas-ink-muted)]">
-                        {passkey.deviceType}
-                        {" · "}
-                        Added{" "}
-                        {new Date(passkey.createdAt).toLocaleDateString(undefined, {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                        {" · "}
-                        {passkey.backedUp ? "Synced" : "Local only"}
-                      </p>
-                    </div>
-                  ))
+                      </div>
+                    )}
+                    <p className="text-xs text-[var(--atlas-ink-muted)]">
+                      {passkey.deviceType}
+                      {" · "}
+                      Added{" "}
+                      {new Date(passkey.createdAt).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                      {" · "}
+                      {passkey.backedUp ? "Synced" : "Local only"}
+                    </p>
+                  </div>
+                ))
                 : null}
             </div>
           </CardContent>
@@ -263,19 +264,30 @@ export default function AccountTab({
                     : "Link GitHub to continue creating pack repositories."}
                 </p>
               </div>
-              {githubLinked ? (
-                <Button
-                  variant="outline"
-                  onClick={onUnlinkGithub}
-                  disabled={githubLoading}
-                >
-                  Disconnect
-                </Button>
-              ) : (
-                <Button onClick={onLinkGithub} disabled={githubLoading}>
-                  Connect GitHub
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {githubLinked ? (
+                  <>
+                    <a
+                      href={`https://github.com/apps/${GITHUB_APP_SLUG}/installations/new`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline">Manage Access</Button>
+                    </a>
+                    <Button
+                      variant="outline"
+                      onClick={onUnlinkGithub}
+                      disabled={githubLoading}
+                    >
+                      Disconnect
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={onLinkGithub} disabled={githubLoading}>
+                    Connect GitHub
+                  </Button>
+                )}
+              </div>
             </div>
             {githubError ? (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
