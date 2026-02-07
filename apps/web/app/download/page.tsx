@@ -54,13 +54,13 @@ export default async function DownloadPage() {
           </p>
           <div className="flex flex-wrap gap-4">
             <Link
-              href="/download/app"
+              href="/download/app/installer/latest"
               className="rounded-full bg-[var(--atlas-ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
             >
               Get Launcher
             </Link>
             <Link
-              href="/download/cli"
+              href="/download/cli/installer/latest"
               className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
             >
               Get CLI
