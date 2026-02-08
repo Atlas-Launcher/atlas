@@ -27,6 +27,8 @@ export const users = pgTable("user", {
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
   role: roleEnum("role").notNull().default("player"),
+  mojangUsername: text("mojang_username"),
+  mojangUuid: text("mojang_uuid"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

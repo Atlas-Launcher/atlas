@@ -58,6 +58,10 @@ export const auth = betterAuth({
       clientId: process.env.GITHUB_CLIENT_ID ?? "",
       clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
     },
+    microsoft: {
+      clientId: process.env.MICROSOFT_CLIENT_ID ?? "",
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? "",
+    },
   },
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -80,7 +84,7 @@ export const auth = betterAuth({
   },
   account: {
     accountLinking: {
-      trustedProviders: ["github"],
+      trustedProviders: ["github", "microsoft"],
       allowDifferentEmails: true,
       updateUserInfoOnLink: true,
     },
@@ -91,6 +95,16 @@ export const auth = betterAuth({
         type: ["player", "creator", "admin"],
         required: false,
         defaultValue: "player",
+        input: false,
+      },
+      mojangUsername: {
+        type: "string",
+        required: false,
+        input: false,
+      },
+      mojangUuid: {
+        type: "string",
+        required: false,
         input: false,
       },
     },
