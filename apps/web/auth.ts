@@ -62,6 +62,7 @@ export const auth = betterAuth({
       clientId: process.env.MICROSOFT_CLIENT_ID ?? "",
       clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? "",
       tenantId: "consumers",
+      scope: ["openid", "profile", "email", "XboxLive.signin", "offline_access"],
     },
   },
   database: drizzleAdapter(db, {
