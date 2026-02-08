@@ -32,7 +32,15 @@ interface AccountTabProps {
   githubError: string | null;
   onLinkGithub: () => void;
   onUnlinkGithub: () => void;
-  focus: "github" | null;
+  microsoftLinked: boolean;
+  microsoftLoading: boolean;
+  microsoftError: string | null;
+  onLinkMicrosoft: () => void;
+  onUnlinkMicrosoft: () => void;
+  onSyncMojang: () => Promise<void>;
+  syncLoading: boolean;
+  mojangUsername: string | null;
+  focus: "github" | "microsoft" | null;
   nextPath: string | null;
 }
 
@@ -51,6 +59,14 @@ export default function AccountTab({
   githubError,
   onLinkGithub,
   onUnlinkGithub,
+  microsoftLinked,
+  microsoftLoading,
+  microsoftError,
+  onLinkMicrosoft,
+  onUnlinkMicrosoft,
+  onSyncMojang,
+  syncLoading,
+  mojangUsername,
   focus,
   nextPath,
 }: AccountTabProps) {
@@ -119,6 +135,11 @@ export default function AccountTab({
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
           Connect a GitHub account to create new repositories. After linking, you&apos;ll
           be returned to {nextPath ?? "/dashboard/create"}.
+        </div>
+      ) : null}
+      {focus === "microsoft" ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+          Connect your Microsoft account to sync your Minecraft profile. Required for Launcher access.
         </div>
       ) : null}
 
@@ -292,6 +313,60 @@ export default function AccountTab({
             {githubError ? (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
                 {githubError}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className={focus === "microsoft" ? "ring-2 ring-amber-200" : ""}>
+          <CardHeader>
+            <CardTitle>Microsoft Account</CardTitle>
+            <CardDescription>
+              Link your Microsoft account to access your Minecraft profile and play on Atlas servers.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold">
+                  {microsoftLinked ? "Connected" : "Not connected"}
+                </p>
+                <p className="text-xs text-[var(--atlas-ink-muted)]">
+                  {microsoftLinked
+                    ? mojangUsername
+                      ? `Linked as ${mojangUsername}`
+                      : "Your Microsoft account is linked. Sync to fetch profile."
+                    : "Link your Microsoft account to sync your Mojang profile."}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {microsoftLinked ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={onSyncMojang}
+                      disabled={syncLoading || microsoftLoading}
+                    >
+                      {syncLoading ? "Syncing…" : "Sync Profile"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={onUnlinkMicrosoft}
+                      disabled={microsoftLoading || syncLoading}
+                    >
+                      Disconnect
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={onLinkMicrosoft} disabled={microsoftLoading}>
+                    Connect Microsoft
+                  </Button>
+                )}
+              </div>
+            </div>
+            {microsoftError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+                {microsoftError}
               </div>
             ) : null}
           </CardContent>
