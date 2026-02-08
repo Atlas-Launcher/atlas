@@ -78,6 +78,8 @@ async fn refresh_atlas_session(session: &AtlasSession) -> Result<AtlasSession, A
             id: user_info.sub,
             email: user_info.email,
             name: user_info.name,
+            mojang_username: user_info.mojang_username,
+            mojang_uuid: user_info.mojang_uuid,
         },
     })
 }

@@ -151,6 +151,19 @@ function updateThemeMode(value: string) {
               @update:modelValue="updateAtlasHubUrl"
             />
           </div>
+          <div class="space-y-2">
+            <label class="text-xs uppercase tracking-widest text-muted-foreground">
+              Legacy Authentication
+            </label>
+            <div class="flex gap-2">
+              <Button variant="outline" class="w-full" @click="$emit('sign-in-microsoft')" :disabled="props.working">
+                Sign in with Microsoft
+              </Button>
+            </div>
+            <p class="text-[10px] text-muted-foreground">
+              Only required if you are not using Atlas Hub account linking.
+            </p>
+          </div>
           <div class="text-xs text-muted-foreground">
             Sign out and sign back in after changing auth settings.
           </div>

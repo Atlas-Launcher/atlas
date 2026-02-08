@@ -64,15 +64,20 @@ impl HubClient {
     }
 
     pub async fn check_creator_permission(&self, pack_id: &str) -> Result<bool> {
-        let url = self.base_url.join("/api/v1/user/permissions")?;
+        let url = self.base_url.join(&format!("/api/v1/packs/{}/check-access", pack_id))?;
         let response = self.client.get(url)
             .headers(self.get_auth_headers().await?)
             .send()
             .await?
             .error_for_status()?;
 
-        let permissions: Vec<UserPermission> = response.json().await?;
-        Ok(permissions.iter().any(|p| p.pack_id == pack_id && (p.role == "creator" || p.role == "admin")))
+        #[derive(Deserialize)]
+        struct AccessResponse {
+            allowed: bool,
+        }
+
+        let access: AccessResponse = response.json().await?;
+        Ok(access.allowed)
     }
 
     pub async fn get_build_lockfile(&self, pack_id: &str, channel: &str) -> Result<Vec<u8>> {

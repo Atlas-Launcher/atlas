@@ -25,6 +25,10 @@ pub struct AtlasUserInfo {
     pub email: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub mojang_username: Option<String>,
+    #[serde(default)]
+    pub mojang_uuid: Option<String>,
 }
 
 fn random_url_safe(len: usize) -> String {
