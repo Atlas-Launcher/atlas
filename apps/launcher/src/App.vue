@@ -545,10 +545,7 @@ watch(
 watch(
   () => tasks.value.length,
   (count, previousCount) => {
-    // Only auto-open when first task starts
-    if (count > 0 && previousCount === 0) {
-      tasksPanelOpen.value = true;
-    }
+    // Manual control only: removed auto-open logic
   }
 );
 
