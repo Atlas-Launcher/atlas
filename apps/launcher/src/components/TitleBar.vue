@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onMounted, ref, computed } from "vue";
-import { X, Minus, Check, Square, Copy, ChevronDown, Globe, LogIn, LogOut } from "lucide-vue-next";
+import { X, Minus, Check, Square, Copy, ChevronDown, Globe, LogIn, LogOut, AlertCircle } from "lucide-vue-next";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +60,7 @@ const atlasStatus = computed(() => {
 });
 
 const atlasSignedIn = computed(() => !!props.atlasProfile);
-const mojangSignedIn = computed(() => !!props.profile);
+const mojangSignedIn = computed(() => !!props.profile || !!props.atlasProfile?.mojang_uuid);
 
 const statusText = computed(() => {
   if (mojangSignedIn.value && atlasSignedIn.value) return "Signed In";
@@ -77,6 +77,13 @@ const statusDotClass = computed(() => {
   }
   return "bg-red-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
 });
+const needsLinking = computed(() => !!props.atlasProfile && !props.atlasProfile.mojang_uuid && !props.profile);
+
+async function linkMicrosoft() {
+  const { open } = await import("@tauri-apps/plugin-opener");
+  const hubUrl = (import.meta.env.VITE_ATLAS_HUB_URL ?? "https://atlas.nathanm.org").replace(/\/$/, "");
+  await open(`${hubUrl}/dashboard?tab=account&focus=microsoft`);
+}
 </script>
 
 <template>
@@ -107,13 +114,13 @@ const statusDotClass = computed(() => {
     <!-- Right Section: Auth & Controls -->
     <div class="flex items-center gap-2.5 h-full pr-0.5" data-tauri-drag-region>
       <DropdownMenu>
-        <DropdownMenuTrigger class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300">
+        <DropdownMenuTrigger class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300" :class="{ 'bg-amber-500/10 border-amber-500/30': needsLinking }">
           <span 
             class="w-2 h-2 rounded-full mr-2.5 transition-all duration-300 group-hover:scale-110" 
-            :class="statusDotClass"
+            :class="needsLinking ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : statusDotClass"
           ></span>
-          <div class="text-xs tracking-tight transition-colors duration-300">
-            {{ statusText }}
+          <div class="text-xs tracking-tight transition-colors duration-300" :class="{ 'text-amber-500 font-bold': needsLinking }">
+            {{ needsLinking ? "Link Required" : statusText }}
           </div>
           <ChevronDown class="ml-2 h-3 w-3 opacity-20 group-hover:opacity-60 transition-all duration-300" />
         </DropdownMenuTrigger>
@@ -145,17 +152,25 @@ const statusDotClass = computed(() => {
             <Check v-if="mojangSignedIn" class="inline h-3.5 w-3.5 ml-1" />
             <X v-else class="inline h-3.5 w-3.5 ml-1" /> </DropdownMenuLabel>
           <div class="px-2.5 pb-2 text-sm font-bold tracking-tight">
-            {{ props.profile ? props.profile.name : "Not signed in" }}
+            <template v-if="props.profile">
+              {{ props.profile.name }}
+            </template>
+            <template v-else-if="props.atlasProfile?.mojang_username">
+              Linked: {{ props.atlasProfile.mojang_username }}
+            </template>
+            <template v-else>
+              Not signed in
+            </template>
           </div>
           <DropdownMenuItem
-              v-if="!props.profile"
-              class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-foreground/[0.04] hover:bg-foreground/[0.1] transition-colors"
-              @select="emit('sign-in-microsoft')"
+              v-if="needsLinking"
+              class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
+              @select="linkMicrosoft"
           >
-            <LogIn class="h-3.5 w-3.5 opacity-80" /> Microsoft
+            <AlertCircle class="h-3.5 w-3.5" /> Link Microsoft Account
           </DropdownMenuItem>
           <DropdownMenuItem
-              v-else
+              v-if="props.profile"
               class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold text-destructive hover:bg-destructive/10"
               @select="emit('sign-out-microsoft')"
           >

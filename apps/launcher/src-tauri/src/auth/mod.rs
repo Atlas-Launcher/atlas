@@ -120,6 +120,8 @@ pub async fn complete_atlas_login(
             id: profile.sub,
             email: profile.email,
             name: profile.name,
+            mojang_username: profile.mojang_username,
+            mojang_uuid: profile.mojang_uuid,
         },
     })
 }

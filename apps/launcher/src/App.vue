@@ -637,6 +637,7 @@ watch(
             v-model:settingsThemeMode="settingsThemeMode"
             :working="working"
             @save-settings="saveSettings"
+            @sign-in-microsoft="startMicrosoftSignIn"
           />
           <ActivityCard
             title="Recent activity"
