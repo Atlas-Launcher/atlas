@@ -99,7 +99,7 @@ const statusDotClass = computed(() => {
           Atlas Launcher
         </span>
       </div>
-      <span class="ml-8 text-[12px] font-black text-foreground/15 tracking-[0.2em] uppercase pointer-events-none" data-tauri-drag-region>
+      <span v-if="isMac" class="ml-8 text-[12px] font-black text-foreground/15 tracking-[0.2em] uppercase pointer-events-none" data-tauri-drag-region>
         Atlas Launcher
       </span>
     </div>
