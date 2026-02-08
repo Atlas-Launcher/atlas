@@ -61,7 +61,9 @@ export const auth = betterAuth({
     microsoft: {
       clientId: process.env.MICROSOFT_CLIENT_ID ?? "",
       clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? "",
+      authority: "https://login.microsoftonline.com",
       tenantId: "consumers",
+      prompt: "select_account", 
       scope: ["openid", "profile", "email", "XboxLive.signin", "offline_access"],
     },
   },
