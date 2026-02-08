@@ -15,6 +15,7 @@
         "title": "Atlas Launcher",
         "width": 1040,
         "height": 720,
+        "visible": false,
         "minWidth": 900,
         "minHeight": 640,
         "resizable": true,

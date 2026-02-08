@@ -111,13 +111,13 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
     const target = resolveDeepLinkTarget(url);
     if (target === "atlas") {
       atlasPendingDeeplink.value = url;
-      pushLog(`Atlas auth redirect received: ${url}`);
+      pushLog("Atlas auth redirect received.");
       void finishAtlasLogin(url);
       return;
     }
     if (target === "microsoft" && authFlow !== "device_code") {
       pendingDeeplink.value = url;
-      pushLog(`Microsoft auth redirect received: ${url}`);
+      pushLog("Microsoft auth redirect received.");
       void finishDeeplinkLogin(url);
     }
   }
