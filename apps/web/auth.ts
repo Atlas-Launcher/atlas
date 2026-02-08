@@ -61,6 +61,7 @@ export const auth = betterAuth({
     microsoft: {
       clientId: process.env.MICROSOFT_CLIENT_ID ?? "",
       clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? "",
+      tenantId: "consumers",
     },
   },
   database: drizzleAdapter(db, {
