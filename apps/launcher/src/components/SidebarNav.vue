@@ -33,7 +33,7 @@ const tasksBadge = computed(() => (props.tasksCount > 9 ? "9+" : String(props.ta
 </script>
 
 <template>
-  <aside class="glass flex h-full flex-col items-center gap-6 rounded-2xl px-3 py-4">
+  <aside class="glass relative z-40 flex h-full flex-col items-center gap-6 rounded-2xl px-3 py-4">
     <TooltipProvider>
       <div class="flex flex-col gap-4">
         <Tooltip>
@@ -74,10 +74,10 @@ const tasksBadge = computed(() => (props.tasksCount > 9 ? "9+" : String(props.ta
       </div>
 
       <div class="mt-auto flex flex-col gap-4">
-        <Tooltip v-if="props.tasksCount > 0">
+        <Tooltip>
           <TooltipTrigger as-child>
             <Button
-              class="relative flex h-12 w-12 items-center justify-center rounded-2xl border text-sm font-semibold transition"
+              class="relative flex h-12 w-12 items-center justify-center rounded-2xl border text-sm font-semibold transition overflow-visible"
               variant="ghost"
               :class="
                 props.tasksOpen
@@ -87,15 +87,36 @@ const tasksBadge = computed(() => (props.tasksCount > 9 ? "9+" : String(props.ta
               @click="toggleTasks"
             >
               <ListTodo class="h-5 w-5" />
+              
+              <!-- Edge Flow Loading Indicator (Mathematically Perfect 1px Inset) -->
+              <svg 
+                v-if="props.tasksCount > 0"
+                key="task-loading-svg"
+                class="absolute inset-0 !size-12 pointer-events-none overflow-visible" 
+                fill="none"
+                viewBox="0 0 48 48"
+              >
+                <path 
+                  d="M 24,1 L 32,1 A 15,15 0 0 1 47,16 L 47,32 A 15,15 0 0 1 32,47 L 16,47 A 15,15 0 0 1 1,32 L 1,16 A 15,15 0 0 1 16,1 Z" 
+                  class="stroke-primary flow-animation"
+                  stroke-width="2.5"
+                  stroke-dasharray="0.3 0.7"
+                  stroke-linecap="round"
+                  pathLength="1"
+                />
+              </svg>
+
               <span
-                class="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground"
+                v-if="props.tasksCount > 0"
+                key="task-loading-badge"
+                class="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground shadow-sm"
               >
                 {{ tasksBadge }}
               </span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="right">
-            {{ props.tasksOpen ? "Hide tasks" : "Show tasks" }}
+            {{ props.tasksOpen ? "Hide Task Center" : "Open Task Center" }}
           </TooltipContent>
         </Tooltip>
 
@@ -111,3 +132,18 @@ const tasksBadge = computed(() => (props.tasksCount > 9 ? "9+" : String(props.ta
     </TooltipProvider>
   </aside>
 </template>
+
+<style scoped>
+@keyframes edgeFlow {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.flow-animation {
+  animation: edgeFlow 2s linear infinite;
+}
+</style>

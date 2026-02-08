@@ -25,7 +25,7 @@ const hiddenSecondaryCount = computed(() => {
 });
 const primaryTaskHeadline = computed(() => {
   if (!primaryTask.value) {
-    return "System Idle";
+    return "No active tasks";
   }
   const verb = primaryTask.value.phase.toLowerCase() === "launch" ? "Launching" : "Installing";
   const packName = props.packName?.trim() || "pack";
@@ -35,13 +35,13 @@ const primaryTaskHeadline = computed(() => {
 </script>
 
 <template>
-  <div class="fixed bottom-4 left-0 right-0 z-30 transition-all duration-500 ease-in-out translate-y-0">
+  <div class="fixed bottom-4 left-0 right-0 z-30 transition-all duration-500 ease-in-out translate-y-0 pointer-events-none">
     <div class="mx-auto w-full max-w-4xl px-6">
-      <Card class="glass rounded-2xl border-none bg-transparent shadow-none">
+      <Card class="glass rounded-2xl border-none bg-transparent shadow-none pointer-events-auto">
         <CardContent class="space-y-3 py-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div class="text-xs uppercase tracking-widest text-muted-foreground/60">Task Center</div>
+              <div class="text-xs uppercase tracking-widest text-muted-foreground/60 mb-2">Task Center</div>
               <div class="text-sm font-semibold text-foreground">
                 {{ primaryTaskHeadline }}
               </div>
@@ -50,7 +50,7 @@ const primaryTaskHeadline = computed(() => {
               {{ activeTasks.length }} tasks running
             </div>
             <div v-else-if="!activeTasks.length" class="text-xs text-muted-foreground/40 italic">
-              Ready
+              No active tasks
             </div>
           </div>
           
@@ -85,7 +85,6 @@ const primaryTaskHeadline = computed(() => {
             </span>
           </div>
           <div v-else class="text-xs text-muted-foreground/40">
-            All systems nominal.
           </div>
         </CardContent>
       </Card>
