@@ -88,13 +88,13 @@ const statusDotClass = computed(() => {
     <div class="flex items-center h-full" data-tauri-drag-region>
       <div 
         class="glass flex items-center h-8 rounded-2xl transition-all"
-        :class="isMac ? 'w-[76px] justify-center' : 'pl-3 pr-4'"
+        :class="isMac ? 'w-[76px] justify-center' : 'px-4 justify-center'"
         data-tauri-drag-region
       >
         <div v-if="isMac" class="w-[60px]" data-tauri-drag-region></div>
         <span 
           v-if="!isMac"
-          class="text-[12px] font-black text-foreground/45 tracking-[0.2em] uppercase pointer-events-none"
+          class="text-[12px] font-black text-foreground/45 tracking-[0.2em] uppercase pointer-events-none text-center leading-none flex items-center h-full"
         >
           Atlas Launcher
         </span>
@@ -164,16 +164,16 @@ const statusDotClass = computed(() => {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <div v-if="!isMac" class="flex items-center h-8 rounded-full bg-foreground/[0.04] border border-foreground/[0.08] backdrop-blur-xl px-1 gap-0.5">
+      <div v-if="!isMac" class="glass flex items-center h-8 rounded-full px-1 gap-0.5">
         <button class="h-6 w-8 flex items-center justify-center rounded-full hover:bg-foreground/[0.05] active:bg-foreground/[0.1] transition-colors" @click="minimize" tabindex="-1">
-          <Minus class="w-3.5 h-3.5 opacity-40 hover:opacity-100 transition-opacity" />
+          <Minus class="w-3.5 h-3.5 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
         </button>
         <button class="h-6 w-8 flex items-center justify-center rounded-full hover:bg-foreground/[0.05] active:bg-foreground/[0.1] transition-colors" @click="toggleMaximize" tabindex="-1">
-          <Square v-if="!isMaximized" class="w-3 h-3 opacity-40 hover:opacity-100 transition-opacity" />
-          <Copy v-else class="w-3 h-3 opacity-40 hover:opacity-100 transition-opacity" />
+          <Square v-if="!isMaximized" class="w-3 h-3 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
+          <Copy v-else class="w-3 h-3 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
         </button>
         <button class="h-6 w-8 flex items-center justify-center rounded-full hover:bg-destructive hover:text-white transition-colors" @click="closeApp" tabindex="-1">
-          <X class="w-3.5 h-3.5 opacity-40 hover:opacity-100 transition-opacity" />
+          <X class="w-3.5 h-3.5 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
         </button>
       </div>
     </div>
