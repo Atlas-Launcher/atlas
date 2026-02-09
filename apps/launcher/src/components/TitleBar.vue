@@ -73,6 +73,20 @@ const statusDotClass = computed(() => {
 const needsLinking = computed(
   () => !!props.atlasProfile && !props.atlasProfile.mojang_uuid && !props.profile
 );
+const needsLinkCompletion = computed(() => {
+  if (!props.atlasProfile) {
+    return false;
+  }
+  const launcherUuid = props.profile?.id?.trim();
+  const atlasUuid = props.atlasProfile.mojang_uuid?.trim();
+  if (!launcherUuid) {
+    return false;
+  }
+  if (!atlasUuid) {
+    return true;
+  }
+  return atlasUuid !== launcherUuid;
+});
 </script>
 
 <template>
@@ -155,6 +169,13 @@ const needsLinking = computed(
               @select="emit('start-auth-flow')"
           >
             <LogIn class="h-3.5 w-3.5 opacity-80" /> Start sign-in
+          </DropdownMenuItem>
+          <DropdownMenuItem
+              v-if="needsLinkCompletion"
+              class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
+              @select="emit('start-auth-flow')"
+          >
+            <LogIn class="h-3.5 w-3.5" /> Complete link
           </DropdownMenuItem>
           <DropdownMenuItem
               v-if="props.profile"
