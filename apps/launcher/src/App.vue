@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import ActivityCard from "./components/ActivityCard.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
 import InstanceView from "./components/InstanceView.vue";
 import LibraryView from "./components/LibraryView.vue";
+import LauncherLinkCard from "./components/LauncherLinkCard.vue";
 import SettingsCard from "./components/SettingsCard.vue";
 import SidebarNav from "./components/SidebarNav.vue";
 import TitleBar from "./components/TitleBar.vue";
@@ -33,12 +35,15 @@ const { working, run } = useWorking();
 const {
   profile,
   atlasProfile,
+  launcherLinkSession,
   restoreSessions,
   initDeepLink,
   startLogin,
   startAtlasLogin,
   signOut,
-  signOutAtlas
+  signOutAtlas,
+  createLauncherLink,
+  completeLauncherLink
 } = useAuth({ setStatus, pushLog, run });
 const {
   settings,
@@ -90,6 +95,7 @@ const libraryView = ref<"grid" | "detail">("grid");
 const syncingRemotePacks = ref(false);
 const instanceInstallStateById = ref<Record<string, boolean>>({});
 const tasksPanelOpen = ref(false);
+const hubUrl = computed(() => (settingsAtlasHubUrl.value ?? "").trim() || import.meta.env.VITE_ATLAS_HUB_URL || "https://atlas.nathanm.org");
 
 const modsDir = computed(() => {
   const base = resolveInstanceGameDir(activeInstance.value);
@@ -112,12 +118,47 @@ async function startMicrosoftSignIn() {
   await startLogin();
 }
 
+async function startUnifiedAuthFlow() {
+  if (!atlasProfile.value) {
+    await startAtlasLogin();
+    return;
+  }
+
+  if (!profile.value) {
+    await startMicrosoftSignIn();
+    return;
+  }
+
+  await startLauncherLinking();
+}
+
 async function signOutMicrosoft() {
   await signOut();
 }
 
 async function signOutAtlasFromMenu() {
   await signOutAtlas();
+}
+
+async function openLauncherLinkPage(code: string) {
+  const base = hubUrl.value.replace(/\/$/, "");
+  await openUrl(`${base}/link/launcher?code=${encodeURIComponent(code)}`);
+}
+
+async function startLauncherLinking() {
+  if (!profile.value) {
+    setStatus("Sign in with Microsoft first.");
+    return;
+  }
+  const existing = launcherLinkSession.value;
+  if (existing) {
+    await openLauncherLinkPage(existing.linkCode);
+    return;
+  }
+  const created = await createLauncherLink();
+  if (created) {
+    await openLauncherLinkPage(created.linkCode);
+  }
 }
 
 function resolveLoaderKind(modloader: string | null | undefined): ModLoaderKind {
@@ -557,10 +598,9 @@ watch(
     <TitleBar 
       :profile="profile"
       :atlas-profile="atlasProfile"
-      @sign-in-microsoft="startMicrosoftSignIn"
       @sign-out-microsoft="signOutMicrosoft"
-      @sign-in-atlas="startAtlasLogin"
       @sign-out-atlas="signOutAtlasFromMenu"
+      @start-auth-flow="startUnifiedAuthFlow"
     />
     
     <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-8">
@@ -614,7 +654,6 @@ watch(
             @back="backToLibrary"
             @launch="launchActiveInstance"
             @update-files="installSelectedVersion"
-            @go-to-settings="startMicrosoftSignIn"
             @toggle-mod="toggleMod"
             @delete-mod="deleteMod"
             @refresh-mods="refreshMods"
@@ -629,6 +668,13 @@ watch(
           />
         </section>
         <section v-else class="flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-6">
+          <LauncherLinkCard
+            :link-session="launcherLinkSession"
+            :atlas-profile="atlasProfile"
+            :profile="profile"
+            :hub-url="hubUrl"
+            :working="working"
+          />
           <SettingsCard
             v-model:settingsClientId="settingsClientId"
             v-model:settingsAtlasHubUrl="settingsAtlasHubUrl"
@@ -637,7 +683,6 @@ watch(
             v-model:settingsThemeMode="settingsThemeMode"
             :working="working"
             @save-settings="saveSettings"
-            @sign-in-microsoft="startMicrosoftSignIn"
           />
           <ActivityCard
             title="Recent activity"
