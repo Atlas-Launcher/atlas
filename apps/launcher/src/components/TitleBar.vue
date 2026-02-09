@@ -53,8 +53,10 @@ function atlasIdentity(profile: AtlasProfile): string {
 const atlasSignedIn = computed(() => !!props.atlasProfile);
 const mojangSignedIn = computed(() => !!props.profile || !!props.atlasProfile?.mojang_uuid);
 
+const needsSetup = computed(() => needsLinking.value || needsLinkCompletion.value);
+
 const statusText = computed(() => {
-  if (needsLinking.value) return "Finish setup";
+  if (needsSetup.value) return "Finish setup";
   if (!atlasSignedIn.value && !mojangSignedIn.value) return "Sign in to Atlas";
   if (!atlasSignedIn.value) return "Sign in to Atlas";
   if (!mojangSignedIn.value) return "Link Minecraft";
@@ -117,13 +119,13 @@ const needsLinkCompletion = computed(() => {
     <!-- Right Section: Auth & Controls -->
     <div class="flex items-center gap-2.5 h-full pr-0.5" data-tauri-drag-region>
       <DropdownMenu>
-        <DropdownMenuTrigger class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300" :class="{ 'bg-amber-500/10 border-amber-500/30': needsLinking }">
+        <DropdownMenuTrigger class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300" :class="{ 'bg-amber-500/10 border-amber-500/30': needsSetup }">
           <span 
             class="w-2 h-2 rounded-full mr-2.5 transition-all duration-300 group-hover:scale-110" 
-            :class="needsLinking ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : statusDotClass"
+            :class="needsSetup ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : statusDotClass"
           ></span>
-          <div class="text-xs tracking-tight transition-colors duration-300" :class="{ 'text-amber-500 font-bold': needsLinking }">
-            {{ needsLinking ? "Finish setup" : statusText }}
+          <div class="text-xs tracking-tight transition-colors duration-300" :class="{ 'text-amber-500 font-bold': needsSetup }">
+            {{ needsSetup ? "Finish setup" : statusText }}
           </div>
           <ChevronDown class="ml-2 h-3 w-3 opacity-20 group-hover:opacity-60 transition-all duration-300" />
         </DropdownMenuTrigger>
@@ -159,12 +161,13 @@ const needsLinkCompletion = computed(() => {
             </template>
           </div>
           <div
-            v-if="needsLinking"
+            v-if="needsSetup"
             class="px-2.5 pb-2 text-[11px] text-amber-600"
           >
             Finish sign-in to link Minecraft and unlock packs.
           </div>
           <DropdownMenuItem
+              v-if="!atlasSignedIn || !profile"
               class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-foreground/[0.08] hover:bg-foreground/[0.12] transition-colors"
               @select="emit('start-auth-flow')"
           >
