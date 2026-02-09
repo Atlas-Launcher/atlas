@@ -6,6 +6,7 @@ import type {
   AtlasProfile,
   AuthFlow,
   DeviceCodeResponse,
+  LauncherLinkComplete,
   LauncherLinkSession,
   Profile
 } from "@/types/auth";
@@ -309,7 +310,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
     const session = launcherLinkSession.value;
     const result = await run(async () => {
       try {
-        await invoke("complete_launcher_link_session", {
+        const completion = await invoke<LauncherLinkComplete>("complete_launcher_link_session", {
           linkSessionId: session.linkSessionId,
           proof: session.proof,
           minecraftUuid: profile.value?.id ?? "",
@@ -317,7 +318,13 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         });
         launcherLinkSession.value = null;
         await restoreAtlasSession();
-        setStatus("Launcher link completed.");
+        if (completion.warning) {
+          const warning = `Launcher link completed, but ${completion.warning}`;
+          setStatus(warning);
+          pushLog(warning);
+        } else {
+          setStatus("Launcher link completed.");
+        }
         return true;
       } catch (err) {
         setStatus(`Launcher link failed: ${String(err)}`);

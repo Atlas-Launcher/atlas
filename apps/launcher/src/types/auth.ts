@@ -26,3 +26,9 @@ export interface LauncherLinkSession {
   proof: string;
   expiresAt: string;
 }
+
+export interface LauncherLinkComplete {
+  success: boolean;
+  userId: string;
+  warning?: string | null;
+}
