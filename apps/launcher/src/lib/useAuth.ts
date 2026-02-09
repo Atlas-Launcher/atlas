@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -49,7 +49,59 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   const atlasProfile = ref<AtlasProfile | null>(null);
   const atlasPendingDeeplink = ref<string | null>(null);
   const launcherLinkSession = ref<LauncherLinkSession | null>(null);
+  const authInFlight = ref(false);
+  const atlasAuthInFlight = ref(false);
   let deviceLoginAttempt = 0;
+  const LAUNCHER_LINK_STORAGE_KEY = "atlas.launcherLinkSession";
+
+  const isSigningIn = computed(
+    () =>
+      authInFlight.value ||
+      atlasAuthInFlight.value ||
+      !!deviceCode.value ||
+      !!pendingDeeplink.value ||
+      !!atlasPendingDeeplink.value
+  );
+
+  function readStoredLauncherLinkSession(): LauncherLinkSession | null {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    try {
+      const raw = window.localStorage.getItem(LAUNCHER_LINK_STORAGE_KEY);
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw) as LauncherLinkSession;
+      if (!parsed?.linkSessionId || !parsed?.expiresAt) {
+        return null;
+      }
+      if (Date.parse(parsed.expiresAt) <= Date.now()) {
+        window.localStorage.removeItem(LAUNCHER_LINK_STORAGE_KEY);
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeStoredLauncherLinkSession(session: LauncherLinkSession | null) {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      if (!session) {
+        window.localStorage.removeItem(LAUNCHER_LINK_STORAGE_KEY);
+        return;
+      }
+      window.localStorage.setItem(LAUNCHER_LINK_STORAGE_KEY, JSON.stringify(session));
+    } catch {
+      // Ignore storage errors; session remains in-memory.
+    }
+  }
+
+  launcherLinkSession.value = readStoredLauncherLinkSession();
 
   async function waitForDeviceApproval(deviceCodeValue: string, attempt: number) {
     try {
@@ -61,12 +113,14 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
       }
       profile.value = result;
       deviceCode.value = null;
+      authInFlight.value = false;
       setStatus(`Signed in as ${result.name}.`);
     } catch (err) {
       if (attempt !== deviceLoginAttempt) {
         return;
       }
       deviceCode.value = null;
+      authInFlight.value = false;
       setStatus(`Login failed: ${String(err)}`);
     }
   }
@@ -153,6 +207,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   }
 
   async function startLogin() {
+    authInFlight.value = true;
     if (authFlow === "device_code") {
       await startDeviceLogin();
     } else {
@@ -173,6 +228,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         return nextDeviceCode;
       } catch (err) {
         setStatus(`Login start failed: ${String(err)}`);
+        authInFlight.value = false;
         return null;
       }
     });
@@ -191,6 +247,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         setStatus("Finish signing in in your browser.");
       } catch (err) {
         setStatus(`Login start failed: ${String(err)}`);
+        authInFlight.value = false;
       }
     });
   }
@@ -213,13 +270,16 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         profile.value = result;
         setStatus(`Signed in as ${result.name}.`);
         pendingDeeplink.value = null;
+        authInFlight.value = false;
       } catch (err) {
         setStatus(`Login failed: ${String(err)}`);
+        authInFlight.value = false;
       }
     });
   }
 
   async function startAtlasLogin() {
+    atlasAuthInFlight.value = true;
     await run(async () => {
       try {
         atlasPendingDeeplink.value = null;
@@ -228,6 +288,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         setStatus("Finish Atlas sign-in in your browser.");
       } catch (err) {
         setStatus(`Atlas login start failed: ${String(err)}`);
+        atlasAuthInFlight.value = false;
       }
     });
   }
@@ -250,8 +311,10 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         atlasProfile.value = result;
         setStatus(`Signed in to Atlas Hub as ${atlasIdentity(result)}.`);
         atlasPendingDeeplink.value = null;
+        atlasAuthInFlight.value = false;
       } catch (err) {
         setStatus(`Atlas login failed: ${String(err)}`);
+        atlasAuthInFlight.value = false;
       }
     });
   }
@@ -265,6 +328,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         deviceCode.value = null;
         pendingDeeplink.value = null;
         launcherLinkSession.value = null;
+        writeStoredLauncherLinkSession(null);
         setStatus("Signed out.");
       } catch (err) {
         setStatus(`Sign out failed: ${String(err)}`);
@@ -279,6 +343,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         atlasProfile.value = null;
         atlasPendingDeeplink.value = null;
         launcherLinkSession.value = null;
+        writeStoredLauncherLinkSession(null);
         setStatus("Signed out of Atlas Hub.");
       } catch (err) {
         setStatus(`Atlas sign out failed: ${String(err)}`);
@@ -291,10 +356,13 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
       try {
         const session = await invoke<LauncherLinkSession>("create_launcher_link_session");
         launcherLinkSession.value = session;
+        writeStoredLauncherLinkSession(session);
         setStatus("Launcher link code generated.");
+        pushLog("Launcher link session created.");
         return session;
       } catch (err) {
         setStatus(`Launcher link failed: ${String(err)}`);
+        pushLog(`Launcher link failed: ${String(err)}`);
         return null;
       }
     });
@@ -304,30 +372,27 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   async function completeLauncherLink() {
     if (!launcherLinkSession.value || !profile.value) {
       setStatus("Missing launcher link session or Minecraft profile.");
+      pushLog("Launcher link completion blocked: missing session or profile.");
       return false;
     }
 
     const session = launcherLinkSession.value;
     const result = await run(async () => {
       try {
-        const completion = await invoke<LauncherLinkComplete>("complete_launcher_link_session", {
-          linkSessionId: session.linkSessionId,
-          proof: session.proof,
-          minecraftUuid: profile.value?.id ?? "",
-          minecraftName: profile.value?.name ?? "",
-        });
-        launcherLinkSession.value = null;
-        await restoreAtlasSession();
-        if (completion.warning) {
-          const warning = `Launcher link completed, but ${completion.warning}`;
-          setStatus(warning);
-          pushLog(warning);
-        } else {
-          setStatus("Launcher link completed.");
+        const outcome = await tryCompleteLauncherLink(session);
+        if (outcome.success) {
+          return true;
         }
-        return true;
+        if (outcome.retryable) {
+          startLauncherLinkCompletionPoll(session);
+          return false;
+        }
+        setStatus(`Launcher link failed: ${outcome.message}`);
+        pushLog(`Launcher link failed: ${outcome.message}`);
+        return false;
       } catch (err) {
         setStatus(`Launcher link failed: ${String(err)}`);
+        pushLog(`Launcher link failed: ${String(err)}`);
         return false;
       }
     });
@@ -337,6 +402,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
 
   return {
     authFlow,
+    isSigningIn,
     profile,
     atlasProfile,
     launcherLinkSession,
@@ -351,6 +417,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
     signOut,
     signOutAtlas,
     createLauncherLink,
-    completeLauncherLink
+    completeLauncherLink,
+    startLauncherLinkCompletionPoll
   };
 }

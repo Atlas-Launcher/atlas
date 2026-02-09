@@ -33,6 +33,7 @@ const {
 } = useStatus();
 const { working, run } = useWorking();
 const {
+  isSigningIn,
   profile,
   atlasProfile,
   launcherLinkSession,
@@ -43,7 +44,8 @@ const {
   signOut,
   signOutAtlas,
   createLauncherLink,
-  completeLauncherLink
+  completeLauncherLink,
+  startLauncherLinkCompletionPoll
 } = useAuth({ setStatus, pushLog, run });
 const {
   settings,
@@ -97,6 +99,22 @@ const instanceInstallStateById = ref<Record<string, boolean>>({});
 const tasksPanelOpen = ref(false);
 const hubUrl = computed(() => (settingsAtlasHubUrl.value ?? "").trim() || import.meta.env.VITE_ATLAS_HUB_URL || "https://atlas.nathanm.org");
 
+function normalizeUuid(value?: string | null) {
+  return (value ?? "").trim().toLowerCase().replace(/-/g, "");
+}
+
+const canLaunch = computed(() => {
+  if (!profile.value || !atlasProfile.value) {
+    return false;
+  }
+  const atlasUuid = normalizeUuid(atlasProfile.value.mojang_uuid);
+  const launcherUuid = normalizeUuid(profile.value.id);
+  if (!atlasUuid || !launcherUuid) {
+    return false;
+  }
+  return atlasUuid === launcherUuid;
+});
+
 const modsDir = computed(() => {
   const base = resolveInstanceGameDir(activeInstance.value);
   if (!base) {
@@ -148,28 +166,37 @@ async function openLauncherLinkPage(code: string) {
 async function startLauncherLinking() {
   if (!profile.value) {
     setStatus("Sign in with Microsoft first.");
+    pushLog("Launcher link start blocked: missing Microsoft profile.");
     return;
   }
   const existing = launcherLinkSession.value;
   if (existing) {
     await openLauncherLinkPage(existing.linkCode);
+    pushLog("Launcher link page opened for existing session.");
     return;
   }
   const created = await createLauncherLink();
   if (created) {
     await openLauncherLinkPage(created.linkCode);
+    pushLog("Launcher link page opened for new session.");
+    startLauncherLinkCompletionPoll(created);
+  } else {
+    pushLog("Launcher link session creation failed.");
   }
 }
 
 async function completeLauncherLinkingFromMenu() {
+  pushLog("Complete link clicked.");
   if (!profile.value) {
     setStatus("Sign in with Microsoft first.");
+    pushLog("Complete link blocked: missing Microsoft profile.");
     return;
   }
   if (!launcherLinkSession.value) {
     await startLauncherLinking();
     return;
   }
+  pushLog("Complete link: finishing launcher link session.");
   await completeLauncherLink();
 }
 
@@ -344,6 +371,10 @@ async function syncAtlasInstanceFiles(instance: InstanceConfig, options?: AtlasS
 }
 
 async function launchActiveInstance() {
+  if (!canLaunch.value) {
+    setStatus("Finish linking Minecraft in Atlas Hub before launching.");
+    return;
+  }
   const instance = activeInstance.value;
   if (!instance) {
     setStatus("Select a profile to launch.");
@@ -363,6 +394,10 @@ async function launchActiveInstance() {
 }
 
 async function launchInstanceFromLibrary(id: string) {
+  if (!canLaunch.value) {
+    setStatus("Finish linking Minecraft in Atlas Hub before launching.");
+    return;
+  }
   await selectInstance(id);
   await launchActiveInstance();
 }
@@ -531,6 +566,16 @@ onMounted(async () => {
 });
 
 watch(
+  () => [profile.value?.id ?? null, launcherLinkSession.value?.linkSessionId ?? null],
+  async ([profileId, linkSessionId]) => {
+    if (!profileId || !linkSessionId || !launcherLinkSession.value) {
+      return;
+    }
+    await startLauncherLinkCompletionPoll(launcherLinkSession.value);
+  }
+);
+
+watch(
   () => activeInstance.value?.id,
   async (value) => {
     if (!value) {
@@ -610,6 +655,7 @@ watch(
     <TitleBar 
       :profile="profile"
       :atlas-profile="atlasProfile"
+      :is-signing-in="isSigningIn"
       @sign-out-microsoft="signOutMicrosoft"
       @sign-out-atlas="signOutAtlasFromMenu"
       @start-auth-flow="startUnifiedAuthFlow"

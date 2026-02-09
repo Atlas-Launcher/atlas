@@ -15,6 +15,7 @@ import type { AtlasProfile, Profile } from "@/types/auth";
 const props = defineProps<{
   profile: Profile | null;
   atlasProfile: AtlasProfile | null;
+  isSigningIn: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -57,6 +58,7 @@ const mojangSignedIn = computed(() => !!props.profile || !!props.atlasProfile?.m
 const needsSetup = computed(() => needsLinking.value || needsLinkCompletion.value);
 
 const statusText = computed(() => {
+  if (props.isSigningIn) return "Signing in";
   if (needsSetup.value) return "Finish setup";
   if (!atlasSignedIn.value && !mojangSignedIn.value) return "Sign in to Atlas";
   if (!atlasSignedIn.value) return "Sign in to Atlas";
@@ -80,8 +82,10 @@ const needsLinkCompletion = computed(() => {
   if (!props.atlasProfile) {
     return false;
   }
-  const launcherUuid = props.profile?.id?.trim();
-  const atlasUuid = props.atlasProfile.mojang_uuid?.trim();
+  const normalizeUuid = (value?: string | null) =>
+    (value ?? "").trim().toLowerCase().replace(/-/g, "");
+  const launcherUuid = normalizeUuid(props.profile?.id);
+  const atlasUuid = normalizeUuid(props.atlasProfile.mojang_uuid);
   if (!launcherUuid) {
     return false;
   }
@@ -167,6 +171,12 @@ const needsLinkCompletion = computed(() => {
           >
             Finish sign-in to link Minecraft and unlock packs.
           </div>
+          <div
+            v-if="props.isSigningIn"
+            class="px-2.5 pb-2 text-[11px] text-amber-600"
+          >
+            Signing in... complete the browser flow to continue.
+          </div>
           <DropdownMenuItem
               v-if="!atlasSignedIn || !profile"
               class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-foreground/[0.08] hover:bg-foreground/[0.12] transition-colors"
@@ -175,7 +185,7 @@ const needsLinkCompletion = computed(() => {
             <LogIn class="h-3.5 w-3.5 opacity-80" /> Start sign-in
           </DropdownMenuItem>
           <DropdownMenuItem
-              v-if="needsLinkCompletion"
+              v-if="needsLinkCompletion && !props.isSigningIn"
               class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
               @select="emit('complete-link')"
           >

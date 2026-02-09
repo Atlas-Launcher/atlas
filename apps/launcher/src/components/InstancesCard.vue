@@ -24,6 +24,7 @@ const props = defineProps<{
   activeInstanceId: string | null;
   instanceInstallStateById: Record<string, boolean>;
   working: boolean;
+  canLaunch: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -129,6 +130,9 @@ function onQuickAction(instance: InstanceConfig) {
     emit("install", instance.id);
     return;
   }
+  if (!props.canLaunch) {
+    return;
+  }
   emit("play", instance.id);
 }
 </script>
@@ -223,6 +227,7 @@ function onQuickAction(instance: InstanceConfig) {
                 type="button"
                 class="absolute inset-1 inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground opacity-0 transition-opacity hover:bg-primary/90 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
                 :aria-label="quickActionLabel(instance)"
+                :disabled="props.working || (!needsRemoteInstall(instance) && !props.canLaunch)"
                 @click.stop="onQuickAction(instance)"
               >
                 <Download v-if="needsRemoteInstall(instance)" class="h-4 w-4" />

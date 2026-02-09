@@ -3,6 +3,7 @@ use crate::config;
 use crate::models::{AtlasProfile, DeviceCodeResponse, Profile};
 use crate::settings;
 use crate::state::AppState;
+use crate::telemetry;
 use crate::net::http::{HttpClient, ReqwestHttpClient};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -263,6 +264,17 @@ pub struct LauncherLinkSession {
 pub struct LauncherLinkComplete {
     pub success: bool,
     pub user_id: String,
+    #[serde(default)]
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct MojangInfoResponse {
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    uuid: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -306,6 +318,9 @@ pub async fn complete_launcher_link_session(
     minecraft_uuid: String,
     minecraft_name: String,
 ) -> Result<LauncherLinkComplete, String> {
+    telemetry::info(format!(
+        "Completing launcher link session {link_session_id} for {minecraft_name} ({minecraft_uuid})."
+    ));
     let settings = state
         .settings
         .lock()
@@ -323,21 +338,76 @@ pub async fn complete_launcher_link_session(
         },
     };
 
-    let result = http
+    let mut result = http
         .post_json::<LauncherLinkComplete, _>(&endpoint, &payload)
         .await
         .map_err(|err| err.to_string())?;
 
-    if let Ok(Some(session)) = auth::load_atlas_session() {
-        if let Ok(session) = auth::ensure_fresh_atlas_session(session).await {
-            if let Ok(session) = auth::refresh_atlas_profile(session).await {
-                let _ = auth::save_atlas_session(&session);
+    let mut warning: Option<String> = None;
+    let session = match auth::load_atlas_session() {
+        Ok(Some(session)) => Some(session),
+        Ok(None) => {
+            warning = Some("Atlas session missing after link completion.".to_string());
+            None
+        }
+        Err(err) => {
+            warning = Some(format!("Atlas session load failed: {err}"));
+            None
+        }
+    };
+
+    if let Some(session) = session {
+        let session = match auth::ensure_fresh_atlas_session(session).await {
+            Ok(session) => Some(session),
+            Err(err) => {
+                warning = Some(format!("Atlas session refresh failed: {err}"));
+                None
+            }
+        };
+
+        if let Some(session) = session {
+            let mut session = match auth::refresh_atlas_profile(session).await {
+                Ok(session) => Some(session),
+                Err(err) => {
+                    warning = Some(format!("Atlas profile refresh failed: {err}"));
+                    None
+                }
+            };
+
+            if let Some(ref mut session) = session {
+                let mojang_info_url = format!("{}/api/v1/user/mojang/info", hub_url);
+                match http
+                    .get_json::<MojangInfoResponse>(&mojang_info_url, Some(&session.access_token))
+                    .await
+                {
+                    Ok(info) => {
+                        if let Some(uuid) = info.uuid.clone() {
+                            session.profile.mojang_uuid = Some(uuid.to_lowercase());
+                        }
+                        if let Some(username) = info.username.clone() {
+                            session.profile.mojang_username = Some(username);
+                        }
+                    }
+                    Err(err) => {
+                        telemetry::warn(format!(
+                            "Failed to fetch Mojang info after link completion: {err}"
+                        ));
+                        warning = Some(format!("Mojang info refresh failed: {err}"));
+                    }
+                }
+
+                let _ = auth::save_atlas_session(session);
                 if let Ok(mut guard) = state.atlas_auth.lock() {
-                    *guard = Some(session);
+                    *guard = Some(session.clone());
                 }
             }
         }
     }
+
+    if let Some(message) = warning.as_ref() {
+        telemetry::warn(message);
+    }
+    result.warning = warning;
 
     Ok(result)
 }
