@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { builds, channels } from "@/lib/db/schema";
 import { decodeArtifactRef, isStorageProviderEnabled } from "@/lib/storage/harness";
 import { resolveCiAuthContext } from "@/lib/ci/auth";
+import { emitPackUpdate } from "@/lib/pack-update-events";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -89,6 +90,13 @@ export async function POST(request: Request) {
       set: { buildId: build.id, updatedAt: new Date() },
     })
     .returning();
+
+  emitPackUpdate({
+    packId,
+    channel,
+    buildId: build.id,
+    source: authContext.method,
+  });
 
   return NextResponse.json({ build, channel: channelRow });
 }
