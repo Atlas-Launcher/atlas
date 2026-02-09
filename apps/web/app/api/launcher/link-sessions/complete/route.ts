@@ -56,6 +56,18 @@ export async function POST(request: Request) {
     );
   }
 
+  // Allow replacing the user's existing linked Minecraft account.
+  if (linkSession.claimedUserId) {
+    await db
+      .update(users)
+      .set({
+        mojangUuid: null,
+        mojangUsername: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, linkSession.claimedUserId));
+  }
+
   await db
     .update(users)
     .set({
