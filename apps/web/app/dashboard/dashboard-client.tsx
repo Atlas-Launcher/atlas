@@ -298,7 +298,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       body: JSON.stringify({
         provider: "microsoft",
         callbackURL,
-        scope: ["openid", "profile", "email", "XboxLive.signin", "offline_access"],
+        scopes: ["openid", "profile", "email", "XboxLive.signin", "offline_access"],
         disableRedirect: true,
       }),
     });

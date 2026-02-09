@@ -16,7 +16,7 @@ export default async function InvitePage({ searchParams }: InvitePageProps) {
 
   return (
     <div className="min-h-screen bg-[var(--atlas-cream)] px-6 py-16 text-[var(--atlas-ink)]">
-      <div className="mx-auto max-w-md">
+      <div className="mx-auto w-full max-w-5xl">
         <InviteClient code={code ?? null} signedIn={signedIn} />
       </div>
     </div>
