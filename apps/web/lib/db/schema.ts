@@ -291,6 +291,27 @@ export const apiKeys = pgTable(
   })
 );
 
+export const runnerServiceTokens = pgTable(
+  "runner_service_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    packId: text("pack_id")
+      .notNull()
+      .references(() => packs.id, { onDelete: "cascade" }),
+    name: text("name"),
+    tokenHash: text("token_hash").notNull(),
+    tokenPrefix: text("token_prefix").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (table) => ({
+    packIdx: index("runner_service_tokens_pack_idx").on(table.packId),
+    tokenPrefixIdx: index("runner_service_tokens_prefix_idx").on(table.tokenPrefix),
+  })
+);
+
 export const invites = pgTable("invites", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email"),

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { packMembers, packs } from "@/lib/db/schema";
+import { packMembers } from "@/lib/db/schema";
 import { getAuthenticatedUserId } from "@/lib/auth/request-user";
+import { getAuthenticatedRunnerPackId } from "@/lib/auth/runner-tokens";
 import { users } from "@/lib/db/schema";
 
 interface RouteParams {
@@ -14,9 +15,15 @@ interface RouteParams {
 export async function GET(request: Request, { params }: RouteParams) {
     const { packId } = await params;
     const userId = await getAuthenticatedUserId(request);
-
     if (!userId) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const runnerPackId = await getAuthenticatedRunnerPackId(request);
+        if (!runnerPackId) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        if (runnerPackId !== packId) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        return NextResponse.json({ allowed: true, role: "runner" });
     }
 
     // Get user role from global users table first (for admin check)
