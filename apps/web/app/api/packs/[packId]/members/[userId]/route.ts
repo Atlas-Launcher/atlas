@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { accounts, packMembers, packs } from "@/lib/db/schema";
 import { hasRole } from "@/lib/auth/roles";
 import { toRepositorySlug } from "@/lib/github";
+import { emitWhitelistUpdate } from "@/lib/whitelist-events";
 
 interface RouteParams {
   params: Promise<{
@@ -495,6 +496,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   await db
     .delete(packMembers)
     .where(and(eq(packMembers.packId, packId), eq(packMembers.userId, userId)));
+
+  emitWhitelistUpdate({ packId, source: "member-remove" });
 
   return NextResponse.json({ ok: true });
 }

@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { invites, packMembers } from "@/lib/db/schema";
+import { emitWhitelistUpdate } from "@/lib/whitelist-events";
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -50,6 +51,8 @@ export async function POST(request: Request) {
     .update(invites)
     .set({ usedAt: new Date() })
     .where(eq(invites.id, invite.id));
+
+  emitWhitelistUpdate({ packId: invite.packId, source: "invite" });
 
   return NextResponse.json({ success: true, packId: invite.packId });
 }
