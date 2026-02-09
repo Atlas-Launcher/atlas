@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-type InviteStep = "account" | "microsoft" | "download" | "done";
+type InviteStep = "account" | "download" | "link" | "done";
 
 interface InviteClientProps {
   code: string | null;
@@ -36,14 +36,6 @@ type InvitePreview = {
 
 type InviteStatus = "idle" | "loading" | "accepted" | "warning" | "error";
 
-const MICROSOFT_SCOPES = [
-  "openid",
-  "profile",
-  "email",
-  "XboxLive.signin",
-  "offline_access",
-];
-
 const steps: { id: InviteStep; label: string; detail: string }[] = [
   {
     id: "account",
@@ -51,14 +43,14 @@ const steps: { id: InviteStep; label: string; detail: string }[] = [
     detail: "Set up your Atlas login.",
   },
   {
-    id: "microsoft",
-    label: "Link Microsoft",
-    detail: "Required for launcher access.",
-  },
-  {
     id: "download",
     label: "Download launcher",
     detail: "Grab the installer.",
+  },
+  {
+    id: "link",
+    label: "Link launcher",
+    detail: "Finish linking in the app.",
   },
   {
     id: "done",
@@ -68,7 +60,7 @@ const steps: { id: InviteStep; label: string; detail: string }[] = [
 ];
 
 function isInviteStep(value: string | null): value is InviteStep {
-  return value === "account" || value === "microsoft" || value === "download" || value === "done";
+  return value === "account" || value === "download" || value === "link" || value === "done";
 }
 
 export default function InviteClient({ code, signedIn }: InviteClientProps) {
@@ -79,9 +71,6 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
   const [signedInState, setSignedInState] = useState(signedIn);
   const [inviteStatus, setInviteStatus] = useState<InviteStatus>("idle");
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [msLinked, setMsLinked] = useState(false);
-  const [msLoading, setMsLoading] = useState(false);
-  const [msError, setMsError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -92,15 +81,13 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
   const initialStep = useMemo<InviteStep>(() => {
     if (isInviteStep(stepParam)) return stepParam;
     if (!signedIn) return "account";
-    if (signedIn && !msLinked) return "microsoft";
     return "account";
-  }, [msLinked, signedIn, stepParam]);
+  }, [signedIn, stepParam]);
   const [manualStep, setManualStep] = useState<InviteStep>(initialStep);
   const resolvedStep = useMemo<InviteStep>(() => {
     if (isInviteStep(stepParam)) return stepParam;
-    if (signedInState && msLinked && manualStep === "microsoft") return "account";
     return manualStep;
-  }, [manualStep, msLinked, signedInState, stepParam]);
+  }, [manualStep, stepParam]);
 
   useEffect(() => {
     if (!code) {
@@ -119,25 +106,6 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
     loadPreview().catch(() => setPreviewError("Unable to load invite details."));
   }, [code]);
 
-  useEffect(() => {
-    if (!signedInState) {
-      return;
-    }
-
-    const loadAccounts = async () => {
-      const response = await fetch("/api/auth/list-accounts");
-      const data = await response.json();
-      if (!response.ok) {
-        return;
-      }
-      const linked = (data ?? []).some(
-        (account: { providerId?: string }) => account.providerId === "microsoft"
-      );
-      setMsLinked(linked);
-    };
-
-    loadAccounts().catch(() => null);
-  }, [signedInState]);
 
   useEffect(() => {
     if (!signedInState || !code || inviteStatus !== "idle") {
@@ -214,37 +182,6 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
     setInviteStatus("idle");
   };
 
-  const handleLinkMicrosoft = async () => {
-    if (!code || msLoading) {
-      return;
-    }
-    setMsError(null);
-    setMsLoading(true);
-    const callbackURL = new URL(`/invite?code=${code}&step=microsoft`, window.location.origin).toString();
-    const response = await fetch("/api/auth/link-social", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        provider: "microsoft",
-        callbackURL,
-        scopes: MICROSOFT_SCOPES,
-        disableRedirect: true,
-      }),
-    });
-    const data = await response.json();
-    setMsLoading(false);
-
-    if (!response.ok) {
-      setMsError(data?.error ?? "Unable to link Microsoft.");
-      return;
-    }
-
-    if (data?.url) {
-      window.location.href = data.url;
-    } else {
-      setMsError("Unable to start Microsoft linking.");
-    }
-  };
 
   if (!code) {
     return (
@@ -291,8 +228,8 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
           <h2 className="mt-4 text-3xl font-semibold">Welcome to Atlas.</h2>
           <p className="mt-3 text-sm text-[var(--atlas-ink-muted)]">
             {preview?.pack?.name
-              ? `You're joining ${preview.pack.name}. We'll set up your account, link Microsoft, and get you the launcher.`
-              : "We will set up your account, link Microsoft, and get you the launcher."}
+              ? `You're joining ${preview.pack.name}. We'll set up your account and get you the launcher.`
+              : "We will set up your account and get you the launcher."}
           </p>
           {preview?.pack?.name ? (
             <div className="mt-5 rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
@@ -379,7 +316,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                     </div>
                   ) : null}
                   <Button
-                    onClick={() => setStepAndUrl(msLinked ? "download" : "microsoft")}
+                    onClick={() => setStepAndUrl("download")}
                     disabled={inviteStatus === "loading"}
                   >
                     Continue
@@ -441,50 +378,6 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
           </Card>
         ) : null}
 
-        {resolvedStep === "microsoft" ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Link your Microsoft account</CardTitle>
-              <CardDescription>Required for the launcher to sync your Minecraft profile.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {msLinked ? (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-                  Microsoft connected. You are ready to download the launcher.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-[var(--atlas-ink-muted)]">
-                    We will open a Microsoft sign-in window so you can grant access.
-                  </p>
-                  {msError ? (
-                    <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
-                      {msError}
-                    </div>
-                  ) : null}
-                  <Button onClick={handleLinkMicrosoft} disabled={msLoading} size="lg">
-                    {msLoading ? "Opening" : "Link Microsoft"}
-                  </Button>
-                </div>
-              )}
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setStepAndUrl("account")}
-                >
-                  Back
-                </Button>
-                <Button
-                  onClick={() => setStepAndUrl("download")}
-                  disabled={!msLinked}
-                >
-                  Continue
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
-
         {resolvedStep === "download" ? (
           <Card>
             <CardHeader>
@@ -512,7 +405,26 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                 </Link>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={() => setStepAndUrl("microsoft")}>Back</Button>
+                <Button variant="outline" onClick={() => setStepAndUrl("account")}>Back</Button>
+                <Button onClick={() => setStepAndUrl("link")}>Continue</Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {resolvedStep === "link" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Link your launcher</CardTitle>
+              <CardDescription>Finish linking inside the Atlas Launcher.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-4 text-sm text-[var(--atlas-ink-muted)]">
+                Open the launcher, sign in with Microsoft, and follow the linking prompt to connect
+                your Minecraft profile to this account.
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button variant="outline" onClick={() => setStepAndUrl("download")}>Back</Button>
                 <Button onClick={() => setStepAndUrl("done")}>Continue</Button>
               </div>
             </CardContent>

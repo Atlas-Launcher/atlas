@@ -32,15 +32,8 @@ interface AccountTabProps {
   githubError: string | null;
   onLinkGithub: () => void;
   onUnlinkGithub: () => void;
-  microsoftLinked: boolean;
-  microsoftLoading: boolean;
-  microsoftError: string | null;
-  onLinkMicrosoft: () => void;
-  onUnlinkMicrosoft: () => void;
-  onSyncMojang: () => Promise<void>;
-  syncLoading: boolean;
   mojangUsername: string | null;
-  focus: "github" | "microsoft" | null;
+  focus: "github" | null;
   nextPath: string | null;
 }
 
@@ -59,13 +52,6 @@ export default function AccountTab({
   githubError,
   onLinkGithub,
   onUnlinkGithub,
-  microsoftLinked,
-  microsoftLoading,
-  microsoftError,
-  onLinkMicrosoft,
-  onUnlinkMicrosoft,
-  onSyncMojang,
-  syncLoading,
   mojangUsername,
   focus,
   nextPath,
@@ -137,12 +123,6 @@ export default function AccountTab({
           be returned to {nextPath ?? "/dashboard/create"}.
         </div>
       ) : null}
-      {focus === "microsoft" ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-          Connect your Microsoft account to sync your Minecraft profile. Required for Launcher access.
-        </div>
-      ) : null}
-
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -318,59 +298,33 @@ export default function AccountTab({
           </CardContent>
         </Card>
 
-        <Card className={focus === "microsoft" ? "ring-2 ring-amber-200" : ""}>
-          <CardHeader>
-            <CardTitle>Microsoft Account</CardTitle>
-            <CardDescription>
-              Link your Microsoft account to access your Minecraft profile and play on Atlas servers.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold">
-                  {microsoftLinked ? "Connected" : "Not connected"}
-                </p>
-                <p className="text-xs text-[var(--atlas-ink-muted)]">
-                  {microsoftLinked
-                    ? mojangUsername
+          <Card>
+            <CardHeader>
+              <CardTitle>Minecraft Profile</CardTitle>
+              <CardDescription>
+                Your launcher links your Minecraft identity to this account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold">
+                    {mojangUsername ? "Linked" : "Not linked"}
+                  </p>
+                  <p className="text-xs text-[var(--atlas-ink-muted)]">
+                    {mojangUsername
                       ? `Linked as ${mojangUsername}`
-                      : "Your Microsoft account is linked. Sync to fetch profile."
-                    : "Link your Microsoft account to sync your Mojang profile."}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                {microsoftLinked ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={onSyncMojang}
-                      disabled={syncLoading || microsoftLoading}
-                    >
-                      {syncLoading ? "Syncing…" : "Sync Profile"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={onUnlinkMicrosoft}
-                      disabled={microsoftLoading || syncLoading}
-                    >
-                      Disconnect
-                    </Button>
-                  </>
-                ) : (
-                  <Button onClick={onLinkMicrosoft} disabled={microsoftLoading}>
-                    Connect Microsoft
+                      : "Open the launcher to link your Minecraft account."}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" disabled>
+                    Linked via launcher
                   </Button>
-                )}
+                </div>
               </div>
-            </div>
-            {microsoftError ? (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
-                {microsoftError}
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
       </div>
     </div>
   );

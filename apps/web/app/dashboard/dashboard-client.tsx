@@ -79,10 +79,6 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   const [githubLinked, setGithubLinked] = useState(false);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
-  const [microsoftLinked, setMicrosoftLinked] = useState(false);
-  const [microsoftLoading, setMicrosoftLoading] = useState(false);
-  const [microsoftError, setMicrosoftError] = useState<string | null>(null);
-  const [syncLoading, setSyncLoading] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const {
     data: passkeysData,
@@ -141,10 +137,6 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       );
       setGithubLinked(Boolean(github));
 
-      const microsoft = (data ?? []).find(
-        (account: { providerId?: string }) => account.providerId === "microsoft"
-      );
-      setMicrosoftLinked(Boolean(microsoft));
     };
 
     loadAccounts().catch(() => {
@@ -284,78 +276,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     setGithubLinked(false);
   };
 
-  const handleLinkMicrosoft = async () => {
-    setMicrosoftError(null);
-    setMicrosoftLoading(true);
-    const callbackURL = new URL(
-      nextPath ?? "/dashboard?tab=account",
-      window.location.origin
-    ).toString();
 
-    const response = await fetch("/api/auth/link-social", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        provider: "microsoft",
-        callbackURL,
-        scopes: ["openid", "profile", "email", "XboxLive.signin", "offline_access"],
-        disableRedirect: true,
-      }),
-    });
-    const data = await response.json();
-    setMicrosoftLoading(false);
-
-    if (!response.ok) {
-      setMicrosoftError(data?.error ?? "Unable to link Microsoft.");
-      return;
-    }
-
-    if (data?.url) {
-      window.location.href = data.url;
-    } else {
-      setMicrosoftError("Unable to start Microsoft linking.");
-    }
-  };
-
-  const handleUnlinkMicrosoft = async () => {
-    setMicrosoftError(null);
-    setMicrosoftLoading(true);
-    const response = await fetch("/api/auth/unlink-account", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ providerId: "microsoft" }),
-    });
-    const data = await response.json();
-    setMicrosoftLoading(false);
-
-    if (!response.ok) {
-      setMicrosoftError(data?.error ?? "Unable to unlink Microsoft.");
-      return;
-    }
-
-    setMicrosoftLinked(false);
-  };
-
-  const handleSyncMojang = async () => {
-    setSyncLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/v1/user/mojang", {
-        method: "POST",
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        setError(data?.error ?? "Unable to sync Mojang profile.");
-      } else {
-        // Refresh session to get updated mojang username/uuid
-        router.refresh();
-      }
-    } catch {
-      setError("Unable to sync Mojang profile.");
-    } finally {
-      setSyncLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-[var(--atlas-cream)] px-6 py-12 text-[var(--atlas-ink)]">
@@ -416,15 +337,8 @@ export default function DashboardClient({ session }: DashboardClientProps) {
               githubError={githubError}
               onLinkGithub={handleLinkGithub}
               onUnlinkGithub={handleUnlinkGithub}
-              microsoftLinked={microsoftLinked}
-              microsoftLoading={microsoftLoading}
-              microsoftError={microsoftError}
-              onLinkMicrosoft={handleLinkMicrosoft}
-              onUnlinkMicrosoft={handleUnlinkMicrosoft}
-              onSyncMojang={handleSyncMojang}
-              syncLoading={syncLoading}
               mojangUsername={session.user.mojangUsername ?? null}
-              focus={focus === "github" ? "github" : focus === "microsoft" ? "microsoft" : null}
+              focus={focus === "github" ? "github" : null}
               nextPath={nextPath}
             />
           </TabsContent>

@@ -7,6 +7,8 @@ export interface AtlasProfile {
   id: string;
   email?: string | null;
   name?: string | null;
+  mojang_username?: string | null;
+  mojang_uuid?: string | null;
 }
 
 export interface DeviceCodeResponse {
@@ -17,3 +19,10 @@ export interface DeviceCodeResponse {
 }
 
 export type AuthFlow = "deeplink" | "device_code";
+
+export interface LauncherLinkSession {
+  linkSessionId: string;
+  linkCode: string;
+  proof: string;
+  expiresAt: string;
+}
