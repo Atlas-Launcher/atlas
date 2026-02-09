@@ -20,7 +20,9 @@ export const accessLevelEnum = pgEnum("access_level", [
   "all",
 ]);
 
-export const users = pgTable("user", {
+export const users = pgTable(
+  "user",
+  {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
@@ -31,7 +33,11 @@ export const users = pgTable("user", {
   mojangUuid: text("mojang_uuid"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+  },
+  (table) => ({
+    mojangUuidUnique: uniqueIndex("user_mojang_uuid_unique").on(table.mojangUuid),
+  })
+);
 
 export const sessions = pgTable("session", {
   id: text("id").primaryKey(),
@@ -297,3 +303,30 @@ export const invites = pgTable("invites", {
   createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const launcherLinkSessions = pgTable(
+  "launcher_link_sessions",
+  {
+    id: text("id").primaryKey(),
+    code: text("code").notNull(),
+    proof: text("proof").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimedUserId: text("claimed_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    minecraftUuid: text("minecraft_uuid"),
+    minecraftName: text("minecraft_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    codeUnique: uniqueIndex("launcher_link_sessions_code_unique").on(table.code),
+    claimedUserIdx: index("launcher_link_sessions_claimed_user_idx").on(
+      table.claimedUserId
+    ),
+    minecraftUuidIdx: index("launcher_link_sessions_minecraft_uuid_idx").on(
+      table.minecraftUuid
+    ),
+  })
+);

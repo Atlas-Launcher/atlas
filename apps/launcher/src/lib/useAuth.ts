@@ -2,7 +2,13 @@ import { ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { AtlasProfile, AuthFlow, DeviceCodeResponse, Profile } from "@/types/auth";
+import type {
+  AtlasProfile,
+  AuthFlow,
+  DeviceCodeResponse,
+  LauncherLinkSession,
+  Profile
+} from "@/types/auth";
 
 interface AuthDeps {
   setStatus: (message: string) => void;
@@ -41,6 +47,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   const profile = ref<Profile | null>(null);
   const atlasProfile = ref<AtlasProfile | null>(null);
   const atlasPendingDeeplink = ref<string | null>(null);
+  const launcherLinkSession = ref<LauncherLinkSession | null>(null);
   let deviceLoginAttempt = 0;
 
   async function waitForDeviceApproval(deviceCodeValue: string, attempt: number) {
@@ -256,6 +263,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         profile.value = null;
         deviceCode.value = null;
         pendingDeeplink.value = null;
+        launcherLinkSession.value = null;
         setStatus("Signed out.");
       } catch (err) {
         setStatus(`Sign out failed: ${String(err)}`);
@@ -269,6 +277,7 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         await invoke("atlas_sign_out");
         atlasProfile.value = null;
         atlasPendingDeeplink.value = null;
+        launcherLinkSession.value = null;
         setStatus("Signed out of Atlas Hub.");
       } catch (err) {
         setStatus(`Atlas sign out failed: ${String(err)}`);
@@ -276,10 +285,54 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
     });
   }
 
+  async function createLauncherLink() {
+    const result = await run(async () => {
+      try {
+        const session = await invoke<LauncherLinkSession>("create_launcher_link_session");
+        launcherLinkSession.value = session;
+        setStatus("Launcher link code generated.");
+        return session;
+      } catch (err) {
+        setStatus(`Launcher link failed: ${String(err)}`);
+        return null;
+      }
+    });
+    return result ?? null;
+  }
+
+  async function completeLauncherLink() {
+    if (!launcherLinkSession.value || !profile.value) {
+      setStatus("Missing launcher link session or Minecraft profile.");
+      return false;
+    }
+
+    const session = launcherLinkSession.value;
+    const result = await run(async () => {
+      try {
+        await invoke("complete_launcher_link_session", {
+          linkSessionId: session.linkSessionId,
+          proof: session.proof,
+          minecraftUuid: profile.value?.id ?? "",
+          minecraftName: profile.value?.name ?? "",
+        });
+        launcherLinkSession.value = null;
+        await restoreAtlasSession();
+        setStatus("Launcher link completed.");
+        return true;
+      } catch (err) {
+        setStatus(`Launcher link failed: ${String(err)}`);
+        return false;
+      }
+    });
+
+    return result === true;
+  }
+
   return {
     authFlow,
     profile,
     atlasProfile,
+    launcherLinkSession,
     restoreSession,
     restoreAtlasSession,
     restoreSessions,
@@ -289,6 +342,8 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
     finishDeeplinkLogin,
     finishAtlasLogin,
     signOut,
-    signOutAtlas
+    signOutAtlas,
+    createLauncherLink,
+    completeLauncherLink
   };
 }

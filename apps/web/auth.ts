@@ -58,14 +58,6 @@ export const auth = betterAuth({
       clientId: process.env.GITHUB_CLIENT_ID ?? "",
       clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
     },
-    microsoft: {
-      clientId: process.env.MICROSOFT_CLIENT_ID ?? "",
-      clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? "",
-      authority: "https://login.microsoftonline.com",
-      tenantId: "consumers",
-      prompt: "select_account", 
-      scope: ["openid", "profile", "email", "XboxLive.signin", "offline_access"],
-    },
   },
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -88,7 +80,7 @@ export const auth = betterAuth({
   },
   account: {
     accountLinking: {
-      trustedProviders: ["github", "microsoft"],
+      trustedProviders: ["github"],
       allowDifferentEmails: true,
       updateUserInfoOnLink: true,
     },
