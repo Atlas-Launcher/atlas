@@ -15,7 +15,7 @@ mod backup;
 mod runner_config;
 
 const DEFAULT_HUB_URL: &str = "https://atlas.nathanm.org";
-const RUNNER_BASE_DIR: &str = "/var/lib/atlas-runner";
+pub const RUNNER_BASE_DIR: &str = "/var/lib/atlas-runner";
 
 #[derive(Parser)]
 #[command(name = "atlas-runner")]

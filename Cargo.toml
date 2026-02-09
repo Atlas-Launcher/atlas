@@ -4,7 +4,10 @@ members = [
   "apps/cli",
   "apps/launcher/src-tauri",
   "apps/runner",
+  "apps/runner-v2",
+  "apps/runnerd-v2",
   "crates/atlas-auth",
   "crates/mod-resolver",
-  "crates/protocol"
-]
+  "crates/protocol",
+  "crates/runner-core-v2"
+, "crates/runner-ipc-v2", "crates/runner-v2-utils"]
