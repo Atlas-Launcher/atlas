@@ -101,27 +101,38 @@ export async function GET(
     }
   }
 
-  const [membership] = await db
-    .select({
-      role: packMembers.role,
-      accessLevel: packMembers.accessLevel,
-    })
-    .from(packMembers)
-    .where(and(eq(packMembers.packId, packId), eq(packMembers.userId, userId)))
-    .limit(1);
+  const membership = userId
+    ? (
+      await db
+        .select({
+          role: packMembers.role,
+          accessLevel: packMembers.accessLevel,
+        })
+        .from(packMembers)
+        .where(and(eq(packMembers.packId, packId), eq(packMembers.userId, userId)))
+        .limit(1)
+    )[0]
+    : null;
 
-  if (!membership) {
+  if (!runnerPackId && !membership) {
     return NextResponse.json({ error: "Pack not found." }, { status: 404 });
   }
 
-  const allowed = runnerPackId
-    ? (["dev", "beta", "production"] as const)
-    : (allowedChannels(
-        membership.accessLevel as AccessLevel,
-        membership.role as MemberRole
-      ) as readonly ChannelName[]);
   const requestedChannel = parseChannelName(requestUrl.searchParams.get("channel"));
   const currentBuildId = requestUrl.searchParams.get("currentBuildId")?.trim() || null;
+
+  let allowed: readonly ChannelName[];
+  if (runnerPackId) {
+    allowed = ["dev", "beta", "production"] as const;
+  } else {
+    if (!membership) {
+      return NextResponse.json({ error: "Pack not found." }, { status: 404 });
+    }
+    allowed = allowedChannels(
+      membership.accessLevel as AccessLevel,
+      membership.role as MemberRole
+    ) as readonly ChannelName[];
+  }
 
   const rows = await db
     .select({
@@ -153,11 +164,13 @@ export async function GET(
     });
   }
 
-  const orderedChannels = buildChannelOrder(
-    allowed,
-    membership.accessLevel as AccessLevel,
-    requestedChannel
-  );
+  const orderedChannels = runnerPackId
+    ? buildChannelOrder(allowed, "all", requestedChannel)
+    : buildChannelOrder(
+        allowed,
+        membership!.accessLevel as AccessLevel,
+        requestedChannel
+      );
   for (const channelName of orderedChannels) {
     const row = rowsByChannel.get(channelName);
     if (!row?.buildId || !row.artifactKey) {
