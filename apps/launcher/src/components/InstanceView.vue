@@ -15,6 +15,7 @@ import { formatLoaderKind } from "@/lib/utils";
 const props = defineProps<{
   instance: InstanceConfig | null;
   profile: Profile | null;
+  canLaunch: boolean;
   working: boolean;
   mods: ModEntry[];
   modsDir: string;
@@ -66,6 +67,16 @@ const remoteControlsDisabled = computed(
 const contentTabLabel = computed(() =>
   isRemoteInstance.value ? "Manage" : "Content"
 );
+
+const launchBlockedReason = computed(() => {
+  if (!props.profile) {
+    return "Sign in with Microsoft to play. Use the top-right menu to continue setup.";
+  }
+  if (!props.canLaunch) {
+    return "Finish linking Minecraft in Atlas Hub before launching.";
+  }
+  return null;
+});
 </script>
 
 <template>
@@ -91,7 +102,7 @@ const contentTabLabel = computed(() =>
           <Button v-if="needsRemoteInstall" :disabled="props.working" @click="emit('install-version')">
             Install
           </Button>
-          <Button v-else :disabled="props.working || !props.profile" @click="emit('launch')">
+          <Button v-else :disabled="props.working || !props.canLaunch" @click="emit('launch')">
             Play
           </Button>
           <Button
@@ -107,10 +118,10 @@ const contentTabLabel = computed(() =>
     </div>
 
     <div
-      v-if="!props.profile"
+      v-if="launchBlockedReason"
       class="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-sm text-muted-foreground"
     >
-      Sign in with Microsoft to play. Use the top-right menu to continue setup.
+      {{ launchBlockedReason }}
     </div>
 
     <Tabs v-model="detailTab" class="flex-1 min-h-0 flex flex-col overflow-hidden gap-4">

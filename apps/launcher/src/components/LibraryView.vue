@@ -7,6 +7,7 @@ const props = defineProps<{
   activeInstanceId: string | null;
   instanceInstallStateById: Record<string, boolean>;
   working: boolean;
+  canLaunch: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -24,6 +25,7 @@ const emit = defineEmits<{
     :active-instance-id="props.activeInstanceId"
     :instance-install-state-by-id="props.instanceInstallStateById"
     :working="props.working"
+    :can-launch="props.canLaunch"
     @select="emit('select', $event)"
     @play="emit('play', $event)"
     @install="emit('install', $event)"
