@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq, gt, inArray, lte } from "drizzle-orm";
 
 import { getAuthenticatedUserId } from "@/lib/auth/request-user";
+import { getAuthenticatedRunnerPackId } from "@/lib/auth/runner-tokens";
 import { allowedChannels } from "@/lib/auth/roles";
 import { db } from "@/lib/db";
 import { builds, channels, packMembers } from "@/lib/db/schema";
@@ -80,14 +81,24 @@ export async function GET(
 ) {
   const requestUrl = new URL(request.url);
   const userId = await getAuthenticatedUserId(request);
+  let runnerPackId: string | null = null;
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    runnerPackId = await getAuthenticatedRunnerPackId(request);
+    if (!runnerPackId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   const params = await context.params;
   const packId = params.packId?.trim();
   if (!packId) {
     return NextResponse.json({ error: "Missing pack id." }, { status: 400 });
+  }
+
+  if (runnerPackId) {
+    if (runnerPackId !== packId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   const [membership] = await db
@@ -103,10 +114,12 @@ export async function GET(
     return NextResponse.json({ error: "Pack not found." }, { status: 404 });
   }
 
-  const allowed = allowedChannels(
-    membership.accessLevel as AccessLevel,
-    membership.role as MemberRole
-  ) as readonly ChannelName[];
+  const allowed = runnerPackId
+    ? (["dev", "beta", "production"] as const)
+    : (allowedChannels(
+        membership.accessLevel as AccessLevel,
+        membership.role as MemberRole
+      ) as readonly ChannelName[]);
   const requestedChannel = parseChannelName(requestUrl.searchParams.get("channel"));
   const currentBuildId = requestUrl.searchParams.get("currentBuildId")?.trim() || null;
 
