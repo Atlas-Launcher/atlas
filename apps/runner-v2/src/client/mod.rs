@@ -49,11 +49,44 @@ async fn connect_or_start() -> anyhow::Result<runner_ipc_v2::framing::FramedStre
 }
 
 async fn start_daemon_detached() -> anyhow::Result<()> {
-    // In dev, run runnerd2 in another terminal or install it so it’s on PATH.
+    use tokio::process::Command;
+
+    // 1) Dev: run an arbitrary command via shell
+    // Example:
+    //   RUNNERD2_CMD='cargo run -p runnerd-v2' cargo run -p runner-v2 -- ping
+    if let Ok(cmd) = std::env::var("RUNNERD2_CMD") {
+        #[cfg(target_os = "macos")]
+        let mut c = Command::new("sh");
+        #[cfg(target_os = "linux")]
+        let mut c = Command::new("sh");
+
+        c.arg("-lc").arg(cmd);
+        c.stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()?;
+        return Ok(());
+    }
+
+    // 2) Dev/prod: explicit binary path
+    // Example:
+    //   RUNNERD2_PATH=target/debug/runnerd2 cargo run -p runner-v2 -- ping
+    if let Ok(path) = std::env::var("RUNNERD2_PATH") {
+        Command::new(path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()?;
+        return Ok(());
+    }
+
+    // 3) Default: hope runnerd2 is on PATH
     Command::new("runnerd2")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()?;
+
     Ok(())
 }
+
