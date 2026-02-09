@@ -1,0 +1,16 @@
+[Unit]
+Description=Atlas Runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=atlas
+WorkingDirectory=/var/lib/atlas-runner
+ExecStart=/usr/local/bin/atlas-runner up --attach
+Restart=always
+RestartSec=5
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

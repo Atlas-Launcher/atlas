@@ -8,7 +8,12 @@ pub async fn exec() -> Result<()> {
     let config = InstanceConfig::load(&instance_path).await
         .context("No instance.toml found in current directory")?;
     
-    let supervisor = Supervisor::new(PathBuf::from("runtime/current"), vec![]);
+    let supervisor = Supervisor::new(
+        PathBuf::from("runtime/current"),
+        "java".to_string(),
+        vec![],
+        Vec::new(),
+    );
     
     println!("Pack: {}", config.pack_id);
     println!("Channel: {}", config.channel);

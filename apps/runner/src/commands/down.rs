@@ -1,35 +1,118 @@
 use anyhow::{Result, Context};
-use crate::supervisor::Supervisor;
 use crate::hub::whitelist::InstanceConfig;
+use crate::rcon::{load_rcon_settings, RconClient};
 use std::path::PathBuf;
+use tokio::time::{sleep, Duration};
+use std::process::Command;
+use tokio::fs;
 
 pub async fn exec() -> Result<()> {
     let instance_path = PathBuf::from("instance.toml");
     let _config = InstanceConfig::load(&instance_path).await
         .context("No instance.toml found in current directory")?;
     
-    // For now we don't need the whole config for 'down'
-    let supervisor = Supervisor::new(PathBuf::from("runtime/current"), vec![]);
-    
-    if supervisor.is_running().await {
-        println!("Stopping Minecraft server...");
-        // TODO: Try RCON "stop" first
-        
-        // Use a dummy child object to kill the process if we have the PID
-        let pid_file = PathBuf::from("runtime/current/server.pid");
-        if let Ok(pid_str) = tokio::fs::read_to_string(&pid_file).await {
-            if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                // On unix we can use libc or just kill command
-                std::process::Command::new("kill")
-                    .arg(pid.to_string())
-                    .status()?;
+    let runner_pid_file = PathBuf::from("runtime/current/runner.pid");
+    let mut stopped_any = false;
+    if let Some(pid) = read_pid(&runner_pid_file).await {
+        println!("Stopping runner process (pid {pid})...");
+        if kill_pid(pid) {
+            let _ = fs::remove_file(&runner_pid_file).await;
+            stopped_any = true;
+        }
+    }
+
+    let runtime_dir = PathBuf::from("runtime/current");
+    let _ = try_rcon_stop(&runtime_dir).await;
+    let mut waited_for_shutdown = false;
+
+    let pid_file = runtime_dir.join("server.pid");
+    if let Some(pid) = read_pid(&pid_file).await {
+        println!("Stopping Minecraft server (pid {pid})...");
+        println!("Waiting 30 seconds for graceful shutdown...");
+        sleep(Duration::from_secs(30)).await;
+        waited_for_shutdown = true;
+        let still_running = read_pid(&pid_file).await == Some(pid);
+        if !still_running {
+            println!("Server stopped.");
+            let _ = fs::remove_file(&pid_file).await;
+            stopped_any = true;
+        } else {
+            if kill_pid(pid) {
                 println!("Server stopped.");
-                let _ = tokio::fs::remove_file(pid_file).await;
+                let _ = fs::remove_file(&pid_file).await;
+                stopped_any = true;
+            } else {
+                let _ = fs::remove_file(&pid_file).await;
             }
         }
-    } else {
+    }
+
+    let fallback_pids = find_server_pids();
+    if !fallback_pids.is_empty() {
+        if !waited_for_shutdown {
+            println!("Waiting 30 seconds for graceful shutdown...");
+            sleep(Duration::from_secs(30)).await;
+            waited_for_shutdown = true;
+        }
+        for pid in fallback_pids {
+            println!("Stopping Minecraft server (pid {pid})...");
+            if kill_pid(pid) {
+                stopped_any = true;
+            }
+        }
+    }
+
+    if !stopped_any {
         println!("Server is not running.");
     }
 
+    Ok(())
+}
+
+async fn read_pid(path: &PathBuf) -> Option<u32> {
+    let pid_str = fs::read_to_string(path).await.ok()?;
+    pid_str.trim().parse::<u32>().ok()
+}
+
+fn kill_pid(pid: u32) -> bool {
+    Command::new("kill")
+        .arg(pid.to_string())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn find_server_pids() -> Vec<u32> {
+    let patterns = [
+        "runtime/current",
+        "server.jar",
+        "fabric-server-launch.jar",
+        "unix_args.txt",
+    ];
+
+    let mut pids = Vec::new();
+    for pattern in patterns {
+        if let Ok(output) = Command::new("pgrep").arg("-f").arg(pattern).output() {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    if let Ok(pid) = line.trim().parse::<u32>() {
+                        pids.push(pid);
+                    }
+                }
+            }
+        }
+    }
+
+    pids.sort_unstable();
+    pids.dedup();
+    pids
+}
+
+async fn try_rcon_stop(runtime_dir: &PathBuf) -> Result<()> {
+    if let Ok(Some(settings)) = load_rcon_settings(runtime_dir).await {
+        let rcon = RconClient::new(settings.address, settings.password);
+        let _ = rcon.execute("stop").await;
+    }
     Ok(())
 }

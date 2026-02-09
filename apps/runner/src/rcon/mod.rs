@@ -1,6 +1,13 @@
 use anyhow::{Result, Context};
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::fs;
+use std::path::Path;
+
+pub struct RconSettings {
+    pub address: String,
+    pub password: String,
+}
 
 pub struct RconClient {
     address: String,
@@ -65,4 +72,43 @@ impl RconClient {
         let body = String::from_utf8_lossy(&payload).to_string();
         Ok((id, body))
     }
+}
+
+pub async fn load_rcon_settings(runtime_dir: &Path) -> Result<Option<RconSettings>> {
+    let properties_path = runtime_dir.join("server.properties");
+    let content = match fs::read_to_string(&properties_path).await {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+
+    let mut enabled = false;
+    let mut port: Option<u16> = None;
+    let mut password: Option<String> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = trimmed.split_once('=') else { continue };
+        match key.trim() {
+            "enable-rcon" => enabled = value.trim().eq_ignore_ascii_case("true"),
+            "rcon.port" => port = value.trim().parse::<u16>().ok(),
+            "rcon.password" => {
+                let val = value.trim();
+                if !val.is_empty() {
+                    password = Some(val.to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if !enabled {
+        return Ok(None);
+    }
+
+    let password = password.ok_or_else(|| anyhow::anyhow!("Missing rcon.password"))?;
+    let address = format!("127.0.0.1:{}", port.unwrap_or(25575));
+    Ok(Some(RconSettings { address, password }))
 }
