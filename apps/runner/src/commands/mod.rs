@@ -1,6 +1,9 @@
-pub mod launch;
+pub mod auth;
 pub mod up;
 pub mod down;
+pub mod config;
 pub mod status;
 pub mod restart;
+pub mod logs;
 pub mod exec;
+pub mod install;

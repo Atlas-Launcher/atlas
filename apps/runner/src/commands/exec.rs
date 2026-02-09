@@ -1,5 +1,5 @@
 use anyhow::{Result, Context};
-use crate::rcon::RconClient;
+use crate::rcon::{load_rcon_settings, RconClient};
 use crate::hub::whitelist::InstanceConfig;
 use std::path::PathBuf;
 
@@ -8,8 +8,11 @@ pub async fn exec(command: String, it: bool) -> Result<()> {
     let _config = InstanceConfig::load(&instance_path).await
         .context("No instance.toml found in current directory")?;
     
-    // TODO: Get RCON port and password from server.properties
-    let rcon = RconClient::new("127.0.0.1:25575".to_string(), "atlas-rcon-pass".to_string());
+    let runtime_dir = PathBuf::from("runtime/current");
+    let settings = load_rcon_settings(&runtime_dir).await
+        .context("RCON not configured in server.properties")?;
+    let settings = settings.context("RCON not enabled")?;
+    let rcon = RconClient::new(settings.address, settings.password);
     
     if it {
         println!("Interactive shell logic not yet fully implemented. Executing single command instead.");

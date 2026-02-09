@@ -10,9 +10,20 @@ pub struct InstanceConfig {
     pub pack_id: String,
     pub channel: String,
     pub hub_url: String,
-    pub token: String,
+    pub token: Option<String>,
+    pub service_token: Option<String>,
     pub memory: Option<String>,
     pub port: Option<u16>,
+    pub minecraft_version: Option<String>,
+    pub java_major: Option<u32>,
+    pub modloader: Option<String>,
+    pub modloader_version: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WhitelistEntry {
+    pub uuid: String,
+    pub name: String,
 }
 
 impl InstanceConfig {
@@ -39,26 +50,31 @@ impl WhitelistSync {
         Self { hub, runtime_dir }
     }
 
-    pub async fn sync(&self, pack_id: &str) -> Result<()> {
+    pub async fn sync(&self, pack_id: &str) -> Result<bool> {
         println!("Syncing whitelist from Hub...");
         let players = self.hub.get_whitelist(pack_id).await?;
         
-        let mut whitelist_data = Vec::new();
-        for player in players {
-            // Simplified whitelist.json entry (only name for now, usually needs UUID)
-            // Minecraft actually expects a JSON array of objects with "uuid" and "name"
-            // For now, let's just write names or handle common format
-            whitelist_data.push(serde_json::json!({
-                "name": player,
-                "uuid": "" // We'd need to resolve UUIDs or get them from Hub
-            }));
-        }
+        let whitelist_data = players
+            .into_iter()
+            .map(|player| {
+                serde_json::json!({
+                    "name": player.name,
+                    "uuid": player.uuid,
+                })
+            })
+            .collect::<Vec<_>>();
 
         let path = self.runtime_dir.join("whitelist.json");
         let content = serde_json::to_string_pretty(&whitelist_data)?;
+        let previous = fs::read_to_string(&path).await.ok();
+        if previous.as_deref() == Some(content.as_str()) {
+            println!("Whitelist already up to date.");
+            return Ok(false);
+        }
+
         fs::write(path, content).await.context("Failed to write whitelist.json")?;
         
         println!("Whitelist synchronized.");
-        Ok(())
+        Ok(true)
     }
 }

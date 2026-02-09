@@ -8,14 +8,27 @@ use tokio::fs;
 
 pub struct Supervisor {
     runtime_dir: PathBuf,
-    jvm_args: Vec<String>,
+    args: Vec<String>,
     pid_file: PathBuf,
+    command: String,
+    envs: Vec<(String, String)>,
 }
 
 impl Supervisor {
-    pub fn new(runtime_dir: PathBuf, jvm_args: Vec<String>) -> Self {
+    pub fn new(
+        runtime_dir: PathBuf,
+        command: String,
+        args: Vec<String>,
+        envs: Vec<(String, String)>,
+    ) -> Self {
         let pid_file = runtime_dir.join("server.pid");
-        Self { runtime_dir, jvm_args, pid_file }
+        Self {
+            runtime_dir,
+            args,
+            pid_file,
+            command,
+            envs,
+        }
     }
 
     pub async fn is_running(&self) -> bool {
@@ -43,12 +56,16 @@ impl Supervisor {
     }
 
     pub async fn spawn(&self) -> Result<Child> {
-        let mut cmd = Command::new("java");
+        let mut cmd = Command::new(&self.command);
         
         cmd.current_dir(&self.runtime_dir)
-            .args(&self.jvm_args)
+            .args(&self.args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        for (key, value) in &self.envs {
+            cmd.env(key, value);
+        }
 
         let child = cmd.spawn().context("Failed to spawn Java process")?;
         let pid = child.id().context("Failed to get process ID")?;

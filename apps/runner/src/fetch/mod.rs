@@ -18,9 +18,11 @@ impl Fetcher {
 
     pub async fn fetch_artifact(&self, url: String, expected_hash: String) -> Result<()> {
         if self.cache.exists(&expected_hash).await {
+            println!("Artifact cached: {}", expected_hash);
             return Ok(());
         }
 
+        println!("Downloading artifact: {}", url);
         let response = self.client.get(&url).send().await?.error_for_status()?;
         let data = response.bytes().await?;
         
