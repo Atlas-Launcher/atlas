@@ -21,6 +21,7 @@ const emit = defineEmits<{
   (event: "sign-out-microsoft"): void;
   (event: "sign-out-atlas"): void;
   (event: "start-auth-flow"): void;
+  (event: "complete-link"): void;
 }>();
 
 const isMac = ref(false);
@@ -176,7 +177,7 @@ const needsLinkCompletion = computed(() => {
           <DropdownMenuItem
               v-if="needsLinkCompletion"
               class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
-              @select="emit('start-auth-flow')"
+              @select="emit('complete-link')"
           >
             <LogIn class="h-3.5 w-3.5" /> Complete link
           </DropdownMenuItem>

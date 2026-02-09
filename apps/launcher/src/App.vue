@@ -161,6 +161,18 @@ async function startLauncherLinking() {
   }
 }
 
+async function completeLauncherLinkingFromMenu() {
+  if (!profile.value) {
+    setStatus("Sign in with Microsoft first.");
+    return;
+  }
+  if (!launcherLinkSession.value) {
+    await startLauncherLinking();
+    return;
+  }
+  await completeLauncherLink();
+}
+
 function resolveLoaderKind(modloader: string | null | undefined): ModLoaderKind {
   const normalized = (modloader ?? "").trim().toLowerCase();
   if (normalized === "fabric") {
@@ -601,6 +613,7 @@ watch(
       @sign-out-microsoft="signOutMicrosoft"
       @sign-out-atlas="signOutAtlasFromMenu"
       @start-auth-flow="startUnifiedAuthFlow"
+      @complete-link="completeLauncherLinkingFromMenu"
     />
     
     <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-8">

@@ -323,7 +323,21 @@ pub async fn complete_launcher_link_session(
         },
     };
 
-    http.post_json::<LauncherLinkComplete, _>(&endpoint, &payload)
+    let result = http
+        .post_json::<LauncherLinkComplete, _>(&endpoint, &payload)
         .await
-        .map_err(|err| err.to_string())
+        .map_err(|err| err.to_string())?;
+
+    if let Ok(Some(session)) = auth::load_atlas_session() {
+        if let Ok(session) = auth::ensure_fresh_atlas_session(session).await {
+            if let Ok(session) = auth::refresh_atlas_profile(session).await {
+                let _ = auth::save_atlas_session(&session);
+                if let Ok(mut guard) = state.atlas_auth.lock() {
+                    *guard = Some(session);
+                }
+            }
+        }
+    }
+
+    Ok(result)
 }

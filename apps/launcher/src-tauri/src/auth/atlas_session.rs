@@ -43,6 +43,23 @@ pub async fn ensure_fresh_atlas_session(session: AtlasSession) -> Result<AtlasSe
     refresh_atlas_session(&session).await
 }
 
+pub async fn refresh_atlas_profile(session: AtlasSession) -> Result<AtlasSession, AuthError> {
+        let http = crate::net::http::ReqwestHttpClient::new();
+        let user_info =
+                atlas::fetch_user_info(&http, &session.auth_base_url, &session.access_token).await?;
+
+        Ok(AtlasSession {
+                profile: AtlasProfile {
+                        id: user_info.sub,
+                        email: user_info.email,
+                        name: user_info.name,
+                        mojang_username: user_info.mojang_username,
+                        mojang_uuid: user_info.mojang_uuid,
+                },
+                ..session
+        })
+}
+
 fn needs_refresh(session: &AtlasSession) -> bool {
     let now = unix_timestamp();
     if session.access_token_expires_at == 0 {

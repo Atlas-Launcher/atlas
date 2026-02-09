@@ -16,7 +16,8 @@ pub use atlas_pending::{
     clear_pending_atlas_auth, load_pending_atlas_auth, save_pending_atlas_auth, AtlasPendingAuth,
 };
 pub use atlas_session::{
-    clear_atlas_session, ensure_fresh_atlas_session, load_atlas_session, save_atlas_session,
+    clear_atlas_session, ensure_fresh_atlas_session, load_atlas_session, refresh_atlas_profile,
+    save_atlas_session,
 };
 pub use error::AuthError;
 pub use pending::{clear_pending_auth, load_pending_auth, save_pending_auth, PendingAuth};
