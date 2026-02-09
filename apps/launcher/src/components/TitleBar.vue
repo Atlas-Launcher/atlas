@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onMounted, ref, computed } from "vue";
-import { X, Minus, Check, Square, Copy, ChevronDown, Globe, LogIn, LogOut, AlertCircle } from "lucide-vue-next";
+import { X, Minus, Check, Square, Copy, ChevronDown, LogIn, LogOut } from "lucide-vue-next";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,10 +18,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: "sign-in-microsoft"): void;
   (event: "sign-out-microsoft"): void;
-  (event: "sign-in-atlas"): void;
   (event: "sign-out-atlas"): void;
+  (event: "start-auth-flow"): void;
 }>();
 
 const isMac = ref(false);
@@ -51,21 +50,15 @@ function atlasIdentity(profile: AtlasProfile): string {
   return profile.name?.trim() || profile.email?.trim() || profile.id;
 }
 
-const msStatus = computed(() => {
-  return props.profile ? props.profile.name : "Signed out";
-});
-
-const atlasStatus = computed(() => {
-  return props.atlasProfile ? atlasIdentity(props.atlasProfile) : "Signed out";
-});
-
 const atlasSignedIn = computed(() => !!props.atlasProfile);
 const mojangSignedIn = computed(() => !!props.profile || !!props.atlasProfile?.mojang_uuid);
 
 const statusText = computed(() => {
-  if (mojangSignedIn.value && atlasSignedIn.value) return "Signed In";
-  if (mojangSignedIn.value || atlasSignedIn.value) return "Sign In Incomplete";
-  return "Not Signed In";
+  if (needsLinking.value) return "Finish setup";
+  if (!atlasSignedIn.value && !mojangSignedIn.value) return "Sign in to Atlas";
+  if (!atlasSignedIn.value) return "Sign in to Atlas";
+  if (!mojangSignedIn.value) return "Link Minecraft";
+  return "Ready";
 });
 
 const statusDotClass = computed(() => {
@@ -77,13 +70,9 @@ const statusDotClass = computed(() => {
   }
   return "bg-red-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
 });
-const needsLinking = computed(() => !!props.atlasProfile && !props.atlasProfile.mojang_uuid && !props.profile);
-
-async function linkMicrosoft() {
-  const { open } = await import("@tauri-apps/plugin-opener");
-  const hubUrl = (import.meta.env.VITE_ATLAS_HUB_URL ?? "https://atlas.nathanm.org").replace(/\/$/, "");
-  await open(`${hubUrl}/dashboard?tab=account&focus=microsoft`);
-}
+const needsLinking = computed(
+  () => !!props.atlasProfile && !props.atlasProfile.mojang_uuid && !props.profile
+);
 </script>
 
 <template>
@@ -120,13 +109,13 @@ async function linkMicrosoft() {
             :class="needsLinking ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : statusDotClass"
           ></span>
           <div class="text-xs tracking-tight transition-colors duration-300" :class="{ 'text-amber-500 font-bold': needsLinking }">
-            {{ needsLinking ? "Link Required" : statusText }}
+            {{ needsLinking ? "Finish setup" : statusText }}
           </div>
           <ChevronDown class="ml-2 h-3 w-3 opacity-20 group-hover:opacity-60 transition-all duration-300" />
         </DropdownMenuTrigger>
         <DropdownMenuContent class="glass w-64 p-2 select-none rounded-2xl" align="end">
           <DropdownMenuLabel class="px-2.5 py-1.5 text-xs font-black uppercase tracking-[0.15em] text-foreground/30">
-            Atlas
+            Atlas Hub
             <Check v-if="atlasSignedIn" class="inline h-3.5 w-3.5 ml-1" />
             <X v-else class="inline h-3.5 w-3.5 ml-1" />
           </DropdownMenuLabel>
@@ -134,21 +123,14 @@ async function linkMicrosoft() {
             {{ props.atlasProfile ? atlasIdentity(props.atlasProfile) : "Not signed in" }}
           </div>
           <DropdownMenuItem
-              v-if="!props.atlasProfile"
-              class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-foreground/[0.04] hover:bg-foreground/[0.1] transition-colors"
-              @select="emit('sign-in-atlas')"
-          >
-            <Globe class="h-3.5 w-3.5 opacity-80" /> Connect
-          </DropdownMenuItem>
-          <DropdownMenuItem
-              v-else
+              v-if="props.atlasProfile"
               class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold text-destructive hover:bg-destructive/10"
               @select="emit('sign-out-atlas')"
           >
             <LogOut class="h-3.5 w-3.5" /> Disconnect
           </DropdownMenuItem>
           <DropdownMenuSeparator class="bg-foreground/5 mx-1" />
-          <DropdownMenuLabel class="px-2.5 py-1.5 text-xs font-black uppercase tracking-[0.15em] text-foreground/30">Mojang
+          <DropdownMenuLabel class="px-2.5 py-1.5 text-xs font-black uppercase tracking-[0.15em] text-foreground/30">Minecraft
             <Check v-if="mojangSignedIn" class="inline h-3.5 w-3.5 ml-1" />
             <X v-else class="inline h-3.5 w-3.5 ml-1" /> </DropdownMenuLabel>
           <div class="px-2.5 pb-2 text-sm font-bold tracking-tight">
@@ -162,12 +144,17 @@ async function linkMicrosoft() {
               Not signed in
             </template>
           </div>
-          <DropdownMenuItem
-              v-if="needsLinking"
-              class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
-              @select="linkMicrosoft"
+          <div
+            v-if="needsLinking"
+            class="px-2.5 pb-2 text-[11px] text-amber-600"
           >
-            <AlertCircle class="h-3.5 w-3.5" /> Link Microsoft Account
+            Finish sign-in to link Minecraft and unlock packs.
+          </div>
+          <DropdownMenuItem
+              class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-foreground/[0.08] hover:bg-foreground/[0.12] transition-colors"
+              @select="emit('start-auth-flow')"
+          >
+            <LogIn class="h-3.5 w-3.5 opacity-80" /> Start sign-in
           </DropdownMenuItem>
           <DropdownMenuItem
               v-if="props.profile"

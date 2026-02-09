@@ -90,6 +90,8 @@ fn main() {
             commands::auth::restore_atlas_session,
             commands::auth::sign_out,
             commands::auth::atlas_sign_out,
+            commands::auth::create_launcher_link_session,
+            commands::auth::complete_launcher_link_session,
             commands::settings::get_settings,
             commands::settings::update_settings
         ])

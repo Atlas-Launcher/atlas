@@ -32,7 +32,6 @@ const emit = defineEmits<{
   (event: "back"): void;
   (event: "launch"): void;
   (event: "update-files"): void;
-  (event: "go-to-settings"): void;
   (event: "toggle-mod", payload: { fileName: string; enabled: boolean }): void;
   (event: "delete-mod", fileName: string): void;
   (event: "refresh-mods"): void;
@@ -111,10 +110,7 @@ const contentTabLabel = computed(() =>
       v-if="!props.profile"
       class="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-sm text-muted-foreground"
     >
-      Sign in with Microsoft to launch this profile.
-      <Button size="sm" variant="ghost" class="ml-2" @click="emit('go-to-settings')">
-        Go to sign in
-      </Button>
+      Sign in with Microsoft to play. Use the top-right menu to continue setup.
     </div>
 
     <Tabs v-model="detailTab" class="flex-1 min-h-0 flex flex-col overflow-hidden gap-4">

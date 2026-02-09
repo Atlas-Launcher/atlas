@@ -3,6 +3,9 @@ use crate::config;
 use crate::models::{AtlasProfile, DeviceCodeResponse, Profile};
 use crate::settings;
 use crate::state::AppState;
+use crate::net::http::{HttpClient, ReqwestHttpClient};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 #[tauri::command]
 pub async fn start_device_code() -> Result<DeviceCodeResponse, String> {
@@ -244,4 +247,83 @@ pub fn atlas_sign_out(state: tauri::State<'_, AppState>) -> Result<(), String> {
         .map_err(|_| "Auth state lock poisoned".to_string())?;
     *pending_guard = None;
     Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherLinkSession {
+    pub link_session_id: String,
+    pub link_code: String,
+    pub proof: String,
+    pub expires_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherLinkComplete {
+    pub success: bool,
+    pub user_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherLinkCompleteRequest {
+    link_session_id: String,
+    proof: String,
+    minecraft: LauncherMinecraftPayload,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherMinecraftPayload {
+    uuid: String,
+    name: String,
+}
+
+#[tauri::command]
+pub async fn create_launcher_link_session(
+    state: tauri::State<'_, AppState>,
+) -> Result<LauncherLinkSession, String> {
+    let settings = state
+        .settings
+        .lock()
+        .map_err(|_| "Settings lock poisoned".to_string())?
+        .clone();
+    let hub_url = config::resolve_atlas_hub_url(&settings);
+    let http = ReqwestHttpClient::new();
+    let endpoint = format!("{}/api/launcher/link-sessions", hub_url);
+
+    http.post_json::<LauncherLinkSession, _>(&endpoint, &json!({}))
+        .await
+        .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub async fn complete_launcher_link_session(
+    state: tauri::State<'_, AppState>,
+    link_session_id: String,
+    proof: String,
+    minecraft_uuid: String,
+    minecraft_name: String,
+) -> Result<LauncherLinkComplete, String> {
+    let settings = state
+        .settings
+        .lock()
+        .map_err(|_| "Settings lock poisoned".to_string())?
+        .clone();
+    let hub_url = config::resolve_atlas_hub_url(&settings);
+    let http = ReqwestHttpClient::new();
+    let endpoint = format!("{}/api/launcher/link-sessions/complete", hub_url);
+    let payload = LauncherLinkCompleteRequest {
+        link_session_id,
+        proof,
+        minecraft: LauncherMinecraftPayload {
+            uuid: minecraft_uuid,
+            name: minecraft_name,
+        },
+    };
+
+    http.post_json::<LauncherLinkComplete, _>(&endpoint, &payload)
+        .await
+        .map_err(|err| err.to_string())
 }
