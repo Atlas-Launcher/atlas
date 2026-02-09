@@ -1,8 +1,8 @@
 use anyhow::{Result, Context};
-use tokio::net::TcpStream;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::task::spawn_blocking;
 use tokio::fs;
 use std::path::Path;
+use minecraft_client_rs::Client;
 
 pub struct RconSettings {
     pub address: String,
@@ -20,62 +20,32 @@ impl RconClient {
     }
 
     pub async fn execute(&self, command: &str) -> Result<String> {
-        let mut stream = TcpStream::connect(&self.address).await
-            .context("Failed to connect to RCON")?;
+        let address = self.address.clone();
+        let password = self.password.clone();
+        let command = command.to_string();
 
-        // 1. Authenticate
-        self.authenticate(&mut stream).await?;
-
-        // 2. Send command
-        self.send_packet(&mut stream, 2, command).await?;
-
-        // 3. Receive response
-        let response = self.receive_packet(&mut stream).await?;
-        Ok(response.1)
-    }
-
-    async fn authenticate(&self, stream: &mut TcpStream) -> Result<()> {
-        self.send_packet(stream, 3, &self.password).await?;
-        let (id, _) = self.receive_packet(stream).await?;
-        
-        if id == -1 {
-            anyhow::bail!("RCON Authentication failed");
-        }
-        Ok(())
-    }
-
-    async fn send_packet(&self, stream: &mut TcpStream, type_: i32, payload: &str) -> Result<()> {
-        let id: i32 = 42; // arbitrary
-        let payload_bytes = payload.as_bytes();
-        let size = (10 + payload_bytes.len()) as i32;
-
-        stream.write_i32_le(size).await?;
-        stream.write_i32_le(id).await?;
-        stream.write_i32_le(type_).await?;
-        stream.write_all(payload_bytes).await?;
-        stream.write_all(&[0, 0]).await?; // two null bytes
-        Ok(())
-    }
-
-    async fn receive_packet(&self, stream: &mut TcpStream) -> Result<(i32, String)> {
-        let size = stream.read_i32_le().await?;
-        let id = stream.read_i32_le().await?;
-        let _type_ = stream.read_i32_le().await?;
-        
-        let mut payload = vec![0u8; (size - 10) as usize];
-        stream.read_exact(&mut payload).await?;
-        
-        // Skip null terminators
-        let mut trailer = [0u8; 2];
-        stream.read_exact(&mut trailer).await?;
-
-        let body = String::from_utf8_lossy(&payload).to_string();
-        Ok((id, body))
+        spawn_blocking(move || {
+            let mut client = Client::new(address)
+                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+            client
+                .authenticate(password)
+                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+            let response = client
+                .send_command(command)
+                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+            client
+                .close()
+                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+            Ok::<_, anyhow::Error>(response.body)
+        })
+        .await
+        .with_context(|| "RCON task failed")?
     }
 }
 
 pub async fn load_rcon_settings(runtime_dir: &Path) -> Result<Option<RconSettings>> {
     let properties_path = runtime_dir.join("server.properties");
+    println!("Loading RCON settings from {}", properties_path.display());
     let content = match fs::read_to_string(&properties_path).await {
         Ok(value) => value,
         Err(_) => return Ok(None),

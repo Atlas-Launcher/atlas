@@ -6,6 +6,15 @@
       <sourceFolder url="file://$MODULE_DIR$/apps/launcher/src-tauri/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/protocol/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src-tauri/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/runner/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/atlas-auth/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/mod-resolver/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/runner-v2/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/runnerd-v2/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/runner-core-v2/crates/runner-core-v2/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/runner-core-v2/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/runner-ipc-v2/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/runner-v2-utils/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/apps/cli/target" />
       <excludeFolder url="file://$MODULE_DIR$/apps/launcher/src-tauri/target" />
       <excludeFolder url="file://$MODULE_DIR$/src-tauri/target" />
