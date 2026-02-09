@@ -4,6 +4,7 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { packMembers, users } from "@/lib/db/schema";
 import { getAuthenticatedUserId } from "@/lib/auth/request-user";
+import { getAuthenticatedRunnerPackId } from "@/lib/auth/runner-tokens";
 
 interface RouteParams {
   params: Promise<{
@@ -14,19 +15,24 @@ interface RouteParams {
 export async function GET(request: Request, { params }: RouteParams) {
   const { packId } = await params;
   const userId = await getAuthenticatedUserId(request);
-
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+    const runnerPackId = await getAuthenticatedRunnerPackId(request);
+    if (!runnerPackId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (runnerPackId !== packId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } else {
+    const [membership] = await db
+      .select({ role: packMembers.role })
+      .from(packMembers)
+      .where(and(eq(packMembers.packId, packId), eq(packMembers.userId, userId)))
+      .limit(1);
 
-  const [membership] = await db
-    .select({ role: packMembers.role })
-    .from(packMembers)
-    .where(and(eq(packMembers.packId, packId), eq(packMembers.userId, userId)))
-    .limit(1);
-
-  if (!membership || (membership.role !== "creator" && membership.role !== "admin")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!membership || (membership.role !== "creator" && membership.role !== "admin")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   const members = await db
