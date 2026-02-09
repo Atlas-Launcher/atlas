@@ -1,10 +1,10 @@
 import { EventEmitter } from "events";
 
-type WhitelistEmitter = EventEmitter & {
+interface WhitelistEmitter extends EventEmitter {
   emit(event: "whitelist:update", payload: WhitelistUpdate): boolean;
   on(event: "whitelist:update", listener: (payload: WhitelistUpdate) => void): this;
   off(event: "whitelist:update", listener: (payload: WhitelistUpdate) => void): this;
-};
+}
 
 export type WhitelistUpdate = {
   packId: string;
