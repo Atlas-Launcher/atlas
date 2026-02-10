@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::time::{sleep, Duration};
 use runner_core_v2::proto::{LogLine, LogStream};
+use runner_v2_utils::runtime_paths_v2;
 
 mod client;
 
@@ -62,6 +63,10 @@ enum Cmd {
 
         #[arg(long = "daemon-logs")]
         daemon_logs: bool,
+    },
+    Cd {
+        #[arg(long, value_name = "SERVER_ROOT")]
+        server_root: Option<PathBuf>,
     },
     Install {
         #[arg(long, value_name = "USER")]
@@ -137,6 +142,10 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        Cmd::Cd { server_root } => {
+            let root = resolve_server_root(server_root);
+            println!("{}", root.display());
+        }
         Cmd::Install { user, runnerd_path } => {
             install_systemd(user, runnerd_path)?;
             println!("atlas-runnerd systemd service enabled and started.");
@@ -199,6 +208,14 @@ fn print_log_line(line: &LogLine) {
         LogStream::Stderr => "stderr",
     };
     println!("[{}] {}", stream, line.line.trim_end());
+}
+
+fn resolve_server_root(server_root: Option<PathBuf>) -> PathBuf {
+    if let Some(value) = server_root {
+        return value;
+    }
+    let paths = runtime_paths_v2();
+    paths.runtime_dir.join("servers").join("default")
 }
 
 fn install_systemd(user: Option<String>, runnerd_path: Option<PathBuf>) -> anyhow::Result<()> {
