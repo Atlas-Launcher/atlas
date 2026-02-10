@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use tokio::time::{sleep, Duration};
 use runner_core_v2::proto::{LogLine, LogStream};
 
@@ -61,6 +62,13 @@ enum Cmd {
 
         #[arg(long = "daemon-logs")]
         daemon_logs: bool,
+    },
+    Install {
+        #[arg(long, value_name = "USER")]
+        user: Option<String>,
+
+        #[arg(long, value_name = "RUNNERD_PATH")]
+        runnerd_path: Option<PathBuf>,
     },
 }
 
@@ -129,6 +137,10 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        Cmd::Install { user, runnerd_path } => {
+            install_systemd(user, runnerd_path)?;
+            println!("atlas-runnerd systemd service enabled and started.");
+        }
     }
     Ok(())
 }
@@ -187,4 +199,56 @@ fn print_log_line(line: &LogLine) {
         LogStream::Stderr => "stderr",
     };
     println!("[{}] {}", stream, line.line.trim_end());
+}
+
+fn install_systemd(user: Option<String>, runnerd_path: Option<PathBuf>) -> anyhow::Result<()> {
+    if std::env::consts::OS != "linux" {
+        anyhow::bail!("systemd install is only supported on Linux");
+    }
+
+    let service_user = user.unwrap_or_else(current_user);
+    let runnerd = runnerd_path
+        .as_ref()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "atlas-runnerd".to_string());
+
+    let service_path = Path::new("/etc/systemd/system/atlas-runnerd.service");
+    let contents = format!(
+        "[Unit]\n\
+Description=Atlas Runner Daemon\n\
+After=network-online.target\n\
+Wants=network-online.target\n\n\
+[Service]\n\
+Type=simple\n\
+User={service_user}\n\
+ExecStart={runnerd}\n\
+Restart=always\n\
+RestartSec=5\n\
+Environment=RUST_LOG=info\n\n\
+[Install]\n\
+WantedBy=multi-user.target\n"
+    );
+
+    std::fs::write(service_path, contents).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to write {}: {err}",
+            service_path.display()
+        )
+    })?;
+
+    run_systemctl(["daemon-reload"])?;
+    run_systemctl(["enable", "--now", "atlas-runnerd.service"])?;
+    Ok(())
+}
+
+fn run_systemctl<const N: usize>(args: [&str; N]) -> anyhow::Result<()> {
+    let status = Command::new("systemctl").args(args).status()?;
+    if !status.success() {
+        anyhow::bail!("systemctl failed with exit code: {status}");
+    }
+    Ok(())
+}
+
+fn current_user() -> String {
+    std::env::var("USER").unwrap_or_else(|_| "atlas".to_string())
 }
