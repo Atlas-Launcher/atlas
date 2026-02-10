@@ -273,10 +273,35 @@ pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, Rp
         guard.watchers_started = false;
     }
 
-    guard.restart_disabled = true;
+    // If there is a watcher thread handle, wait for it to finish (with timeout)
+    let watcher_handle_opt = guard.watcher_handle.take();
+    let watcher_done_opt = guard.watcher_done.clone();
     drop(guard);
 
-    stop_server_internal(state.clone(), force).await?;
+    if let Some(handle) = watcher_handle_opt {
+        // Wait up to 10 seconds for the watcher to signal done. Use spawn_blocking to join the thread without blocking the async runtime.
+        let done_flag = watcher_done_opt.clone();
+        let join_result = tokio::task::spawn_blocking(move || {
+            // Poll the done flag with a small sleep until timeout or until join completes
+            let start = std::time::Instant::now();
+            while start.elapsed() < std::time::Duration::from_secs(10) {
+                if let Some(ref f) = done_flag {
+                    if f.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            // Attempt to join; if the thread is still running, this will block until it exits; but we've waited already up to the timeout.
+            let _ = handle.join();
+        }).await;
+
+        if join_result.is_err() {
+            warn!("failed to join watcher worker thread cleanly");
+        } else {
+            info!("watcher worker thread joined");
+        }
+    }
 
     let mut guard = state.lock().await;
     let profile = guard.profile.clone().unwrap_or_else(|| "default".into());
