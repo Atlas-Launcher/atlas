@@ -89,6 +89,12 @@ pub async fn start_server_from_deploy(state: SharedState) {
     info!("auto-starting server from deploy key");
     let server_root = default_server_root("default");
     let current_build_id = load_current_build_id(&server_root).await;
+    // reflect on-disk current build id in shared state
+    if let Some(ref id) = current_build_id {
+        let mut guard = state.lock().await;
+        guard.current_pack_build_id = Some(id.clone());
+    }
+
     let artifact = match hub.get_launcher_artifact(&deploy.pack_id, &deploy.channel, current_build_id.as_deref()).await {
         Ok(value) => value,
         Err(err) => {
@@ -135,18 +141,26 @@ pub async fn start_server_from_deploy(state: SharedState) {
 
     let profile = "default".to_string();
 
-    if let Err(err) = start_server(profile, &build, server_root.clone(), state).await {
+    if let Err(err) = start_server(profile, &build, server_root.clone(), state.clone()).await {
         warn!("failed to auto-start server: {}", err.message);
         return;
     }
 
     info!("server auto-started successfully");
 
-    // Save the new build_id and pack_blob
+    // Save the new build_id and pack_blob. Update shared state immediately so the
+    // in-memory state reflects the deployed build even if persisting to disk fails.
     if let Some(build_id) = artifact.build_id {
+        // update shared state first
+        {
+            let mut guard = state.lock().await;
+            guard.current_pack_build_id = Some(build_id.clone());
+        }
+
         if let Err(err) = save_current_build_id(&server_root, &build_id).await {
             warn!("failed to save build_id: {err}");
         }
+
         if let Err(err) = save_pack_blob(&server_root, &build).await {
             warn!("failed to save pack_blob: {err}");
         }
@@ -192,7 +206,7 @@ pub async fn start_server(
         if let Ok(mut hub) = HubClient::new(&deploy.hub_url) {
             hub.set_service_token(deploy.deploy_key.clone());
             let hub = Arc::new(hub);
-            if let Err(err) = sync_whitelist_to_root(hub, &deploy.pack_id, &server_root).await {
+            if let Err(err) = sync_whitelist_to_root(hub, &deploy.pack_id, &server_root, state.clone()).await {
                 warn!("whitelist sync failed on start: {err}");
             }
         }

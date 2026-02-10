@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::process::Child;
@@ -24,6 +23,8 @@ pub struct ServerState {
     pub(crate) last_start_ms: Option<u64>,
     pub(crate) logs: LogStore,
     pub(crate) pack_etag: Option<String>,
+    pub(crate) whitelist_etag: Option<String>,
+    pub(crate) current_pack_build_id: Option<String>,
 }
 
 impl ServerState {
@@ -41,6 +42,8 @@ impl ServerState {
             last_start_ms: None,
             logs,
             pack_etag: None,
+            whitelist_etag: None,
+            current_pack_build_id: None,
         }
     }
 
