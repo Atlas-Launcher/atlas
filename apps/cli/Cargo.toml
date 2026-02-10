@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
-atlas-auth = { path = "../../crates/atlas-auth" }
+atlas-client = { path = "../../crates/atlas-client" }
 base64 = "0.22"
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5"

@@ -4,7 +4,7 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use atlas_auth::device_code::{
+use atlas_client::device_code::{
     DEFAULT_ATLAS_DEVICE_SCOPE, DeviceCodeRequest, DeviceCodeResponse, DeviceTokenPollStatus,
     DeviceTokenRequest, StandardDeviceTokenResponse, hub_device_code_endpoint,
     hub_device_token_endpoint, parse_device_token_poll_body,
