@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use crate::client::connect_or_start;
 use atlas_client::hub::HubClient;
 use runner_v2_utils::{ensure_dir, runtime_paths_v2};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use sysinfo::System;
 
 pub async fn ping() -> anyhow::Result<String> {
     let mut framed = connect_or_start().await?;
@@ -53,6 +54,8 @@ pub async fn up(
     profile: String,
     pack_blob: Option<PathBuf>,
     server_root: Option<PathBuf>,
+    max_ram: Option<u32>,
+    accept_eula: bool,
 ) -> anyhow::Result<String> {
     let mut framed = connect_or_start().await?;
 
@@ -85,6 +88,60 @@ pub async fn up(
         );
     }
 
+    if let Ok(mut config) = load_deploy_key() {
+        if config.eula_accepted != Some(true) {
+            if accept_eula {
+                config.eula_accepted = Some(true);
+            } else {
+                println!("Minecraft EULA: https://aka.ms/MinecraftEULA");
+                print!("Do you accept the Minecraft EULA? (y/N): ");
+                std::io::Write::flush(&mut std::io::stdout())?;
+                let accepted = tokio::task::spawn_blocking(|| {
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input).unwrap();
+                    let answer = input.trim().to_ascii_lowercase();
+                    answer == "y" || answer == "yes"
+                }).await.unwrap();
+                if !accepted {
+                    anyhow::bail!("EULA not accepted. Re-run with --accept-eula to proceed.");
+                }
+                config.eula_accepted = Some(true);
+            }
+        }
+        let max_ram_val = if let Some(arg_val) = max_ram {
+            arg_val
+        } else if let Some(existing) = config.max_ram {
+            existing
+        } else {
+            // prompt
+            let default = get_default_max_ram();
+            println!("Default RAM limit is {} GB. Override? (y/n)", default);
+            let do_override = tokio::task::spawn_blocking(|| {
+                use std::io::{self, BufRead};
+                let stdin = io::stdin();
+                let mut input = String::new();
+                stdin.read_line(&mut input).unwrap();
+                input.trim().to_lowercase() == "y"
+            }).await.unwrap();
+            if do_override {
+                println!("Enter RAM limit in GB:");
+                let ram = tokio::task::spawn_blocking(move || {
+                    use std::io::{self, BufRead};
+                    let stdin = io::stdin();
+                    let mut input = String::new();
+                    stdin.read_line(&mut input).unwrap();
+                    input.trim().parse::<u32>().unwrap_or(default)
+                }).await.unwrap();
+                ram
+            } else {
+                default
+            }
+        };
+        config.max_ram = Some(max_ram_val);
+        config.should_autostart = Some(true);
+        let _ = save_deploy_key(&config);
+    }
+
     let req = Envelope {
         id: 1,
         payload: Request::Start { profile, env },
@@ -100,7 +157,7 @@ pub async fn up(
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct DeployKeyConfig {
     hub_url: String,
     pack_id: String,
@@ -109,6 +166,27 @@ struct DeployKeyConfig {
     deploy_key: String,
     #[serde(default)]
     prefix: Option<String>,
+    #[serde(default)]
+    max_ram: Option<u32>,
+    #[serde(default)]
+    should_autostart: Option<bool>,
+    #[serde(default)]
+    eula_accepted: Option<bool>,
+}
+
+fn save_deploy_key(config: &DeployKeyConfig) -> anyhow::Result<()> {
+    let path = deploy_key_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| anyhow::anyhow!("Failed to create runnerd config dir: {err}"))?;
+    }
+
+    let payload = serde_json::to_string_pretty(config)
+        .map_err(|err| anyhow::anyhow!("Failed to serialize deploy key config: {err}"))?;
+    std::fs::write(&path, payload)
+        .map_err(|err| anyhow::anyhow!("Failed to write deploy key config: {err}"))?;
+
+    Ok(())
 }
 
 fn load_deploy_key() -> anyhow::Result<DeployKeyConfig> {
@@ -132,6 +210,34 @@ fn config_dir() -> anyhow::Result<PathBuf> {
         return Ok(home.join(".atlas").join("runnerd"));
     }
     Err(anyhow::anyhow!("Unable to resolve a writable data directory"))
+}
+
+fn get_default_max_ram() -> u32 {
+    let mut system = System::new();
+    system.refresh_memory();
+    let total_gb = (system.total_memory() / 1024 / 1024 / 1024) as u32;
+    if total_gb <= 8 {
+        (total_gb.saturating_sub(2)).max(1)
+    } else {
+        #[cfg(target_os = "macos")]
+        {
+            8
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if total_gb == 16 {
+                14
+            } else if total_gb >= 24 {
+                16
+            } else {
+                8
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        {
+            8
+        }
+    }
 }
 
 fn default_channel() -> String {
