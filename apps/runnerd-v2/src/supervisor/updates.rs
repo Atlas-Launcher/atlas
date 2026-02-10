@@ -209,7 +209,7 @@ pub(crate) async fn sync_whitelist_to_root(
         .map(|player| {
             serde_json::json!({
                 "name": player.name,
-                "uuid": player.uuid,
+                "uuid": format_uuid_with_dashes(&player.uuid),
             })
         })
         .collect::<Vec<_>>();
@@ -232,6 +232,21 @@ pub(crate) async fn sync_whitelist_to_root(
     }
 
     Ok(())
+}
+
+fn format_uuid_with_dashes(value: &str) -> String {
+    let compact: String = value.chars().filter(|ch| ch.is_ascii_hexdigit()).collect();
+    if compact.len() != 32 {
+        return value.to_string();
+    }
+    format!(
+        "{}-{}-{}-{}-{}",
+        &compact[0..8],
+        &compact[8..12],
+        &compact[12..16],
+        &compact[16..20],
+        &compact[20..32]
+    )
 }
 
 async fn apply_pack_update(
