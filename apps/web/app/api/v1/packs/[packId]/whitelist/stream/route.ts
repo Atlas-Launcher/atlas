@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { packMembers, whitelist } from "@/lib/db/schema";
+import { packMembers, users } from "@/lib/db/schema";
 import { getAuthenticatedUserId } from "@/lib/auth/request-user";
 import { getAuthenticatedRunnerPackId } from "@/lib/auth/runner-tokens";
 
@@ -38,11 +38,26 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
   }
 
-  // Poll: return current whitelist state
-  const entries = await db
-    .select()
-    .from(whitelist)
-    .where(eq(whitelist.packId, packId));
+  // Build whitelist from pack members with Mojang info
+  const members = await db
+    .select({
+      userId: packMembers.userId,
+      role: packMembers.role,
+      mojangUuid: users.mojangUuid,
+      mojangUsername: users.mojangUsername,
+    })
+    .from(packMembers)
+    .innerJoin(users, eq(packMembers.userId, users.id))
+    .where(eq(packMembers.packId, packId));
 
-  return NextResponse.json({ packId, whitelist: entries });
+  // Only include members with valid mojangUuid
+  const whitelist = members
+    .filter(m => m.mojangUuid)
+    .map(m => ({
+      name: m.mojangUsername || m.userId,
+      uuid: m.mojangUuid,
+      role: m.role,
+    }));
+
+  return NextResponse.json({ packId, whitelist });
 }
