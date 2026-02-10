@@ -266,6 +266,13 @@ pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, Rp
         });
     }
 
+    // Request watcher worker to stop gracefully (if present)
+    if let Some(ref flag) = guard.watcher_stop {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        // mark watchers as not started so future start will re-create them
+        guard.watchers_started = false;
+    }
+
     guard.restart_disabled = true;
     drop(guard);
 
@@ -370,7 +377,7 @@ pub(crate) async fn stop_server_internal(state: SharedState, force: bool) -> Res
                 sleep(Duration::from_millis(500)).await;
             }
         }
-        
+
         child.kill().await.map_err(|err| RpcError {
             code: ErrorCode::IoError,
             message: format!("failed to kill server: {err}"),

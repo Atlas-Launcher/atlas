@@ -60,72 +60,93 @@ pub async fn ensure_watchers(state: SharedState) {
         }
     }
 
-    let whitelist_state = state.clone();
-    let whitelist_config = config.clone();
-    let whitelist_hub_url = hub_url.clone();
-    let whitelist_deploy_key = hub_deploy_key.clone();
-    tokio::task::spawn_blocking(move || {
-        // Run the async watcher loop on a dedicated current-thread runtime to avoid Send requirements
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("failed to create local runtime for whitelist watcher");
-        rt.block_on(async move {
-            // construct local HubClient for this task so the task doesn't capture a non-Send client
-            let mut local_hub = match HubClient::new(&whitelist_hub_url) {
-                Ok(h) => h,
-                Err(err) => {
-                    warn!("whitelist watcher: failed to create hub client: {err}");
-                    return;
-                }
-            };
-            local_hub.set_service_token(whitelist_deploy_key.clone());
-            let local_hub = Arc::new(local_hub);
+    // Start a single dedicated watcher worker thread which runs a current-thread tokio runtime
+    // and executes both the whitelist and pack-update loops concurrently. This keeps all
+    // watcher logic in one place and avoids requiring Send for internal non-Send futures.
+    let worker_state_whitelist = state.clone();
+    let worker_state_update = state.clone();
+    let worker_whitelist_config = config.clone();
+    let worker_update_config = config.clone();
+    let worker_hub_url = hub_url.clone();
+    let worker_deploy_key = hub_deploy_key.clone();
 
-            let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 1 minute
-            loop {
-                match poll_whitelist(local_hub.clone(), &whitelist_config, whitelist_state.clone()).await {
-                    Ok(()) => {},
-                    Err(err) => warn!("whitelist poll error: {err}"),
-                }
-                sleep(poll_interval).await;
-            }
+    // create watcher stop flag and persist into shared state so other code can signal shutdown
+    let watcher_stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let mut guard = state.lock().await;
+        guard.watcher_stop = Some(watcher_stop_flag.clone());
+    }
+
+    std::thread::Builder::new()
+        .name("atlas-watcher-worker".into())
+        .spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to create watcher worker runtime");
+
+            rt.block_on(async move {
+                // Whitelist loop future
+                let whitelist_fut = async {
+                    // construct local HubClient for this task
+                    let mut local_hub = match HubClient::new(&worker_hub_url) {
+                        Ok(h) => h,
+                        Err(err) => {
+                            warn!("watcher worker: failed to create hub client for whitelist: {err}");
+                            return;
+                        }
+                    };
+                    local_hub.set_service_token(worker_deploy_key.clone());
+                    let local_hub = Arc::new(local_hub);
+
+                    let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 1 minute
+                    loop {
+                        if watcher_stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                            info!("watcher worker: whitelist loop exiting due to stop request");
+                            break;
+                        }
+                        match poll_whitelist(local_hub.clone(), &worker_whitelist_config, worker_state_whitelist.clone()).await {
+                            Ok(()) => {},
+                            Err(err) => warn!("whitelist poll error: {err}"),
+                        }
+                        sleep(poll_interval).await;
+                    }
+                };
+
+                // Pack update loop future
+                let update_fut = async {
+                    // construct local HubClient for this task
+                    let mut local_hub = match HubClient::new(&worker_hub_url) {
+                        Ok(h) => h,
+                        Err(err) => {
+                            warn!("watcher worker: failed to create hub client for updates: {err}");
+                            return;
+                        }
+                    };
+                    local_hub.set_service_token(worker_deploy_key.clone());
+                    let local_hub = Arc::new(local_hub);
+
+                    let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 5 minutes
+                    loop {
+                        if watcher_stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                            info!("watcher worker: update loop exiting due to stop request");
+                            break;
+                        }
+                        match poll_pack_update(local_hub.clone(), &worker_update_config, worker_state_update.clone()).await {
+                            Ok(()) => {},
+                            Err(err) => warn!("pack update poll error: {err}"),
+                        }
+                        sleep(poll_interval).await;
+                    }
+                };
+
+                // Run both loops concurrently; they are infinite loops and will run until process exit.
+                tokio::join!(whitelist_fut, update_fut);
+            });
         })
-    });
-    info!("started whitelist watcher");
+        .expect("failed to spawn watcher worker thread");
 
-    let update_state = state.clone();
-    let update_config = config.clone();
-    let update_hub_url = hub_url.clone();
-    let update_deploy_key = hub_deploy_key.clone();
-    tokio::task::spawn_blocking(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("failed to create local runtime for update watcher");
-        rt.block_on(async move {
-            // construct local HubClient for this task so the task doesn't capture a non-Send client
-            let mut local_hub = match HubClient::new(&update_hub_url) {
-                Ok(h) => h,
-                Err(err) => {
-                    warn!("update watcher: failed to create hub client: {err}");
-                    return;
-                }
-            };
-            local_hub.set_service_token(update_deploy_key.clone());
-            let local_hub = Arc::new(local_hub);
-
-            let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 5 minutes
-            loop {
-                match poll_pack_update(local_hub.clone(), &update_config, update_state.clone()).await {
-                    Ok(()) => {},
-                    Err(err) => warn!("pack update poll error: {err}"),
-                }
-                sleep(poll_interval).await;
-            }
-        })
-    });
-    info!("started pack update watcher");
+    info!("started watcher worker thread");
 }
 
 #[derive(Debug, Deserialize)]
