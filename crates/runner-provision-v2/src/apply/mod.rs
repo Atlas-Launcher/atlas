@@ -5,6 +5,7 @@ use protocol::{decode_blob, PackBlob};
 use crate::{
     deps::{provider::DependencyProvider, verify},
     errors::ProvisionError,
+    java,
     launch::{self, LaunchPlan},
 };
 
@@ -14,6 +15,7 @@ mod preserve;
 mod marker;
 mod pointers;
 mod loader;
+mod eula;
 
 pub async fn ensure_applied_from_packblob_bytes(
     server_root: &Path,
@@ -23,42 +25,64 @@ pub async fn ensure_applied_from_packblob_bytes(
     // 1) Decode PackBlob
     let pack = decode_packblob(pack_blob_bytes)?;
 
-    // 2) Short-circuit if already applied
+    // 2) Ensure java runtime is available
+    let java_bin = java::ensure_java_for_minecraft(
+        server_root,
+        &pack.metadata.minecraft_version,
+        None,
+    )
+    .await?;
+
+    // 3) Short-circuit if already applied
     if marker::is_pack_applied(server_root, &pack).await? {
-        return launch::read_launch_plan(server_root).await;
+        let mut plan = launch::read_launch_plan(server_root).await?;
+        launch::apply_java_path_to_plan(&mut plan, &java_bin);
+        let current_dir = server_root.join("current");
+        eula::ensure_eula(&current_dir).await?;
+        launch::write_launch_plan_to_dir(&current_dir, &plan).await?;
+        return Ok(plan);
     }
 
-    // 3) Build apply plan (what files to write where)
+    // 4) Build apply plan (what files to write where)
     let plan = plan::build_apply_plan(&pack)?;
 
-    // 4) Stage everything into staging dir
+    // 5) Stage everything into staging dir
     let staging_dir = staging::create_staging_dir(server_root).await?;
     let staging_current = staging_dir.join("current"); // staging/current/...
 
     staging::ensure_dir(&staging_current).await?;
 
-    // 4a) Write inline files
+    // 5a) Write inline files
     plan::write_inline_files(&pack, &staging_current).await?;
 
-    // 4b) Fetch+verify+write dependencies
+    // 5b) Fetch+verify+write dependencies
     for item in plan.deps {
         let bytes = dep_provider.fetch(&item.dep).await?;
         verify::verify_dependency_bytes(&item.dep, &bytes)?;
         plan::write_dependency_bytes(&item, &bytes, &staging_current).await?;
     }
 
-    // 4c) Ensure server loader is installed
-    loader::ensure_loader_installed(server_root, &staging_current, &pack.metadata).await?;
+    // 5c) Ensure server loader is installed
+    loader::ensure_loader_installed(
+        server_root,
+        &staging_current,
+        &pack.metadata,
+        &java_bin,
+    )
+    .await?;
 
-    // 5) Preserve selected files from existing current -> staging/current
+    // 6) Preserve selected files from existing current -> staging/current
     preserve::preserve_from_existing(server_root, &staging_current).await?;
 
-    // 6) Write launch plan + applied marker into staging/current/.runner/
-    let launch_plan = launch::derive_launch_plan(&pack, &staging_current)?;
+    // 7) Ensure EULA is accepted
+    eula::ensure_eula(&staging_current).await?;
+
+    // 8) Write launch plan + applied marker into staging/current/.runner/
+    let launch_plan = launch::derive_launch_plan(&pack, &staging_current, &java_bin)?;
     launch::write_launch_plan_to_dir(&staging_current, &launch_plan).await?;
     marker::write_applied_marker_to_dir(&staging_current, &pack).await?;
 
-    // 7) Promote staging/current to server_root/current atomically
+    // 9) Promote staging/current to server_root/current atomically
     staging::promote(server_root, &staging_current).await?;
 
     Ok(launch_plan)

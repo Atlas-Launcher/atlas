@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 
 use protocol::{Loader, PackMetadata};
 
-use crate::errors::ProvisionError;
+use crate::{errors::ProvisionError, now_millis};
+use std::process::Output;
 
 const FABRIC_INSTALLER_META: &str = "https://meta.fabricmc.net/v2/versions/installer";
 const FABRIC_INSTALLER_MAVEN: &str = "https://maven.fabricmc.net/net/fabricmc/fabric-installer";
@@ -13,6 +14,7 @@ pub async fn ensure_loader_installed(
     server_root: &Path,
     staging_current: &Path,
     meta: &PackMetadata,
+    java_bin: &Path,
 ) -> Result<(), ProvisionError> {
     if has_server_launch_files(staging_current).await {
         return Ok(());
@@ -34,7 +36,14 @@ pub async fn ensure_loader_installed(
 
             let installer_path = staging_current.join("fabric-installer.jar");
             copy_if_missing(&installer_cache, &installer_path).await?;
-            run_fabric_installer(staging_current, &installer_path, meta).await?;
+            run_fabric_installer(
+                staging_current,
+                &installer_path,
+                meta,
+                java_bin,
+                server_root,
+            )
+            .await?;
         }
         Loader::Forge => {
             let loader_version = require_loader_version(meta, "forge")?;
@@ -51,7 +60,14 @@ pub async fn ensure_loader_installed(
 
             let installer_path = staging_current.join("forge-installer.jar");
             copy_if_missing(&installer_cache, &installer_path).await?;
-            run_server_installer(staging_current, &installer_path).await?;
+            run_server_installer(
+                staging_current,
+                &installer_path,
+                java_bin,
+                server_root,
+                "forge",
+            )
+            .await?;
         }
         Loader::Neo => {
             let loader_version = require_loader_version(meta, "neoforge")?;
@@ -67,7 +83,14 @@ pub async fn ensure_loader_installed(
 
             let installer_path = staging_current.join("neoforge-installer.jar");
             copy_if_missing(&installer_cache, &installer_path).await?;
-            run_server_installer(staging_current, &installer_path).await?;
+            run_server_installer(
+                staging_current,
+                &installer_path,
+                java_bin,
+                server_root,
+                "neoforge",
+            )
+            .await?;
         }
     }
 
@@ -129,22 +152,47 @@ async fn copy_if_missing(source: &PathBuf, dest: &PathBuf) -> Result<(), Provisi
     Ok(())
 }
 
-async fn run_server_installer(runtime_dir: &Path, installer: &PathBuf) -> Result<(), ProvisionError> {
+async fn run_server_installer(
+    runtime_dir: &Path,
+    installer: &PathBuf,
+    java_bin: &Path,
+    server_root: &Path,
+    label: &str,
+) -> Result<(), ProvisionError> {
     let installer_arg = installer
         .file_name()
         .map(|value| value.to_string_lossy().to_string())
         .unwrap_or_else(|| installer.to_string_lossy().to_string());
-    let status = tokio::process::Command::new("java")
+    let cmd_line = format!(
+        "{} -jar {} --installServer",
+        java_bin.display(),
+        installer_arg
+    );
+    let log_path = installer_log_path(server_root, label);
+    let output = tokio::process::Command::new(java_bin)
         .current_dir(runtime_dir)
         .arg("-jar")
         .arg(installer_arg)
         .arg("--installServer")
-        .status()
-        .await?;
+        .output()
+        .await;
 
-    if !status.success() {
+    let output = match output {
+        Ok(value) => {
+            write_installer_log(&log_path, &cmd_line, &value).await;
+            value
+        }
+        Err(err) => {
+            write_installer_error_log(&log_path, &cmd_line, &err).await;
+            return Err(err.into());
+        }
+    };
+
+    if !output.status.success() {
         return Err(ProvisionError::Invalid(format!(
-            "server installer failed with exit code: {status}"
+            "server installer failed with exit code: {} (log: {})",
+            output.status,
+            log_path.display()
         )));
     }
     Ok(())
@@ -154,6 +202,8 @@ async fn run_fabric_installer(
     runtime_dir: &Path,
     installer: &PathBuf,
     meta: &PackMetadata,
+    java_bin: &Path,
+    server_root: &Path,
 ) -> Result<(), ProvisionError> {
     let loader_version = require_loader_version(meta, "fabric")?;
     let installer_arg = installer
@@ -161,7 +211,15 @@ async fn run_fabric_installer(
         .map(|value| value.to_string_lossy().to_string())
         .unwrap_or_else(|| installer.to_string_lossy().to_string());
 
-    let status = tokio::process::Command::new("java")
+    let cmd_line = format!(
+        "{} -jar {} server -mcversion {} -loader {} -downloadMinecraft",
+        java_bin.display(),
+        installer_arg,
+        meta.minecraft_version,
+        loader_version
+    );
+    let log_path = installer_log_path(server_root, "fabric");
+    let output = tokio::process::Command::new(java_bin)
         .current_dir(runtime_dir)
         .arg("-jar")
         .arg(installer_arg)
@@ -171,15 +229,69 @@ async fn run_fabric_installer(
         .arg("-loader")
         .arg(&loader_version)
         .arg("-downloadMinecraft")
-        .status()
-        .await?;
+        .output()
+        .await;
 
-    if !status.success() {
+    let output = match output {
+        Ok(value) => {
+            write_installer_log(&log_path, &cmd_line, &value).await;
+            value
+        }
+        Err(err) => {
+            write_installer_error_log(&log_path, &cmd_line, &err).await;
+            return Err(err.into());
+        }
+    };
+
+    if !output.status.success() {
         return Err(ProvisionError::Invalid(format!(
-            "fabric installer failed with exit code: {status}"
+            "fabric installer failed with exit code: {} (log: {})",
+            output.status,
+            log_path.display()
         )));
     }
     Ok(())
+}
+
+fn installer_log_path(server_root: &Path, label: &str) -> PathBuf {
+    let logs_dir = server_root.join(".runner").join("logs");
+    let stamp = now_millis();
+    logs_dir.join(format!("installer-{label}-{stamp}.log"))
+}
+
+async fn write_installer_log(log_path: &Path, cmd_line: &str, output: &Output) {
+    let mut contents = String::new();
+    contents.push_str("command: ");
+    contents.push_str(cmd_line);
+    contents.push('\n');
+    contents.push_str("status: ");
+    contents.push_str(&output.status.to_string());
+    contents.push('\n');
+    contents.push_str("stdout:\n");
+    contents.push_str(&String::from_utf8_lossy(&output.stdout));
+    contents.push_str("\n\nstderr:\n");
+    contents.push_str(&String::from_utf8_lossy(&output.stderr));
+    contents.push('\n');
+
+    if let Some(parent) = log_path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    let _ = tokio::fs::write(log_path, contents).await;
+}
+
+async fn write_installer_error_log(log_path: &Path, cmd_line: &str, err: &std::io::Error) {
+    let mut contents = String::new();
+    contents.push_str("command: ");
+    contents.push_str(cmd_line);
+    contents.push('\n');
+    contents.push_str("error: ");
+    contents.push_str(&err.to_string());
+    contents.push('\n');
+
+    if let Some(parent) = log_path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    let _ = tokio::fs::write(log_path, contents).await;
 }
 
 async fn resolve_fabric_installer_version() -> Result<String, ProvisionError> {
