@@ -82,8 +82,6 @@ pub struct LauncherArtifactResponse {
     pub build_id: Option<String>,
     #[serde(default)]
     pub build_version: Option<String>,
-    #[serde(default)]
-    pub channel: Option<String>,
 }
 
 #[derive(Debug)]
