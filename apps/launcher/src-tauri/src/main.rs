@@ -49,17 +49,15 @@ fn main() {
                 app.deep_link().register_all()?;
             }
 
-            #[cfg(not(target_os = "macos"))]
             {
                 use tauri::Manager;
+                #[cfg(not(target_os = "macos"))]
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.set_decorations(false);
                 }
-            }
-            {
-                use tauri::Manager;
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
+                if let Some(loading) = app.get_webview_window("loading") {
+                    let _ = loading.show();
+                    let _ = loading.set_focus();
                 }
             }
             let _ = app;

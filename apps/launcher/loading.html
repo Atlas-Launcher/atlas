@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Launching Atlas</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: "Sora", system-ui, sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(255, 180, 120, 0.18), transparent 50%),
+          radial-gradient(circle at top right, rgba(90, 160, 255, 0.2), transparent 55%),
+          #0b0f16;
+        color: #e5e7eb;
+      }
+
+      :root {
+        color-scheme: dark;
+      }
+
+      .card {
+        width: min(320px, 80vw);
+        padding: 24px 26px;
+        border-radius: 18px;
+        background: rgba(15, 20, 32, 0.78);
+        border: 1px solid rgba(120, 140, 170, 0.18);
+        box-shadow: 0 12px 30px rgba(3, 7, 14, 0.5);
+        text-align: center;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 18px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      p {
+        margin: 0 0 18px;
+        font-size: 14px;
+        color: #9aa4b2;
+      }
+
+      .bar {
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.2);
+        overflow: hidden;
+        position: relative;
+      }
+
+      .bar::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: 33%;
+        border-radius: 999px;
+        animation: progress-stripe-sweep 1.2s linear infinite;
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          rgba(96, 165, 250, 0.2) 35%,
+          rgba(96, 165, 250, 0.85) 50%,
+          rgba(96, 165, 250, 0.2) 65%,
+          transparent 100%
+        );
+      }
+
+      @keyframes progress-stripe-sweep {
+        from {
+          transform: translateX(-140%);
+        }
+
+        to {
+          transform: translateX(360%);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Atlas Launcher</h1>
+      <p>Loading your profiles and packs…</p>
+      <div class="bar"></div>
+    </div>
+  </body>
+</html>
