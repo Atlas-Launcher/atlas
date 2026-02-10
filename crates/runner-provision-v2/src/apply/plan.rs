@@ -116,13 +116,9 @@ fn dependency_pointer_path(dep: &Dependency) -> PathBuf {
     if !trimmed.is_empty() {
         return PathBuf::from(trimmed);
     }
-
-    let fallback = match dep.kind {
-        DependencyKind::Mod => "mods/asset.mod.toml",
-        DependencyKind::Resource => "resources/asset.res.toml",
-    };
-
-    PathBuf::from(fallback)
+    let kind = dependency_kind_to_pointer_kind(dep.kind);
+    let resolved = mod_resolver::pointer::resolve_pointer_path("", kind, &dep.url);
+    PathBuf::from(resolved)
 }
 
 fn dependency_kind_to_pointer_kind(kind: DependencyKind) -> super::pointers::PointerKind {
