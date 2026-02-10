@@ -1,0 +1,2 @@
+[env]
+ATLAS_RUNNERD_PATH = { value = "target/debug/atlas-runnerd", relative = true }
