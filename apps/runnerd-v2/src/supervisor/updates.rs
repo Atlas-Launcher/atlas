@@ -58,28 +58,27 @@ pub async fn ensure_watchers(state: SharedState) {
     let whitelist_hub = hub.clone();
     let whitelist_config = config.clone();
     tokio::spawn(async move {
-        let mut backoff = Duration::from_secs(2);
+        let poll_interval = Duration::from_secs(300); // 5 minutes
         loop {
-            match listen_whitelist_events(whitelist_hub.clone(), &whitelist_config, whitelist_state.clone()).await {
-                Ok(()) => backoff = Duration::from_secs(2),
-                Err(err) => warn!("whitelist stream error: {err}"),
+            match poll_whitelist(whitelist_hub.clone(), &whitelist_config, whitelist_state.clone()).await {
+                Ok(()) => {},
+                Err(err) => warn!("whitelist poll error: {err}"),
             }
-            sleep(backoff).await;
-            backoff = (backoff * 2).min(Duration::from_secs(60));
+            sleep(poll_interval).await;
         }
     });
 
     let update_state = state.clone();
     let update_hub = hub.clone();
+    let update_config = config.clone();
     tokio::spawn(async move {
-        let mut backoff = Duration::from_secs(2);
+        let poll_interval = Duration::from_secs(300); // 5 minutes
         loop {
-            match listen_pack_update_events(update_hub.clone(), &config, update_state.clone()).await {
-                Ok(()) => backoff = Duration::from_secs(2),
-                Err(err) => warn!("pack update stream error: {err}"),
+            match poll_pack_update(update_hub.clone(), &update_config, update_state.clone()).await {
+                Ok(()) => {},
+                Err(err) => warn!("pack update poll error: {err}"),
             }
-            sleep(backoff).await;
-            backoff = (backoff * 2).min(Duration::from_secs(60));
+            sleep(poll_interval).await;
         }
     });
 }
@@ -101,30 +100,13 @@ struct PackUpdateEvent {
     channel: Option<String>,
 }
 
-async fn listen_whitelist_events(
+async fn poll_whitelist(
     hub: Arc<HubClient>,
     config: &DeployKeyConfig,
     state: SharedState,
 ) -> Result<(), String> {
-    let response = hub
-        .open_whitelist_events(&config.pack_id)
-        .await
-        .map_err(|err| format!("whitelist SSE failed: {err}"))?;
-    let mut stream = response.bytes_stream();
-    let mut parser = SseParser::new();
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|err| format!("whitelist SSE read failed: {err}"))?;
-        for payload in parser.push_chunk(&chunk) {
-            if should_trigger_whitelist_sync(&payload, &config.pack_id) {
-                if let Err(err) = sync_whitelist(hub.clone(), &config.pack_id, state.clone()).await {
-                    warn!("whitelist sync failed: {err}");
-                }
-            }
-        }
-    }
-
-    Err("whitelist stream ended".to_string())
+    // Always sync whitelist on poll
+    sync_whitelist(hub, &config.pack_id, state).await
 }
 
 fn should_trigger_whitelist_sync(payload: &str, pack_id: &str) -> bool {
@@ -139,30 +121,14 @@ fn should_trigger_whitelist_sync(payload: &str, pack_id: &str) -> bool {
     false
 }
 
-async fn listen_pack_update_events(
+async fn poll_pack_update(
     hub: Arc<HubClient>,
     config: &DeployKeyConfig,
     state: SharedState,
 ) -> Result<(), String> {
-    let response = hub
-        .open_pack_update_events(&config.pack_id)
-        .await
-        .map_err(|err| format!("pack update SSE failed: {err}"))?;
-    let mut stream = response.bytes_stream();
-    let mut parser = SseParser::new();
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|err| format!("pack update SSE read failed: {err}"))?;
-        for payload in parser.push_chunk(&chunk) {
-            if should_trigger_pack_update(&payload, &config.pack_id, &config.channel) {
-                if let Err(err) = apply_pack_update(hub.clone(), config, state.clone()).await {
-                    warn!("pack update failed: {err}");
-                }
-            }
-        }
-    }
-
-    Err("pack update stream ended".to_string())
+    // Fetch latest build/channel info and apply update if needed
+    // For now, always attempt update (could cache last build/channel)
+    apply_pack_update(hub, config, state).await
 }
 
 fn should_trigger_pack_update(payload: &str, pack_id: &str, channel: &str) -> bool {
