@@ -48,38 +48,8 @@ export async function GET(
     return NextResponse.json({ error: "Asset not found." }, { status: 404 });
   }
 
-  const range = request.headers.get("range");
-  const response = await fetch(asset.browser_download_url, {
-    headers: {
-      "User-Agent": "atlas-hub-downloads",
-      ...getAuthHeaders(),
-      ...(range ? { Range: range } : {}),
-    },
-    next: { revalidate: 300 },
-  });
-
-  if (!response.ok) {
-    return NextResponse.json({ error: "Failed to fetch asset." }, { status: 502 });
-  }
-
-  const headers = buildHeaders(
-    response.headers.get("content-type") ?? asset.content_type,
-    asset.size,
-    asset.name,
-  );
+  const headers = buildHeaders(asset.content_type, asset.size, asset.name);
   applyRateLimitHeaders(headers, limiter);
 
-  const contentRange = response.headers.get("content-range");
-  if (contentRange) {
-    headers.set("content-range", contentRange);
-  }
-  const acceptRanges = response.headers.get("accept-ranges");
-  if (acceptRanges) {
-    headers.set("accept-ranges", acceptRanges);
-  }
-
-  return new NextResponse(response.body, {
-    status: response.status,
-    headers,
-  });
+  return NextResponse.redirect(asset.browser_download_url, { headers });
 }
