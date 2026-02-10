@@ -48,6 +48,8 @@ pub enum Request {
 
     LogsTail { lines: usize },
 
+    DaemonLogsTail { lines: usize },
+
     Subscribe {
         topics: Vec<Topic>,
         send_initial_status: bool,
@@ -63,6 +65,7 @@ pub enum Request {
     SaveDeployKey {
         hub_url: String,
         pack_id: String,
+        channel: String,
         deploy_key: String,
         #[serde(default)]
         prefix: Option<String>,
