@@ -46,66 +46,54 @@ export async function POST(request: Request) {
         );
       }
 
-      if (artifactRef.provider === "r2") {
-        const url = await createDownloadUrlForArtifactRef(artifactRef);
-        return NextResponse.json({ url, key, provider: artifactRef.provider });
+      const url = await createDownloadUrlForArtifactRef(artifactRef);
+      return NextResponse.json({ url, key, provider: artifactRef.provider });
+    } else {
+      let provider: StorageProviderId;
+      let objectKey: string;
+
+      if (key.includes("::")) {
+        const artifactRef = decodeArtifactRef(key);
+        provider = artifactRef.provider;
+        objectKey = artifactRef.key;
+      } else {
+        provider = providerFromBody ?? getPreferredStorageProvider();
+        objectKey = key;
       }
 
-      const token = createStorageToken({
-        action: "download",
-        provider: artifactRef.provider,
-        key: artifactRef.key,
-        expiresInSeconds: 900,
-      });
-      const origin = new URL(request.url).origin;
-      const url = `${origin}/api/v1/storage/download?token=${encodeURIComponent(token)}`;
-      return NextResponse.json({ url, key, provider: artifactRef.provider });
-    }
+      if (!isStorageProviderEnabled(provider)) {
+        return NextResponse.json(
+          {
+            error: `Storage provider '${provider}' is not enabled.`,
+          },
+          { status: 503 }
+        );
+      }
 
-    let provider: StorageProviderId;
-    let objectKey: string;
+      let url: string;
+      if (provider === "r2") {
+        url = await createUploadUrlForProvider({
+          provider,
+          key: objectKey,
+          contentType,
+        });
+      } else {
+        const token = createStorageToken({
+          action: "upload",
+          provider,
+          key: objectKey,
+          expiresInSeconds: 900,
+        });
+        const origin = new URL(request.url).origin;
+        url = `${origin}/api/v1/storage/upload?token=${encodeURIComponent(token)}`;
+      }
 
-    if (key.includes("::")) {
-      const artifactRef = decodeArtifactRef(key);
-      provider = artifactRef.provider;
-      objectKey = artifactRef.key;
-    } else {
-      provider = providerFromBody ?? getPreferredStorageProvider();
-      objectKey = key;
-    }
-
-    if (!isStorageProviderEnabled(provider)) {
-      return NextResponse.json(
-        {
-          error: `Storage provider '${provider}' is not enabled.`,
-        },
-        { status: 503 }
-      );
-    }
-
-    let url: string;
-    if (provider === "r2") {
-      url = await createUploadUrlForProvider({
+      return NextResponse.json({
+        url,
+        key: encodeArtifactRef({ provider, key: objectKey }),
         provider,
-        key: objectKey,
-        contentType,
       });
-    } else {
-      const token = createStorageToken({
-        action: "upload",
-        provider,
-        key: objectKey,
-        expiresInSeconds: 900,
-      });
-      const origin = new URL(request.url).origin;
-      url = `${origin}/api/v1/storage/upload?token=${encodeURIComponent(token)}`;
     }
-
-    return NextResponse.json({
-      url,
-      key: encodeArtifactRef({ provider, key: objectKey }),
-      provider,
-    });
   } catch (error) {
     console.error("Presign error", error);
     return NextResponse.json(
