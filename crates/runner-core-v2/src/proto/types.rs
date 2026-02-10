@@ -5,6 +5,8 @@ pub type UnixMillis = u64;
 
 pub type ProfileId = String;
 
+pub type SessionId = u64;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LogStream {
     Stdout,

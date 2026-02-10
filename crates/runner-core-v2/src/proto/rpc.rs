@@ -1,7 +1,24 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use super::{LogLine, ProfileId, RequestId, RpcError, UnixMillis};
+use super::{LogLine, ProfileId, RequestId, RpcError, UnixMillis, SessionId};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data")]
+pub enum Event {
+    Log(LogLine),
+    Status(ServerStatus),
+    Lifecycle(LifecycleEvent),
+    RconOut { session: SessionId, text: String },
+    RconErr { session: SessionId, text: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "data")]
+pub enum Outbound {
+    Response(Envelope<Response>),
+    Event(Event),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope<T> {
@@ -27,6 +44,8 @@ pub enum Request {
         grace_ms: Option<u64>,
     },
 
+    Shutdown {},
+
     LogsTail { lines: usize },
 
     Subscribe {
@@ -35,6 +54,11 @@ pub enum Request {
     },
 
     Unsubscribe {},
+
+    RconExec { command: String },
+    RconOpen {},
+    RconSend { session: SessionId, command: String },
+    RconClose { session: SessionId },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +82,12 @@ pub enum Response {
 
     Subscribed { topics: Vec<Topic> },
     Unsubscribed {},
+
+    ShutdownAck {},
+
+    RconResult { text: String },
+    RconOpened { session: SessionId, prompt: String },
+    RconClosed { session: SessionId },
 
     Error(RpcError),
 }
@@ -95,14 +125,6 @@ pub enum ServerStatus {
 pub struct ExitInfo {
     pub code: Option<i32>,
     pub signal: Option<i32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-pub enum Event {
-    Log(LogLine),
-    Status(ServerStatus),
-    Lifecycle(LifecycleEvent),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
