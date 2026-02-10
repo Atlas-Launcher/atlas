@@ -1,6 +1,7 @@
 mod curseforge;
 mod curseforge_proxy;
 mod modrinth;
+pub mod pointer;
 
 #[cfg(feature = "blocking")]
 use anyhow::Context;
