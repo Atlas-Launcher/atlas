@@ -77,7 +77,12 @@ export function pickAllowedParams(
   const allowedSet = new Set(allowed);
   for (const [key, value] of params.entries()) {
     if (allowedSet.has(key)) {
-      next.append(key, value);
+      if (key === "pageSize") {
+        const size = parseInt(value, 10);
+        next.append(key, Math.min(isNaN(size) ? 50 : size, 100).toString()); // Cap at 100
+      } else {
+        next.append(key, value);
+      }
     }
   }
   return next;

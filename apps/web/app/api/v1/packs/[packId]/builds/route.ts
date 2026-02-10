@@ -39,11 +39,15 @@ export async function GET(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 100); // Default 50, max 100
+
   const rows = await db
     .select()
     .from(builds)
     .where(eq(builds.packId, packId))
-    .orderBy(desc(builds.createdAt));
+    .orderBy(desc(builds.createdAt))
+    .limit(limit);
 
   const result = rows
     .map((build) => {
