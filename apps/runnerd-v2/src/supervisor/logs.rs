@@ -35,23 +35,25 @@ impl LogStore {
 
     pub fn push_server(&self, stream: LogStream, line: String) {
         let mut guard = self.inner.lock().expect("log lock poisoned");
+        let max_lines = guard.max_lines;
         let entry = LogLine {
             at_ms: now_millis(),
             stream,
             line,
         };
-        push_bounded(&mut guard.server, guard.max_lines, entry.clone());
+        push_bounded(&mut guard.server, max_lines, entry.clone());
         let _ = guard.server_tx.send(entry);
     }
 
     pub fn push_daemon(&self, line: String) {
         let mut guard = self.inner.lock().expect("log lock poisoned");
+        let max_lines = guard.max_lines;
         let entry = LogLine {
             at_ms: now_millis(),
             stream: LogStream::Stdout,
             line,
         };
-        push_bounded(&mut guard.daemon, guard.max_lines, entry.clone());
+        push_bounded(&mut guard.daemon, max_lines, entry.clone());
         let _ = guard.daemon_tx.send(entry);
     }
 

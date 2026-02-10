@@ -97,10 +97,8 @@ pub async fn complete_atlas_login(
     callback_url: &str,
     pending: AtlasPendingAuth,
 ) -> Result<AtlasSession, AuthError> {
-    let http = ReqwestHttpClient::new();
     let code = atlas::parse_auth_callback(callback_url, &pending.state)?;
     let token = atlas::exchange_auth_code(
-        &http,
         &pending.auth_base_url,
         &pending.client_id,
         &code,
@@ -109,7 +107,7 @@ pub async fn complete_atlas_login(
     )
     .await?;
     let profile =
-        atlas::fetch_user_info(&http, &pending.auth_base_url, &token.access_token).await?;
+        atlas::fetch_user_info(&pending.auth_base_url, &token.access_token).await?;
 
     Ok(AtlasSession {
         access_token: token.access_token,

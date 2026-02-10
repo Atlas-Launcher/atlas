@@ -44,9 +44,7 @@ pub async fn ensure_fresh_atlas_session(session: AtlasSession) -> Result<AtlasSe
 }
 
 pub async fn refresh_atlas_profile(session: AtlasSession) -> Result<AtlasSession, AuthError> {
-        let http = crate::net::http::ReqwestHttpClient::new();
-        let user_info =
-                atlas::fetch_user_info(&http, &session.auth_base_url, &session.access_token).await?;
+    let user_info = atlas::fetch_user_info(&session.auth_base_url, &session.access_token).await?;
 
         Ok(AtlasSession {
                 profile: AtlasProfile {
@@ -69,21 +67,19 @@ fn needs_refresh(session: &AtlasSession) -> bool {
 }
 
 async fn refresh_atlas_session(session: &AtlasSession) -> Result<AtlasSession, AuthError> {
-    let http = crate::net::http::ReqwestHttpClient::new();
     let refresh_token = session
         .refresh_token
         .clone()
         .ok_or_else(|| "Missing Atlas refresh token; please sign in again.".to_string())?;
 
     let refreshed = atlas::refresh_token(
-        &http,
         &session.auth_base_url,
         &session.client_id,
         &refresh_token,
     )
     .await?;
     let user_info =
-        atlas::fetch_user_info(&http, &session.auth_base_url, &refreshed.access_token).await?;
+        atlas::fetch_user_info(&session.auth_base_url, &refreshed.access_token).await?;
 
     Ok(AtlasSession {
         access_token: refreshed.access_token,

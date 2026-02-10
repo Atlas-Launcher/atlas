@@ -48,9 +48,29 @@ pub async fn fetch_atlas_remote_packs(
     atlas_hub_url: &str,
     access_token: &str,
 ) -> Result<Vec<AtlasRemotePack>, LibraryError> {
-    let mut hub = HubClient::new(atlas_hub_url)?;
+    let mut hub = HubClient::new(atlas_hub_url)
+        .map_err(|err| LibraryError::Message(err.to_string()))?;
     hub.set_token(access_token.to_string());
-    Ok(hub.list_launcher_packs().await?)
+    let packs = hub
+        .list_launcher_packs()
+        .await
+        .map_err(|err| LibraryError::Message(err.to_string()))?;
+    Ok(packs
+        .into_iter()
+        .map(|pack| AtlasRemotePack {
+            pack_id: pack.pack_id,
+            pack_name: pack.pack_name,
+            pack_slug: pack.pack_slug,
+            access_level: "unknown".to_string(),
+            channel: pack.channel,
+            build_id: None,
+            build_version: None,
+            artifact_key: None,
+            minecraft_version: None,
+            modloader: None,
+            modloader_version: None,
+        })
+        .collect())
 }
 
 pub async fn sync_atlas_pack(
