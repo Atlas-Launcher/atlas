@@ -4,9 +4,11 @@ use crate::models::{AtlasProfile, DeviceCodeResponse, Profile};
 use crate::settings;
 use crate::state::AppState;
 use crate::telemetry;
-use crate::net::http::{HttpClient, ReqwestHttpClient};
+use atlas_client::hub::{
+    HubClient, LauncherLinkComplete, LauncherLinkCompleteRequest, LauncherLinkSession,
+    LauncherMinecraftPayload,
+};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 #[tauri::command]
 pub async fn start_device_code() -> Result<DeviceCodeResponse, String> {
@@ -250,47 +252,9 @@ pub fn atlas_sign_out(state: tauri::State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct LauncherLinkSession {
-    pub link_session_id: String,
-    pub link_code: String,
-    pub proof: String,
-    pub expires_at: String,
-}
+pub use atlas_client::hub::LauncherLinkSession;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct LauncherLinkComplete {
-    pub success: bool,
-    pub user_id: String,
-    #[serde(default)]
-    pub warning: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct MojangInfoResponse {
-    #[serde(default)]
-    username: Option<String>,
-    #[serde(default)]
-    uuid: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LauncherLinkCompleteRequest {
-    link_session_id: String,
-    proof: String,
-    minecraft: LauncherMinecraftPayload,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LauncherMinecraftPayload {
-    uuid: String,
-    name: String,
-}
+pub use atlas_client::hub::LauncherLinkComplete;
 
 #[tauri::command]
 pub async fn create_launcher_link_session(
@@ -302,10 +266,8 @@ pub async fn create_launcher_link_session(
         .map_err(|_| "Settings lock poisoned".to_string())?
         .clone();
     let hub_url = config::resolve_atlas_hub_url(&settings);
-    let http = ReqwestHttpClient::new();
-    let endpoint = format!("{}/api/launcher/link-sessions", hub_url);
-
-    http.post_json::<LauncherLinkSession, _>(&endpoint, &json!({}))
+    let hub = HubClient::new(&hub_url).map_err(|err| err.to_string())?;
+    hub.create_launcher_link_session()
         .await
         .map_err(|err| err.to_string())
 }
@@ -327,8 +289,7 @@ pub async fn complete_launcher_link_session(
         .map_err(|_| "Settings lock poisoned".to_string())?
         .clone();
     let hub_url = config::resolve_atlas_hub_url(&settings);
-    let http = ReqwestHttpClient::new();
-    let endpoint = format!("{}/api/launcher/link-sessions/complete", hub_url);
+    let hub = HubClient::new(&hub_url).map_err(|err| err.to_string())?;
     let payload = LauncherLinkCompleteRequest {
         link_session_id,
         proof,
@@ -338,8 +299,8 @@ pub async fn complete_launcher_link_session(
         },
     };
 
-    let mut result = http
-        .post_json::<LauncherLinkComplete, _>(&endpoint, &payload)
+    let mut result = hub
+        .complete_launcher_link_session(&payload)
         .await
         .map_err(|err| err.to_string())?;
 
@@ -375,11 +336,7 @@ pub async fn complete_launcher_link_session(
             };
 
             if let Some(ref mut session) = session {
-                let mojang_info_url = format!("{}/api/v1/user/mojang/info", hub_url);
-                match http
-                    .get_json::<MojangInfoResponse>(&mojang_info_url, Some(&session.access_token))
-                    .await
-                {
+                match hub.get_mojang_info(&session.access_token).await {
                     Ok(info) => {
                         if let Some(uuid) = info.uuid.clone() {
                             session.profile.mojang_uuid = Some(uuid.to_lowercase());

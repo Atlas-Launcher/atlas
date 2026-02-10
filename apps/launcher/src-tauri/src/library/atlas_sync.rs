@@ -4,8 +4,12 @@ use crate::models::{AtlasPackSyncResult, LaunchEvent};
 use crate::net::http::shared_client;
 use crate::paths::{ensure_dir, normalize_path};
 use crate::telemetry;
+use atlas_client::hub::HubClient;
+use mod_resolver::pointer::{
+    destination_relative_path as resolve_destination_relative_path, is_pointer_path,
+    resolve_pointer_path, PointerKind,
+};
 use protocol::{DependencyKind, DependencySide, HashAlgorithm, Platform};
-use serde::Deserialize;
 use sha1::{Digest as Sha1Digest, Sha1};
 use sha2::{Sha256, Sha512};
 use std::collections::HashSet;
@@ -13,49 +17,19 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Window};
-use url::Url;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PointerKind {
-    Mod,
-    Resource,
-}
 
-impl PointerKind {
-    fn suffix(self) -> &'static str {
-        match self {
-            Self::Mod => ".mod.toml",
-            Self::Resource => ".res.toml",
-        }
-    }
-
-    fn default_extension(self) -> &'static str {
-        match self {
-            Self::Mod => ".jar",
-            Self::Resource => ".zip",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 struct ArtifactResponse {
     pack_id: String,
     channel: String,
-    #[serde(default)]
     build_id: Option<String>,
-    #[serde(default)]
     build_version: Option<String>,
     download_url: String,
-    #[serde(default)]
     minecraft_version: Option<String>,
-    #[serde(default)]
     modloader: Option<String>,
-    #[serde(default)]
     modloader_version: Option<String>,
-    #[serde(default)]
     force_reinstall: bool,
-    #[serde(default)]
     requires_full_reinstall: bool,
 }
 
@@ -172,7 +146,7 @@ pub async fn sync_atlas_pack(
     }
 
     emit_sync(window, "Downloading pack data", None, None)?;
-    let blob_bytes = download_blob_bytes(&artifact.download_url).await?;
+    let blob_bytes = download_blob_bytes(atlas_hub_url, &artifact.download_url).await?;
     telemetry::info(format!(
         "downloaded pack blob pack_id={} bytes={}",
         artifact.pack_id,
@@ -186,17 +160,12 @@ pub async fn sync_atlas_pack(
     let blob_modloader = loader_kind_to_modloader(blob.metadata.loader).to_string();
     let mut expected_mod_paths = HashSet::<PathBuf>::new();
 
-    let mut raw_file_paths = HashSet::<String>::new();
-    for raw in &blob.manifest.raw_files {
-        raw_file_paths.insert(raw.path.clone());
-    }
-
     let total_files = blob.files.len() as u64;
     let mut processed_files = 0u64;
     for (relative_path, bytes) in blob.files {
-        if is_pointer_path(&relative_path) {
+        if is_pointer_path(&relative_path).is_some() {
             remove_blob_file_if_exists(&minecraft_dir, &relative_path)?;
-        } else if !raw_file_paths.contains(&relative_path) {
+        } else {
             let safe_relative = sanitize_relative_path(&relative_path)?;
             if is_mod_relative_path(&safe_relative) {
                 expected_mod_paths.insert(safe_relative);
@@ -232,9 +201,10 @@ pub async fn sync_atlas_pack(
             continue;
         }
 
-        let pointer_path = dependency_pointer_path(dep);
         let kind = dependency_kind_to_pointer_kind(dep.kind);
-        let relative_asset_path = destination_relative_path(&pointer_path, kind, Some(&dep.url));
+        let pointer_path = resolve_pointer_path(&dep.pointer_path, kind, &dep.url);
+        let relative_asset_path =
+            resolve_destination_relative_path(&pointer_path, kind, &dep.url);
         jobs.push((relative_asset_path, dep));
     }
 
@@ -406,38 +376,26 @@ async fn request_artifact_download(
     channel: &str,
     current_build_id: Option<&str>,
 ) -> Result<ArtifactResponse, LibraryError> {
-    let mut endpoint = Url::parse(&format!(
-        "{}/api/launcher/packs/{}/artifact",
-        atlas_hub_url.trim_end_matches('/'),
-        pack_id
-    ))
-    .map_err(|err| format!("Invalid artifact endpoint URL: {err}"))?;
-    endpoint.query_pairs_mut().append_pair("channel", channel);
-    if let Some(value) = current_build_id {
-        endpoint
-            .query_pairs_mut()
-            .append_pair("currentBuildId", value);
-    }
+    let mut hub = HubClient::new(atlas_hub_url)
+        .map_err(|err| format!("Invalid hub URL: {err}"))?;
+    hub.set_token(access_token.to_string());
 
-    let response = shared_client()
-        .get(endpoint.as_str())
-        .bearer_auth(access_token)
-        .send()
+    let response = hub
+        .get_launcher_artifact(pack_id, channel, current_build_id)
         .await
         .map_err(|err| format!("Failed to request artifact metadata: {err}"))?;
-    let status = response.status();
-    let body = response
-        .bytes()
-        .await
-        .map_err(|err| format!("Failed to read artifact metadata response: {err}"))?;
-    if !status.is_success() {
-        let text = String::from_utf8_lossy(&body);
-        return Err(format!("Artifact metadata request failed ({status}): {text}").into());
-    }
 
-    serde_json::from_slice::<ArtifactResponse>(&body).map_err(|err| {
-        let body_text = String::from_utf8_lossy(&body);
-        format!("Failed to parse artifact metadata JSON: {err}. Body: {body_text}").into()
+    Ok(ArtifactResponse {
+        pack_id: response.pack_id.unwrap_or_else(|| pack_id.to_string()),
+        channel: response.channel.unwrap_or_else(|| channel.to_string()),
+        build_id: response.build_id,
+        build_version: response.build_version,
+        download_url: response.download_url,
+        minecraft_version: response.minecraft_version,
+        modloader: response.modloader,
+        modloader_version: response.modloader_version,
+        force_reinstall: response.force_reinstall.unwrap_or(false),
+        requires_full_reinstall: response.requires_full_reinstall.unwrap_or(false),
     })
 }
 
@@ -455,24 +413,15 @@ fn normalize_channel(channel: Option<&str>) -> &'static str {
     }
 }
 
-async fn download_blob_bytes(download_url: &str) -> Result<Vec<u8>, LibraryError> {
-    let response = shared_client()
-        .get(download_url)
-        .send()
+async fn download_blob_bytes(
+    atlas_hub_url: &str,
+    download_url: &str,
+) -> Result<Vec<u8>, LibraryError> {
+    let hub = HubClient::new(atlas_hub_url)
+        .map_err(|err| format!("Invalid hub URL: {err}"))?;
+    hub.download_blob(download_url)
         .await
-        .map_err(|err| format!("Failed to download pack blob: {err}"))?;
-
-    let status = response.status();
-    let body = response
-        .bytes()
-        .await
-        .map_err(|err| format!("Failed to read pack blob response: {err}"))?;
-    if !status.is_success() {
-        let text = String::from_utf8_lossy(&body);
-        return Err(format!("Pack blob download failed ({status}): {text}").into());
-    }
-
-    Ok(body.to_vec())
+        .map_err(|err| format!("Failed to download pack blob: {err}").into())
 }
 
 fn write_blob_file(game_dir: &Path, relative_path: &str, bytes: &[u8]) -> Result<(), LibraryError> {
@@ -519,10 +468,6 @@ fn remove_blob_file_if_exists(game_dir: &Path, relative_path: &str) -> Result<()
     Ok(())
 }
 
-fn is_pointer_path(relative_path: &str) -> bool {
-    relative_path.ends_with(".mod.toml") || relative_path.ends_with(".res.toml")
-}
-
 fn sanitize_relative_path(value: &str) -> Result<PathBuf, LibraryError> {
     let normalized = value.replace('\\', "/");
     if normalized.trim().is_empty() {
@@ -546,31 +491,6 @@ fn sanitize_relative_path(value: &str) -> Result<PathBuf, LibraryError> {
     Ok(out)
 }
 
-fn destination_relative_path(pointer_path: &str, kind: PointerKind, url: Option<&str>) -> String {
-    let base = pointer_path
-        .strip_suffix(kind.suffix())
-        .unwrap_or(pointer_path)
-        .to_string();
-
-    if base.trim().is_empty() {
-        return format!(
-            "{}{}",
-            match kind {
-                PointerKind::Mod => "mods/asset",
-                PointerKind::Resource => "resources/asset",
-            },
-            kind.default_extension()
-        );
-    }
-
-    if Path::new(&base).extension().is_some() {
-        return base;
-    }
-
-    let extension = extension_from_url(url).unwrap_or_else(|| kind.default_extension().to_string());
-    format!("{}{}", base, extension)
-}
-
 fn dependency_kind_to_pointer_kind(kind: DependencyKind) -> PointerKind {
     match kind {
         DependencyKind::Mod => PointerKind::Mod,
@@ -578,38 +498,6 @@ fn dependency_kind_to_pointer_kind(kind: DependencyKind) -> PointerKind {
     }
 }
 
-fn dependency_pointer_path(dep: &protocol::Dependency) -> String {
-    let trimmed = dep.pointer_path.trim();
-    if !trimmed.is_empty() {
-        return trimmed.to_string();
-    }
-
-    let base = url_filename_stem(&dep.url).unwrap_or_else(|| "asset".to_string());
-    let base = slugify_filename(&base);
-
-    match dep.kind {
-        DependencyKind::Mod => format!("mods/{}.mod.toml", base),
-        DependencyKind::Resource => format!("resources/{}.res.toml", base),
-    }
-}
-
-fn extension_from_url(url: Option<&str>) -> Option<String> {
-    let value = url?;
-    let parsed = Url::parse(value).ok()?;
-    let last = parsed
-        .path_segments()
-        .and_then(|segments| segments.last())
-        .unwrap_or_default();
-    if last.is_empty() {
-        return None;
-    }
-
-    let ext = Path::new(last).extension()?.to_str()?.to_ascii_lowercase();
-    if ext.is_empty() || ext.len() > 10 || !ext.chars().all(|ch| ch.is_ascii_alphanumeric()) {
-        return None;
-    }
-    Some(format!(".{}", ext))
-}
 
 fn is_mod_relative_path(relative_path: &Path) -> bool {
     matches!(
@@ -779,41 +667,6 @@ fn sha256_file(path: &Path) -> Result<String, LibraryError> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-fn slugify_filename(value: &str) -> String {
-    let mut out = String::new();
-    let mut last_dash = false;
-    for ch in value.chars() {
-        let normalized = ch.to_ascii_lowercase();
-        if normalized.is_ascii_alphanumeric() {
-            out.push(normalized);
-            last_dash = false;
-            continue;
-        }
-        if !last_dash {
-            out.push('-');
-            last_dash = true;
-        }
-    }
-    out.trim_matches('-').to_string()
-}
-
-fn url_filename_stem(url: &str) -> Option<String> {
-    let parsed = Url::parse(url).ok()?;
-    let last = parsed
-        .path_segments()
-        .and_then(|segments| segments.last())
-        .unwrap_or_default();
-    if last.is_empty() {
-        return None;
-    }
-
-    let stem = Path::new(last).file_stem()?.to_str()?.to_string();
-    if stem.trim().is_empty() {
-        None
-    } else {
-        Some(stem)
-    }
-}
 
 fn emit_sync(
     window: &Window,

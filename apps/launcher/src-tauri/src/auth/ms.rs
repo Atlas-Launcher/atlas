@@ -1,5 +1,5 @@
 use crate::models::DeviceCodeResponse;
-use atlas_auth::device_code::{
+use atlas_client::device_code::{
     parse_device_token_poll_json, DeviceTokenPollStatus, DEVICE_CODE_GRANT_TYPE,
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -40,7 +40,7 @@ pub async fn start_device_code<H: HttpClient + ?Sized>(
     ];
 
     let response = http
-        .post_form::<atlas_auth::device_code::DeviceCodeResponse>(DEVICE_CODE_URL, &params)
+        .post_form::<atlas_client::device_code::DeviceCodeResponse>(DEVICE_CODE_URL, &params)
         .await?;
     Ok(response.into())
 }
