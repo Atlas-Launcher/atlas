@@ -2,7 +2,8 @@ use std::process;
 use std::sync::Arc;
 use tokio::net::UnixListener;
 use tokio::sync::Mutex;
-use tracing::warn;
+use tracing::{warn, info};
+use tokio::signal;
 
 use runner_core_v2::proto::*;
 use runner_ipc_v2::framing;
@@ -27,6 +28,33 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
     let auto_state = state.clone();
     tokio::spawn(async move {
         start_server_from_deploy(auto_state).await;
+    });
+
+    // Signal handler for SIGTERM (graceful shutdown)
+    let state_for_signal = state.clone();
+    tokio::spawn(async move {
+        // Wait for SIGTERM
+        signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap().recv().await;
+        info!("Received SIGTERM, stopping Minecraft server gracefully...");
+        if let Err(err) = crate::supervisor::stop_server(false, state_for_signal.clone()).await {
+            warn!("SIGTERM graceful shutdown failed: {}", err.message);
+            let _ = crate::supervisor::stop_server(true, state_for_signal).await;
+        }
+        info!("Graceful shutdown complete. Exiting daemon.");
+        std::process::exit(0);
+    });
+
+    // Signal handler for SIGINT (simulate SIGKILL: force kill MC server)
+    let state_for_sigint = state.clone();
+    tokio::spawn(async move {
+        signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap().recv().await;
+        info!("Received SIGINT, force killing Minecraft server...");
+        let mut guard = state_for_sigint.lock().await;
+        if let Some(child) = guard.child.as_mut() {
+            let _ = child.kill().await;
+            info!("Minecraft server process killed.");
+        }
+        std::process::exit(1);
     });
     loop {
         let (stream, _addr) = listener.accept().await?;
