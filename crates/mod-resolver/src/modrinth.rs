@@ -248,6 +248,7 @@ pub async fn resolve_by_project_id(
                 url: Some(file.url.clone()),
                 hashes: Some(ModHashes {
                     sha1: None,
+                    sha256: None,
                     sha512: file.hashes.sha512.clone(),
                 }),
             },
