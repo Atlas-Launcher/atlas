@@ -43,11 +43,15 @@ export async function GET(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 100);
+
   const result = await db
     .select()
     .from(invites)
     .where(eq(invites.packId, packId))
-    .orderBy(desc(invites.createdAt));
+    .orderBy(desc(invites.createdAt))
+    .limit(limit);
 
   const origin = new URL(request.url).origin;
   const serializedInvites = result.map((invite) => ({

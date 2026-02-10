@@ -15,6 +15,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "100"), 500);
+
   const allUsers = await db
     .select({
       id: users.id,
@@ -24,7 +27,8 @@ export async function GET(request: Request) {
       createdAt: users.createdAt,
     })
     .from(users)
-    .orderBy(users.createdAt);
+    .orderBy(users.createdAt)
+    .limit(limit);
 
   return NextResponse.json({ users: allUsers });
 }
