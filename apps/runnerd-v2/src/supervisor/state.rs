@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::process::Child;
 use tokio::sync::Mutex;
 use std::sync::atomic::AtomicBool;
+use std::thread::JoinHandle;
 
 use runner_core_v2::proto::{ProfileId, ServerStatus};
 use runner_provision_v2::LaunchPlan;
@@ -27,6 +28,10 @@ pub struct ServerState {
     pub(crate) whitelist_etag: Option<String>,
     pub(crate) current_pack_build_id: Option<String>,
     pub(crate) watcher_stop: Option<Arc<AtomicBool>>,
+    // Optional JoinHandle for the watcher worker thread so the daemon can wait for it to exit
+    pub(crate) watcher_handle: Option<JoinHandle<()>>,
+    // Flag set by watcher worker when it has fully exited
+    pub(crate) watcher_done: Option<Arc<AtomicBool>>,
 }
 
 impl ServerState {
@@ -47,6 +52,8 @@ impl ServerState {
             whitelist_etag: None,
             current_pack_build_id: None,
             watcher_stop: None,
+            watcher_handle: None,
+            watcher_done: None,
         }
     }
 

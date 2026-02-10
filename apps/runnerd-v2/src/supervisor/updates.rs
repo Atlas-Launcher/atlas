@@ -70,14 +70,16 @@ pub async fn ensure_watchers(state: SharedState) {
     let worker_hub_url = hub_url.clone();
     let worker_deploy_key = hub_deploy_key.clone();
 
-    // create watcher stop flag and persist into shared state so other code can signal shutdown
+    // create watcher stop and done flags and persist into shared state so other code can signal shutdown and observe completion
     let watcher_stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let watcher_done_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     {
         let mut guard = state.lock().await;
         guard.watcher_stop = Some(watcher_stop_flag.clone());
+        guard.watcher_done = Some(watcher_done_flag.clone());
     }
 
-    std::thread::Builder::new()
+    let handle = std::thread::Builder::new()
         .name("atlas-watcher-worker".into())
         .spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -142,9 +144,18 @@ pub async fn ensure_watchers(state: SharedState) {
 
                 // Run both loops concurrently; they are infinite loops and will run until process exit.
                 tokio::join!(whitelist_fut, update_fut);
+
+                // mark done before returning from the thread runtime
+                watcher_done_flag.store(true, std::sync::atomic::Ordering::Relaxed);
             });
         })
         .expect("failed to spawn watcher worker thread");
+
+    // Store the handle so the daemon can wait for it during shutdown
+    {
+        let mut guard = state.lock().await;
+        guard.watcher_handle = Some(handle);
+    }
 
     info!("started watcher worker thread");
 }
