@@ -116,6 +116,19 @@ const canLaunch = computed(() => {
   return atlasUuid === launcherUuid;
 });
 
+const homeStatusMessage = computed(() => {
+  if (!profile.value) {
+    return "Sign in with Microsoft to play. Use the top-right menu to continue setup.";
+  }
+  if (!atlasProfile.value) {
+    return "Sign in to Atlas Hub to finish setup.";
+  }
+  if (!canLaunch.value) {
+    return "Finish linking Minecraft in Atlas Hub before launching.";
+  }
+  return null;
+});
+
 const modsDir = computed(() => {
   const base = resolveInstanceGameDir(activeInstance.value);
   if (!base) {
@@ -709,6 +722,8 @@ watch(
               :active-instance-id="activeInstance?.id ?? null"
               :instance-install-state-by-id="instanceInstallStateById"
               :working="working"
+              :can-launch="canLaunch"
+              :status-message="homeStatusMessage"
               @select="openInstance"
               @play="launchInstanceFromLibrary"
               @install="installInstanceFromLibrary"
@@ -721,6 +736,7 @@ watch(
             class="flex-1 min-h-0"
             :instance="activeInstance"
             :profile="profile"
+            :can-launch="canLaunch"
             :working="working"
             :mods="mods"
             :mods-dir="modsDir"

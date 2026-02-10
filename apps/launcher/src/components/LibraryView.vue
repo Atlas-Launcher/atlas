@@ -8,6 +8,7 @@ const props = defineProps<{
   instanceInstallStateById: Record<string, boolean>;
   working: boolean;
   canLaunch: boolean;
+  statusMessage?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -20,16 +21,24 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <InstancesCard
-    :instances="props.instances"
-    :active-instance-id="props.activeInstanceId"
-    :instance-install-state-by-id="props.instanceInstallStateById"
-    :working="props.working"
-    :can-launch="props.canLaunch"
-    @select="emit('select', $event)"
-    @play="emit('play', $event)"
-    @install="emit('install', $event)"
-    @create="emit('create')"
-    @refresh-packs="emit('refresh-packs')"
-  />
+  <div class="space-y-4">
+    <div
+      v-if="props.statusMessage"
+      class="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-sm text-muted-foreground"
+    >
+      {{ props.statusMessage }}
+    </div>
+    <InstancesCard
+      :instances="props.instances"
+      :active-instance-id="props.activeInstanceId"
+      :instance-install-state-by-id="props.instanceInstallStateById"
+      :working="props.working"
+      :can-launch="props.canLaunch"
+      @select="emit('select', $event)"
+      @play="emit('play', $event)"
+      @install="emit('install', $event)"
+      @create="emit('create')"
+      @refresh-packs="emit('refresh-packs')"
+    />
+  </div>
 </template>
