@@ -46,6 +46,7 @@ pub struct PackMetadata {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackMetadataResponse {
     pub pack_id: String,
     pub channel: String,
@@ -459,40 +460,40 @@ impl HubClient {
             .join(&format!("/api/v1/runner/packs/{pack_id}/metadata"))?;
         url.query_pairs_mut().append_pair("channel", channel);
 
-        let mut request = self
-            .client
-            .get(url)
-            .headers(self.get_auth_headers().await?);
+        let mut request = self.client.get(url).headers(self.get_auth_headers().await?);
 
         if let Some(etag) = etag {
-            request = request.header("if-none-match", etag);
+            request = request.header(reqwest::header::IF_NONE_MATCH, etag);
         }
 
         let response = request.send().await?;
 
-        if response.status() == 304 {
-            // Not modified, return None with the same etag
-            let etag = response.headers()
-                .get("etag")
+        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            // Prefer header if present; otherwise reuse the caller-provided etag.
+            let returned = response
+                .headers()
+                .get(reqwest::header::ETAG)
                 .and_then(|h| h.to_str().ok())
-                .unwrap_or(etag.unwrap_or(""));
-            return Ok((None, etag.to_string()));
+                .map(|s| s.to_string());
+
+            let effective = returned
+                .or_else(|| etag.map(|s| s.to_string()))
+                .ok_or_else(|| anyhow::anyhow!("server returned 304 but no etag was provided or returned"))?;
+
+            return Ok((None, effective));
         }
 
         let status = response.status();
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
-            anyhow::bail!(
-                "Pack metadata request failed (HTTP {}): {}",
-                status.as_u16(),
-                body
-            );
+            anyhow::bail!("Pack metadata request failed (HTTP {}): {}", status.as_u16(), body);
         }
 
-        let etag = response.headers()
-            .get("etag")
+        let etag = response
+            .headers()
+            .get(reqwest::header::ETAG)
             .and_then(|h| h.to_str().ok())
-            .unwrap_or("")
+            .ok_or_else(|| anyhow::anyhow!("metadata response missing ETag header"))?
             .to_string();
 
         let metadata: PackMetadataResponse = response.json().await?;
