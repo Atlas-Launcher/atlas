@@ -220,6 +220,11 @@ pub async fn complete_atlas_login(
 pub async fn restore_atlas_session(
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<AtlasProfile>, String> {
+    let settings = state
+        .settings
+        .lock()
+        .map_err(|_| "Settings lock poisoned".to_string())?
+        .clone();
     let session = auth::load_atlas_session().map_err(|err| err.to_string())?;
     let Some(session) = session else {
         return Ok(None);
@@ -232,6 +237,28 @@ pub async fn restore_atlas_session(
         session = auth::refresh_atlas_profile(session)
             .await
             .map_err(|err| err.to_string())?;
+    }
+
+    if session.profile.mojang_uuid.as_deref().unwrap_or_default().is_empty() {
+        let hub_url = config::resolve_atlas_hub_url(&settings);
+        if let Ok(hub) = HubClient::new(&hub_url) {
+            match hub.get_mojang_info(&session.access_token).await {
+                Ok(info) => {
+                    if let Some(uuid) = info.uuid {
+                        let normalized = uuid.trim().to_ascii_lowercase().replace('-', "");
+                        session.profile.mojang_uuid = Some(normalized);
+                    }
+                    if let Some(username) = info.username {
+                        session.profile.mojang_username = Some(username);
+                    }
+                }
+                Err(err) => {
+                    telemetry::warn(format!(
+                        "Failed to refresh Mojang info during restore: {err}"
+                    ));
+                }
+            }
+        }
     }
     auth::save_atlas_session(&session).map_err(|err| err.to_string())?;
 
@@ -346,7 +373,8 @@ pub async fn complete_launcher_link_session(
                 match hub.get_mojang_info(&session.access_token).await {
                     Ok(info) => {
                         if let Some(uuid) = info.uuid.clone() {
-                            session.profile.mojang_uuid = Some(uuid.to_lowercase());
+                            let normalized = uuid.trim().to_ascii_lowercase().replace('-', "");
+                            session.profile.mojang_uuid = Some(normalized);
                         }
                         if let Some(username) = info.username.clone() {
                             session.profile.mojang_username = Some(username);
