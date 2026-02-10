@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::process::Child;
 use tokio::sync::Mutex;
 use std::sync::atomic::AtomicBool;
-use std::thread::JoinHandle;
+use tokio::task::JoinHandle;
 
 use runner_core_v2::proto::{ProfileId, ServerStatus};
 use runner_provision_v2::LaunchPlan;

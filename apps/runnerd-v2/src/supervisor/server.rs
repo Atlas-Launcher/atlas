@@ -269,17 +269,8 @@ pub async fn start_server(
         server_root.display()
     ));
 
-    // Start update watchers in a background blocking task to avoid any chance of
-    // the watcher initialization (which spawns non-Send thread-local runtimes)
-    // blocking or interacting poorly with the current async task.
-    let state_for_watchers = state.clone();
-    tokio::task::spawn_blocking(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("failed to create local runtime for ensure_watchers");
-        rt.block_on(async move { let _ = ensure_watchers(state_for_watchers).await; });
-    });
+    // Start monitor; update watchers are started by the daemon bootstrap path to avoid
+    // mutually recursive async dependencies between modules.
     ensure_monitor(state.clone()).await;
 
     Ok(Response::Started { profile, pid, started_at_ms })
@@ -325,27 +316,20 @@ pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, Rp
     drop(guard);
 
     if let Some(handle) = watcher_handle_opt {
-        // Wait up to 10 seconds for the watcher to signal done. Use spawn_blocking to join the thread without blocking the async runtime.
-        let done_flag = watcher_done_opt.clone();
-        let join_result = tokio::task::spawn_blocking(move || {
-            // Poll the done flag with a small sleep until timeout or until join completes
-            let start = std::time::Instant::now();
-            while start.elapsed() < std::time::Duration::from_secs(10) {
-                if let Some(ref f) = done_flag {
-                    if f.load(std::sync::atomic::Ordering::Relaxed) {
-                        break;
-                    }
+        // Wait up to 10 seconds for the watcher async task to finish. Use tokio::time::timeout
+        // so we don't block the runtime indefinitely.
+        match tokio::time::timeout(std::time::Duration::from_secs(10), handle).await {
+            Ok(join_res) => match join_res {
+                Ok(_) => {
+                    info!("watcher worker task finished");
                 }
-                std::thread::sleep(std::time::Duration::from_millis(200));
+                Err(join_err) => {
+                    warn!("watcher worker task panicked or was cancelled: {:?}", join_err);
+                }
+            },
+            Err(_) => {
+                warn!("timed out waiting for watcher worker task to exit");
             }
-            // Attempt to join; if the thread is still running, this will block until it exits; but we've waited already up to the timeout.
-            let _ = handle.join();
-        }).await;
-
-        if join_result.is_err() {
-            warn!("failed to join watcher worker thread cleanly");
-        } else {
-            info!("watcher worker thread joined");
         }
     }
 
