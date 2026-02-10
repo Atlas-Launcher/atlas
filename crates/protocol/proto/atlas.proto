@@ -13,6 +13,9 @@ message PackMetadata {
   string version = 2;
   string minecraft_version = 3;
   Loader loader = 4;
+  string loader_version = 5;
+  string name = 6;
+  string description = 7;
 }
 
 message Manifest {
@@ -23,6 +26,9 @@ message Dependency {
   string url = 1;
   Hash hash = 2;
   PlatformFilter platform = 3;
+  DependencyKind kind = 4;
+  DependencySide side = 11;
+  string pointer_path = 13;
 }
 
 message Hash {
@@ -38,7 +44,20 @@ message PlatformFilter {
 enum HashAlgorithm {
   HASH_ALGORITHM_SHA1 = 0;
   HASH_ALGORITHM_SHA256 = 1;
+  HASH_ALGORITHM_SHA512 = 2;
 }
+
+enum DependencyKind {
+  DEPENDENCY_KIND_MOD = 0;
+  DEPENDENCY_KIND_RESOURCE = 1;
+}
+
+enum DependencySide {
+  DEPENDENCY_SIDE_BOTH = 0;
+  DEPENDENCY_SIDE_CLIENT = 1;
+  DEPENDENCY_SIDE_SERVER = 2;
+}
+
 
 enum Loader {
   LOADER_FABRIC = 0;

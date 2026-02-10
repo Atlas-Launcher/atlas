@@ -1,6 +1,6 @@
 use crate::error::ProtocolError;
 use crate::platform::Platform;
-use crate::types::{HashAlgorithm, Loader};
+use crate::types::{DependencyKind, DependencySide, HashAlgorithm, Loader};
 
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/atlas.protocol.rs"));
@@ -15,6 +15,9 @@ impl From<&crate::types::PackMetadata> for PackMetadata {
             version: value.version.clone(),
             minecraft_version: value.minecraft_version.clone(),
             loader: value.loader as i32,
+            loader_version: value.loader_version.clone(),
+            name: value.name.clone(),
+            description: value.description.clone(),
         }
     }
 }
@@ -28,6 +31,9 @@ impl TryFrom<PackMetadata> for crate::types::PackMetadata {
             version: value.version,
             minecraft_version: value.minecraft_version,
             loader: decode_loader(value.loader)?,
+            loader_version: value.loader_version,
+            name: value.name,
+            description: value.description,
         })
     }
 }
@@ -60,6 +66,9 @@ impl From<&crate::types::Dependency> for Dependency {
             url: value.url.clone(),
             hash: Some(Hash::from(&value.hash)),
             platform: Some(PlatformFilter::from(&value.platform)),
+            kind: value.kind as i32,
+            side: value.side as i32,
+            pointer_path: value.pointer_path.clone(),
         }
     }
 }
@@ -77,11 +86,16 @@ impl TryFrom<Dependency> for crate::types::Dependency {
             .map(crate::platform::PlatformFilter::try_from)
             .transpose()?
             .unwrap_or_default();
+        let kind = decode_dependency_kind(value.kind)?;
+        let side = decode_dependency_side(value.side)?;
 
         Ok(Self {
             url: value.url,
             hash,
             platform,
+            kind,
+            side,
+            pointer_path: value.pointer_path,
         })
     }
 }
@@ -181,6 +195,21 @@ fn decode_hash_algorithm(value: i32) -> Result<HashAlgorithm, ProtocolError> {
     })
 }
 
+fn decode_dependency_kind(value: i32) -> Result<DependencyKind, ProtocolError> {
+    DependencyKind::try_from(value).map_err(|_| ProtocolError::InvalidEnum {
+        field: "dependency.kind",
+        value,
+    })
+}
+
+fn decode_dependency_side(value: i32) -> Result<DependencySide, ProtocolError> {
+    DependencySide::try_from(value).map_err(|_| ProtocolError::InvalidEnum {
+        field: "dependency.side",
+        value,
+    })
+}
+
+
 fn decode_platforms(field: &'static str, values: Vec<i32>) -> Result<Vec<Platform>, ProtocolError> {
     values
         .into_iter()
@@ -189,3 +218,4 @@ fn decode_platforms(field: &'static str, values: Vec<i32>) -> Result<Vec<Platfor
         })
         .collect()
 }
+
