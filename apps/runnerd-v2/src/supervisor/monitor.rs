@@ -36,7 +36,8 @@ pub async fn ensure_monitor(state: SharedState) {
                         if uptime_ms >= RESET_AFTER_MS {
                             guard.restart_attempts = 0;
                         }
-                        let exit = ExitInfo { code: status.code(), signal: None };
+                        let exit_code = status.code();
+                        let exit = ExitInfo { code: exit_code, signal: None };
                         let profile = guard.profile.clone().unwrap_or_else(|| "default".into());
                         guard.child = None;
                         guard.status = ServerStatus::Exited {
@@ -44,6 +45,12 @@ pub async fn ensure_monitor(state: SharedState) {
                             exit,
                             at_ms: now_millis(),
                         };
+                        let logs = guard.logs.clone();
+                        logs.push_daemon(format!(
+                            "server crashed: profile={} exit_code={:?}",
+                            profile,
+                            exit_code
+                        ));
                         (
                             guard.profile.clone(),
                             guard.server_root.clone(),
