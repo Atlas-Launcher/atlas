@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result};
+use atlas_client::hub::{HubClient, CiCompleteRequest};
 use clap::Args;
 use reqwest::blocking::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
@@ -60,32 +61,30 @@ pub fn run(args: DeployArgs) -> Result<()> {
     };
     let artifact_size = bytes.len() as u64;
 
-    let client = Client::new();
-    let presign = request_presign(&client, &settings.hub_url, &ci_auth, &pack_id)?;
+    let mut hub_client = HubClient::new(&settings.hub_url)?;
+    apply_ci_auth_to_client(&mut hub_client, &ci_auth)?;
+    let presign = hub_client.blocking_presign_ci_upload(&pack_id)?;
 
-    upload_artifact(&client, &presign.upload_url, bytes)?;
-    complete_build(
-        &client,
-        &settings.hub_url,
-        &ci_auth,
-        CompleteRequest {
-            pack_id: &pack_id,
-            build_id: &presign.build_id,
-            artifact_key: &presign.artifact_key,
-            version: &version,
-            commit_hash: Some(commit_hash.as_str()),
-            commit_message: commit_message.as_deref(),
-            minecraft_version: build_context
-                .as_ref()
-                .map(|value| value.minecraft_version.as_str()),
-            modloader: build_context.as_ref().map(|value| value.modloader.as_str()),
-            modloader_version: build_context
-                .as_ref()
-                .and_then(|value| value.modloader_version.as_deref()),
-            artifact_size,
-            channel: &settings.channel,
-        },
-    )?;
+    let upload_client = Client::new();
+    upload_artifact(&upload_client, &presign.upload_url, bytes)?;
+
+    hub_client.blocking_complete_ci_build(&CiCompleteRequest {
+        pack_id: pack_id.clone(),
+        build_id: presign.build_id.clone(),
+        artifact_key: presign.artifact_key.clone(),
+        version: version.clone(),
+        commit_hash: Some(commit_hash.clone()),
+        commit_message: commit_message.clone(),
+        minecraft_version: build_context
+            .as_ref()
+            .map(|value| value.minecraft_version.clone()),
+        modloader: build_context.as_ref().map(|value| value.modloader.clone()),
+        modloader_version: build_context
+            .as_ref()
+            .and_then(|value| value.modloader_version.clone()),
+        artifact_size,
+        channel: settings.channel.clone(),
+    })?;
 
     println!(
         "Deployed {} (version {}) to {}",
@@ -139,22 +138,6 @@ struct CompleteRequest<'a> {
     channel: &'a str,
 }
 
-fn request_presign(
-    client: &Client,
-    hub_url: &str,
-    ci_auth: &CiAuth,
-    pack_id: &str,
-) -> Result<PresignResponse> {
-    apply_ci_auth(client.post(format!("{}/api/ci/presign", hub_url)), ci_auth)
-        .json(&PresignRequest { pack_id })
-        .send()
-        .context("Failed to request presigned URL")?
-        .error_for_status()
-        .context("Presign request failed")?
-        .json::<PresignResponse>()
-        .context("Failed to parse presign response")
-}
-
 fn upload_artifact(client: &Client, upload_url: &str, bytes: Vec<u8>) -> Result<()> {
     client
         .put(upload_url)
@@ -164,21 +147,6 @@ fn upload_artifact(client: &Client, upload_url: &str, bytes: Vec<u8>) -> Result<
         .context("Failed to upload artifact")?
         .error_for_status()
         .context("Upload failed")?;
-    Ok(())
-}
-
-fn complete_build(
-    client: &Client,
-    hub_url: &str,
-    ci_auth: &CiAuth,
-    payload: CompleteRequest<'_>,
-) -> Result<()> {
-    apply_ci_auth(client.post(format!("{}/api/ci/complete", hub_url)), ci_auth)
-        .json(&payload)
-        .send()
-        .context("Failed to complete build")?
-        .error_for_status()
-        .context("Complete request failed")?;
     Ok(())
 }
 
@@ -193,6 +161,14 @@ fn resolve_ci_auth(oidc_token_override: Option<String>, hub_url: &str) -> Result
         "No deploy credential provided. Use `--oidc-token` (or `ATLAS_CI_OIDC_TOKEN`) for CI, or sign in locally with `atlas auth signin`."
     })?;
     Ok(CiAuth::UserToken(user_token))
+}
+
+fn apply_ci_auth_to_client(client: &mut HubClient, ci_auth: &CiAuth) -> Result<()> {
+    match ci_auth {
+        CiAuth::UserToken(token) => client.set_token(token.clone()),
+        CiAuth::OidcToken(token) => client.set_service_token(token.clone()),
+    }
+    Ok(())
 }
 
 fn apply_ci_auth(builder: RequestBuilder, ci_auth: &CiAuth) -> RequestBuilder {
