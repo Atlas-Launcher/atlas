@@ -76,7 +76,8 @@ pub async fn start_server_from_deploy(state: SharedState) {
         let guard = state.lock().await;
         guard.logs.clone()
     };
-    let child = match spawn_server(&launch_plan, &server_root, &env, logs).await {
+    let spawn_logs = logs.clone();
+    let child = match spawn_server(&launch_plan, &server_root, &env, spawn_logs).await {
         Ok(value) => value,
         Err(err) => {
             warn!("failed to start server: {err}");
@@ -101,6 +102,17 @@ pub async fn start_server_from_deploy(state: SharedState) {
         started_at_ms,
         meta: Default::default(),
     };
+
+    logs.push_daemon(format!(
+        "server started: profile={} pid={} root={}",
+        guard.profile.clone().unwrap_or_else(|| "default".into()),
+        pid,
+        guard
+            .server_root
+            .as_ref()
+            .map(|root| root.display().to_string())
+            .unwrap_or_else(|| "<unknown>".to_string())
+    ));
 
     ensure_watchers(state.clone()).await;
     ensure_monitor(state.clone()).await;
@@ -176,7 +188,8 @@ pub async fn start_server(
         let guard = state.lock().await;
         guard.logs.clone()
     };
-    let child = spawn_server(&launch_plan, &server_root, &env, logs).await.map_err(|err| RpcError {
+    let spawn_logs = logs.clone();
+    let child = spawn_server(&launch_plan, &server_root, &env, spawn_logs).await.map_err(|err| RpcError {
         code: ErrorCode::Internal,
         message: format!("failed to start server: {err}"),
         details: Default::default(),
@@ -202,6 +215,13 @@ pub async fn start_server(
             meta: Default::default(),
         };
     }
+
+    logs.push_daemon(format!(
+        "server started: profile={} pid={} root={}",
+        profile,
+        pid,
+        server_root.display()
+    ));
 
     ensure_watchers(state.clone()).await;
     ensure_monitor(state.clone()).await;
@@ -235,6 +255,9 @@ pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, Rp
         exit: exit_info.clone(),
         at_ms: stopped_at_ms,
     };
+
+    let logs = guard.logs.clone();
+    logs.push_daemon(format!("server stopped: profile={profile}"));
 
     Ok(Response::Stopped {
         exit: Some(exit_info),
