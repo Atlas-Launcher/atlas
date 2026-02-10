@@ -13,8 +13,8 @@ pub struct DeviceCodeResponse {
     pub message: Option<String>,
 }
 
-impl From<atlas_auth::device_code::DeviceCodeResponse> for DeviceCodeResponse {
-    fn from(value: atlas_auth::device_code::DeviceCodeResponse) -> Self {
+impl From<atlas_client::device_code::DeviceCodeResponse> for DeviceCodeResponse {
+    fn from(value: atlas_client::device_code::DeviceCodeResponse) -> Self {
         Self {
             device_code: value.device_code,
             user_code: value.user_code,

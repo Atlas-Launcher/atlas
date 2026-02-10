@@ -6,10 +6,10 @@ use crate::models::{
     AtlasPackSyncResult, AtlasRemotePack, FabricLoaderVersion, ModEntry, VersionManifestSummary,
     VersionSummary,
 };
-use crate::net::http::{fetch_json_shared, shared_client, HttpClient, ReqwestHttpClient};
+use atlas_client::hub::HubClient;
+use crate::net::http::{fetch_json_shared, shared_client};
 use crate::paths;
 use error::LibraryError;
-use serde::Deserialize;
 use std::fs;
 use std::path::Component;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -44,22 +44,13 @@ pub async fn fetch_neoforge_loader_versions() -> Result<Vec<String>, LibraryErro
     Ok(crate::launcher::loaders::neoforge::fetch_loader_versions(client).await?)
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AtlasRemotePackResponse {
-    packs: Vec<AtlasRemotePack>,
-}
-
 pub async fn fetch_atlas_remote_packs(
     atlas_hub_url: &str,
     access_token: &str,
 ) -> Result<Vec<AtlasRemotePack>, LibraryError> {
-    let endpoint = format!("{}/api/launcher/packs", atlas_hub_url.trim_end_matches('/'));
-    let http = ReqwestHttpClient::new();
-    let response = http
-        .get_json::<AtlasRemotePackResponse>(&endpoint, Some(access_token))
-        .await?;
-    Ok(response.packs)
+    let mut hub = HubClient::new(atlas_hub_url)?;
+    hub.set_token(access_token.to_string());
+    Ok(hub.list_launcher_packs().await?)
 }
 
 pub async fn sync_atlas_pack(

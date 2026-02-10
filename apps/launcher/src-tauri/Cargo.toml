@@ -8,7 +8,7 @@ edition = "2021"
 tauri-build = { version = "2.5.4", features = [] }
 
 [dependencies]
-atlas-auth = { path = "../../../crates/atlas-auth" }
+atlas-client = { path = "../../../crates/atlas-client" }
 mod-resolver = { path = "../../../crates/mod-resolver" }
 protocol = { path = "../../../crates/protocol" }
 tauri = { version = "2.10.1", features = [] }
