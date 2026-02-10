@@ -2,7 +2,7 @@ use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use crate::hub::HubClient;
+use crate::hub::{HubClient, WhitelistEntry};
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -20,11 +20,6 @@ pub struct InstanceConfig {
     pub modloader_version: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct WhitelistEntry {
-    pub uuid: String,
-    pub name: String,
-}
 
 impl InstanceConfig {
     pub async fn load(path: &Path) -> Result<Self> {

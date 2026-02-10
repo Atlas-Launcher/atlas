@@ -29,8 +29,8 @@ minecraft-client-rs = "0.1.3"
 
 # Atlas Crates
 protocol = { path = "../../crates/protocol" }
-mod-resolver = { path = "../../crates/mod-resolver" }
-atlas-auth = { path = "../../crates/atlas-auth" }
+atlas-client = { path = "../../crates/atlas-client" }
+atlas-client = { path = "../../crates/atlas-client" }
 
 [[bin]]
 name = "atlas-runner"
