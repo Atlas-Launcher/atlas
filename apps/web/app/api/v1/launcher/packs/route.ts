@@ -186,5 +186,9 @@ export async function GET(request: Request) {
     })
     .sort((a, b) => a.packName.localeCompare(b.packName));
 
-  return NextResponse.json({ packs: remotePacks });
+  return NextResponse.json({ packs: remotePacks }, {
+    headers: {
+      "Cache-Control": "private, max-age=300", // Cache for 5 minutes
+    },
+  });
 }
