@@ -155,7 +155,9 @@ impl HubClient {
     pub fn new(base_url: &str) -> Result<Self> {
         let base_url = Url::parse(base_url)?;
         Ok(Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()?,
             base_url,
             auth: Mutex::new(AuthState::None),
         })

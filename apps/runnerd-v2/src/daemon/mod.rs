@@ -14,12 +14,12 @@ use crate::supervisor::{
     ensure_rcon_available,
     ensure_watchers,
     execute_rcon_command,
-    start_server,
     start_server_from_deploy,
     stop_server,
     LogStore,
     ServerState,
     SharedState,
+    default_server_root,
 };
 
 pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()> {
@@ -139,7 +139,37 @@ async fn handle_conn(
                 let tx = resp_tx.clone();
                 let state = state.clone();
                 tokio::spawn(async move {
-                    let payload = match start_server(profile, env, state).await {
+                    let pack_blob_path = match env.get("ATLAS_PACK_BLOB") {
+                        Some(path) if !path.trim().is_empty() => path.clone(),
+                        _ => {
+                            let err = Response::Error(RpcError {
+                                code: ErrorCode::BadRequest,
+                                message: "ATLAS_PACK_BLOB is required".into(),
+                                details: Default::default(),
+                            });
+                            let out = Outbound::Response(Envelope { id: req_id, payload: err });
+                            let _ = tx.send(PendingOutbound::Send(out)).await;
+                            return;
+                        }
+                    };
+                    let pack_blob_bytes = match tokio::fs::read(&pack_blob_path).await {
+                        Ok(bytes) => bytes,
+                        Err(err) => {
+                            let err = Response::Error(RpcError {
+                                code: ErrorCode::IoError,
+                                message: format!("failed to read pack blob: {err}"),
+                                details: Default::default(),
+                            });
+                            let out = Outbound::Response(Envelope { id: req_id, payload: err });
+                            let _ = tx.send(PendingOutbound::Send(out)).await;
+                            return;
+                        }
+                    };
+                    let server_root = env
+                        .get("ATLAS_SERVER_ROOT")
+                        .map(|value| std::path::PathBuf::from(value))
+                        .unwrap_or_else(|| default_server_root(&profile));
+                    let payload = match crate::supervisor::start_server(profile, &pack_blob_bytes, server_root, env, state).await {
                         Ok(resp) => resp,
                         Err(err) => Response::Error(err),
                     };
