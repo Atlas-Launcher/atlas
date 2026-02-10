@@ -86,7 +86,11 @@ pub async fn ensure_monitor(state: SharedState) {
             info!("server exited; restarting in {:?}", backoff);
             sleep(backoff).await;
 
-            match spawn_server(&launch_plan, &server_root, &env).await {
+            let logs = {
+                let guard = state.lock().await;
+                guard.logs.clone()
+            };
+            match spawn_server(&launch_plan, &server_root, &env, logs).await {
                 Ok(child) => {
                     let pid = child.id().unwrap_or_default() as i32;
                     let started_at_ms = now_millis();

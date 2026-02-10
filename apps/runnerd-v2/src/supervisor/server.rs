@@ -4,9 +4,11 @@ use std::path::PathBuf;
 use runner_core_v2::proto::*;
 use runner_provision_v2::{ensure_applied_from_packblob_bytes, DependencyProvider, LaunchPlan};
 use runner_v2_rcon::{load_rcon_settings, RconClient};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
 
+use super::logs::LogStore;
 use super::monitor::ensure_monitor;
 use super::state::{ServerState, SharedState};
 use super::updates::ensure_watchers;
@@ -69,7 +71,11 @@ pub async fn start_server(
         })?;
 
     let launch_plan = apply_pack_blob(&server_root, &pack_blob).await?;
-    let child = spawn_server(&launch_plan, &server_root, &env).await.map_err(|err| RpcError {
+    let logs = {
+        let guard = state.lock().await;
+        guard.logs.clone()
+    };
+    let child = spawn_server(&launch_plan, &server_root, &env, logs).await.map_err(|err| RpcError {
         code: ErrorCode::Internal,
         message: format!("failed to start server: {err}"),
         details: Default::default(),
@@ -212,6 +218,7 @@ pub(crate) async fn spawn_server(
     plan: &LaunchPlan,
     server_root: &PathBuf,
     env: &BTreeMap<String, String>,
+    logs: LogStore,
 ) -> Result<tokio::process::Child, std::io::Error> {
     let cwd = server_root.join("current").join(&plan.cwd_rel);
     let mut argv = plan.argv.iter();
@@ -223,11 +230,35 @@ pub(crate) async fn spawn_server(
     let mut cmd = Command::new(program);
     cmd.args(argv);
     cmd.current_dir(&cwd);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
     for (key, value) in env {
         cmd.env(key, value);
     }
 
-    cmd.spawn()
+    let mut child = cmd.spawn()?;
+
+    if let Some(stdout) = child.stdout.take() {
+        let stdout_logs = logs.clone();
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(stdout).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                stdout_logs.push_server(LogStream::Stdout, line);
+            }
+        });
+    }
+
+    if let Some(stderr) = child.stderr.take() {
+        let stderr_logs = logs.clone();
+        tokio::spawn(async move {
+            let mut lines = BufReader::new(stderr).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                stderr_logs.push_server(LogStream::Stderr, line);
+            }
+        });
+    }
+
+    Ok(child)
 }
 
 #[derive(Default)]
