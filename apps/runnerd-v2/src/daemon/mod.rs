@@ -56,7 +56,11 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
         }
         std::process::exit(1);
     });
+    let mut shutting_down = false;
     loop {
+        if shutting_down {
+            break Ok(());
+        }
         let (stream, _addr) = listener.accept().await?;
         let state = Arc::clone(&state);
         let start_ms = start_ms;
@@ -162,8 +166,16 @@ async fn handle_conn(
                     let guard = state.lock().await;
                     guard.logs.clone()
                 };
+                let mut log_lines = logs.tail_server(lines);
+                if log_lines.is_empty() {
+                    log_lines.push(runner_core_v2::proto::LogLine {
+                        at_ms: crate::supervisor::now_millis(),
+                        stream: runner_core_v2::proto::LogStream::Stdout,
+                        line: "No log content available yet. Server may not have started.".to_string(),
+                    });
+                }
                 let payload = Response::LogsTail {
-                    lines: logs.tail_server(lines),
+                    lines: log_lines,
                     truncated: false,
                 };
                 let out = Outbound::Response(Envelope { id: req_id, payload });
