@@ -89,6 +89,40 @@ pub async fn daemon_logs_tail(lines: usize) -> Result<LogsTailInfo> {
     }
 }
 
+pub async fn logs_tail_follow(lines: usize) -> Result<LogsTailInfo> {
+    let mut framed = crate::client::connect_only().await?;
+    let req = Envelope {
+        id: 1,
+        payload: Request::LogsTail { lines },
+    };
+
+    runner_ipc_v2::framing::send_request(&mut framed, &req).await?;
+    let resp = read_response_payload(&mut framed).await?;
+
+    match resp {
+        Response::LogsTail { lines, truncated } => Ok(LogsTailInfo { lines, truncated }),
+        Response::Error(err) => Err(anyhow::anyhow!("logs tail failed: {}", err.message)),
+        other => Err(anyhow::anyhow!("unexpected response: {other:?}")),
+    }
+}
+
+pub async fn daemon_logs_tail_follow(lines: usize) -> Result<LogsTailInfo> {
+    let mut framed = crate::client::connect_only().await?;
+    let req = Envelope {
+        id: 1,
+        payload: Request::DaemonLogsTail { lines },
+    };
+
+    runner_ipc_v2::framing::send_request(&mut framed, &req).await?;
+    let resp = read_response_payload(&mut framed).await?;
+
+    match resp {
+        Response::LogsTail { lines, truncated } => Ok(LogsTailInfo { lines, truncated }),
+        Response::Error(err) => Err(anyhow::anyhow!("daemon logs tail failed: {}", err.message)),
+        other => Err(anyhow::anyhow!("unexpected response: {other:?}")),
+    }
+}
+
 async fn read_response_payload(
     framed: &mut runner_ipc_v2::framing::FramedStream,
 ) -> Result<Response> {

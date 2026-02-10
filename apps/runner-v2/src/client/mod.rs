@@ -9,7 +9,9 @@ pub use commands::core::{ping, shutdown, up};
 pub use commands::auth::exec as auth;
 pub use commands::supervisor::{
     daemon_logs_tail,
+    daemon_logs_tail_follow,
     logs_tail,
+    logs_tail_follow,
     status,
     stop,
     LogsTailInfo,
@@ -36,6 +38,14 @@ pub(crate) async fn connect_or_start() -> anyhow::Result<runner_ipc_v2::framing:
     }
 
     anyhow::bail!("failed to connect to runnerd2 after starting it");
+}
+
+pub(crate) async fn connect_only() -> anyhow::Result<runner_ipc_v2::framing::FramedStream> {
+    let paths = runtime_paths_v2();
+    runner_ipc_v2::socket::connect(&paths.socket_path)
+        .await
+        .map(runner_ipc_v2::framing::framed)
+        .map_err(Into::into)
 }
 
 async fn start_daemon_detached() -> anyhow::Result<()> {
