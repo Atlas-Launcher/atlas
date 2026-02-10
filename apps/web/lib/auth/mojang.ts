@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
-import { accounts, users } from "@/lib/db/schema";
+import { accounts, users, packMembers } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { recomputeWhitelist } from "@/lib/packs/whitelist";
 
 export async function syncMojangProfile(userId: string) {
     // 1. Get Microsoft account
@@ -72,6 +73,16 @@ export async function syncMojangProfile(userId: string) {
                 mojangUuid: profileData.id,
             })
             .where(eq(users.id, userId));
+
+        // Increment whitelist versions for all packs this user is a member of
+        const userPacks = await db
+            .select({ packId: packMembers.packId })
+            .from(packMembers)
+            .where(eq(packMembers.userId, userId));
+
+        for (const { packId } of userPacks) {
+            await recomputeWhitelist(packId);
+        }
 
         return { username: profileData.name, uuid: profileData.id };
     } catch (error) {

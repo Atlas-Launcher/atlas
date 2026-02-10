@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { invites, packMembers } from "@/lib/db/schema";
 import { emitWhitelistUpdate } from "@/lib/whitelist-events";
+import { recomputeWhitelist } from "@/lib/packs/whitelist";
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -46,6 +47,8 @@ export async function POST(request: Request) {
       accessLevel: invite.accessLevel,
     })
     .onConflictDoNothing();
+
+  await recomputeWhitelist(invite.packId);
 
   await db
     .update(invites)
