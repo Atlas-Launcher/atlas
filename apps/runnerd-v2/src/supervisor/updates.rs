@@ -397,8 +397,12 @@ pub(crate) async fn sync_whitelist_to_root(
         // Persist the returned etag even if content matches
         if !etag.is_empty() {
             let normalized = normalize_etag_value(&etag);
-            let mut guard = state.lock().await;
-            guard.whitelist_etag = Some(normalized);
+            // update in-memory state then persist without holding lock
+            {
+                let mut guard = state.lock().await;
+                guard.whitelist_etag = Some(normalized.clone());
+            }
+            let _ = write_whitelist_etag_to_disk(server_root, &normalized).await;
         }
         return Ok(());
     }
@@ -407,12 +411,14 @@ pub(crate) async fn sync_whitelist_to_root(
         .await
         .map_err(|err| format!("whitelist write failed: {err}"))?;
 
-    // Persist etag after successful write
-    {
-        let mut guard = state.lock().await;
-        if !etag.is_empty() {
-            guard.whitelist_etag = Some(etag);
+    // Persist etag after successful write: normalize, set in-memory, then persist to disk
+    if !etag.is_empty() {
+        let normalized = normalize_etag_value(&etag);
+        {
+            let mut guard = state.lock().await;
+            guard.whitelist_etag = Some(normalized.clone());
         }
+        let _ = write_whitelist_etag_to_disk(server_root, &normalized).await;
     }
 
     if let Ok(Some(settings)) = load_rcon_settings(&server_root.join("current")).await {
