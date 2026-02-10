@@ -81,7 +81,7 @@ export function RepositorySelector({
                 params.set("search", searchQuery);
             }
 
-            const response = await fetch(`/api/github/repos?${params.toString()}`);
+            const response = await fetch(`/api/v1/github/repos?${params.toString()}`);
             const data = await response.json();
 
             if (!response.ok) {
