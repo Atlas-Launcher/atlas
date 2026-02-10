@@ -20,9 +20,13 @@ use super::util::{default_server_root, now_millis};
 
 pub async fn start_server_from_deploy(state: SharedState) {
     {
-        let guard = state.lock().await;
+        let mut guard = state.lock().await;
         if guard.is_running() {
             return;
+        }
+        // Ensure logs are initialized for auto-start
+        if guard.logs.server_subscribe().is_empty() {
+            guard.logs = super::logs::LogStore::new(2000);
         }
     }
 
