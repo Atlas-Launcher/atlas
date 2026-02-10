@@ -1,9 +1,7 @@
-use futures_util::{SinkExt, StreamExt};
 use tokio::net::UnixListener;
-use tokio_util::codec::{Framed, LengthDelimitedCodec};
-
-use runner_core_v2::PROTOCOL_VERSION;
-use runner_core_v2::proto::{Envelope, Request, Response, RpcError, ErrorCode};
+use runner_core_v2::proto::*;
+use runner_ipc_v2::framing;
+use std::process;
 
 pub async fn serve(listener: UnixListener) -> std::io::Result<()> {
     loop {
@@ -15,44 +13,125 @@ pub async fn serve(listener: UnixListener) -> std::io::Result<()> {
 }
 
 async fn handle_conn(stream: tokio::net::UnixStream) -> std::io::Result<()> {
-    let mut framed = Framed::new(stream, LengthDelimitedCodec::new());
+    let mut framed = framing::framed(stream);
 
-    let frame = framed
-        .next()
-        .await
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "socket closed"))??;
+    // Per-connection session state. Simplest possible.
+    let mut next_session_id: SessionId = 1;
+    let mut active_session: Option<SessionId> = None;
 
-    let req_env = serde_json::from_slice::<Envelope<Request>>(&frame)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    while let Some(req_env) = framing::read_request(&mut framed).await? {
+        let req_id = req_env.id;
 
-    let resp = match req_env.payload {
-        Request::Ping { protocol_version, .. } => {
-            if protocol_version != PROTOCOL_VERSION {
-                Response::Error(RpcError {
-                    code: ErrorCode::UnsupportedProtocol,
-                    message: format!(
-                        "protocol mismatch: client={protocol_version} daemon={PROTOCOL_VERSION}"
-                    ),
-                    details: Default::default(),
-                })
-            } else {
-                Response::Pong {
+        match req_env.payload {
+            Request::Shutdown {} => {
+                let resp = Response::ShutdownAck {};
+                let out = Outbound::Response(Envelope { id: req_id, payload: resp });
+                framing::send_outbound(&mut framed, &out).await?;
+                process::exit(0);
+            }
+
+            Request::Ping { protocol_version, .. } => {
+                // respond
+                let resp = Response::Pong {
                     daemon_version: env!("CARGO_PKG_VERSION").to_string(),
-                    protocol_version: PROTOCOL_VERSION,
+                    protocol_version, // or your constant
+                };
+                let out = Outbound::Response(Envelope { id: req_id, payload: resp });
+                framing::send_outbound(&mut framed, &out).await?;
+            }
+
+            Request::RconExec { command } => {
+                // TODO: replace with real rcon call
+                // let text = rcon.exec(&command).await?;
+                let text = format!("(stub) executed: {command}");
+
+                let resp = Response::RconResult { text };
+                let out = Outbound::Response(Envelope { id: req_id, payload: resp });
+                framing::send_outbound(&mut framed, &out).await?;
+            }
+
+            Request::RconOpen {} => {
+                if active_session.is_some() {
+                    let out = Outbound::Response(Envelope {
+                        id: req_id,
+                        payload: Response::Error(RpcError {
+                            code: ErrorCode::BadRequest,
+                            message: "RCON session already open on this connection".into(),
+                            details: Default::default(),
+                        }),
+                    });
+                    framing::send_outbound(&mut framed, &out).await?;
+                    continue;
                 }
+
+                let sid = next_session_id;
+                next_session_id += 1;
+                active_session = Some(sid);
+
+                let resp = Response::RconOpened { session: sid, prompt: "rcon> ".into() };
+                let out = Outbound::Response(Envelope { id: req_id, payload: resp });
+                framing::send_outbound(&mut framed, &out).await?;
+            }
+
+            Request::RconSend { session, command } => {
+                if active_session != Some(session) {
+                    let out = Outbound::Response(Envelope {
+                        id: req_id,
+                        payload: Response::Error(RpcError {
+                            code: ErrorCode::BadRequest,
+                            message: "invalid or inactive session".into(),
+                            details: Default::default(),
+                        }),
+                    });
+                    framing::send_outbound(&mut framed, &out).await?;
+                    continue;
+                }
+
+                // Execute and stream output as an Event (so CLI can continuously print)
+                // let text = rcon.exec(&command).await?;
+                let text = format!("(stub) {command} -> ok");
+
+                let evt = Event::RconOut { session, text };
+                framing::send_outbound(&mut framed, &Outbound::Event(evt)).await?;
+
+                // Optionally also send an ack as a Response (not strictly needed)
+                // framing::send_outbound(&mut framed, &Outbound::Response(Envelope { id: req_id, payload: Response::RconAck { session } })).await?;
+                let _ = req_id; // if you skip ack, keep id unused or remove it
+            }
+
+            Request::RconClose { session } => {
+                if active_session != Some(session) {
+                    let out = Outbound::Response(Envelope {
+                        id: req_id,
+                        payload: Response::Error(RpcError {
+                            code: ErrorCode::BadRequest,
+                            message: "invalid or inactive session".into(),
+                            details: Default::default(),
+                        }),
+                    });
+                    framing::send_outbound(&mut framed, &out).await?;
+                    continue;
+                }
+
+                active_session = None;
+                let resp = Response::RconClosed { session };
+                let out = Outbound::Response(Envelope { id: req_id, payload: resp });
+                framing::send_outbound(&mut framed, &out).await?;
+            }
+
+            _ => {
+                let out = Outbound::Response(Envelope {
+                    id: req_id,
+                    payload: Response::Error(RpcError {
+                        code: ErrorCode::UnsupportedProtocol,
+                        message: "unsupported request type".into(),
+                        details: Default::default(),
+                    }),
+                });
+                framing::send_outbound(&mut framed, &out).await?;
             }
         }
-        _ => Response::Error(RpcError {
-            code: ErrorCode::BadRequest,
-            message: "unsupported request (not implemented yet)".into(),
-            details: Default::default(),
-        }),
-    };
+    }
 
-    let resp_env = Envelope { id: req_env.id, payload: resp };
-    let out = serde_json::to_vec(&resp_env)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-
-    framed.send(out.into()).await?;
     Ok(())
 }
