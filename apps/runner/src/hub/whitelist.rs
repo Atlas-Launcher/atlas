@@ -38,16 +38,29 @@ impl InstanceConfig {
 pub struct WhitelistSync {
     hub: Arc<HubClient>,
     runtime_dir: PathBuf,
+    current_etag: std::sync::Mutex<Option<String>>,
 }
 
 impl WhitelistSync {
     pub fn new(hub: Arc<HubClient>, runtime_dir: PathBuf) -> Self {
-        Self { hub, runtime_dir }
+        Self { 
+            hub, 
+            runtime_dir,
+            current_etag: std::sync::Mutex::new(None),
+        }
     }
 
     pub async fn sync(&self, pack_id: &str) -> Result<bool> {
-        println!("Syncing whitelist from Hub...");
-        let players = self.hub.get_whitelist(pack_id).await?;
+        let current_etag = self.current_etag.lock().unwrap().clone();
+        println!("Syncing whitelist from Hub... (current etag: {:?})", current_etag);
+        
+        let (players, new_etag) = self.hub.get_whitelist_with_version(pack_id, current_etag.as_deref()).await?;
+        
+        if players.is_empty() && current_etag.is_some() {
+            // ETag matched, no update needed
+            println!("Whitelist is up to date (etag: {})", current_etag.as_ref().unwrap());
+            return Ok(false);
+        }
         
         let whitelist_data = players
             .into_iter()
@@ -69,7 +82,10 @@ impl WhitelistSync {
 
         fs::write(path, content).await.context("Failed to write whitelist.json")?;
         
-        println!("Whitelist synchronized.");
+        // Update stored etag
+        *self.current_etag.lock().unwrap() = Some(new_etag.clone());
+        
+        println!("Whitelist synchronized (etag: {})", new_etag);
         Ok(true)
     }
 }
