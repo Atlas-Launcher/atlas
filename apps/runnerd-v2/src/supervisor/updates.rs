@@ -89,14 +89,6 @@ pub async fn ensure_watchers(state: SharedState) {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WhitelistPushEvent {
-    pack_id: String,
-    #[serde(rename = "type")]
-    event_type: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct PackUpdateEvent {
     pack_id: String,
     #[serde(rename = "type")]
@@ -111,18 +103,6 @@ async fn poll_whitelist(
 ) -> Result<(), String> {
     // Always sync whitelist on poll
     sync_whitelist(hub, &config.pack_id, state).await
-}
-
-fn should_trigger_whitelist_sync(payload: &str, pack_id: &str) -> bool {
-    if payload.is_empty() {
-        return false;
-    }
-
-    if let Ok(event) = serde_json::from_str::<WhitelistPushEvent>(payload) {
-        return event.pack_id == pack_id && event.event_type.as_deref() != Some("ready");
-    }
-
-    false
 }
 
 async fn poll_pack_update(

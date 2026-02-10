@@ -438,33 +438,52 @@ impl HubClient {
     }
 
     pub async fn get_whitelist(&self, pack_id: &str) -> Result<Vec<WhitelistEntry>> {
-        let url = self
-            .base_url
-            .join(&format!("/api/v1/packs/{pack_id}/whitelist"))?;
-        let response = self
-            .client
-            .get(url)
-            .headers(self.get_auth_headers().await?)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        response.json().await.context("Failed to parse whitelist")
+        let (whitelist, _) = self.get_whitelist_with_version(pack_id, None).await?;
+        Ok(whitelist)
     }
 
-    pub async fn open_whitelist_events(&self, pack_id: &str) -> Result<Response> {
+    pub async fn get_whitelist_with_version(&self, pack_id: &str, etag: Option<&str>) -> Result<(Vec<WhitelistEntry>, String)> {
         let url = self
             .base_url
-            .join(&format!("/api/v1/packs/{pack_id}/whitelist/stream"))?;
-        let response = self
+            .join(&format!("/api/v1/runner/packs/{pack_id}/whitelist"))?;
+        let mut request = self
             .client
             .get(url)
-            .headers(self.get_auth_headers().await?)
-            .send()
-            .await?
-            .error_for_status()?;
+            .headers(self.get_auth_headers().await?);
 
-        Ok(response)
+        if let Some(etag) = etag {
+            request = request.header("if-none-match", etag);
+        }
+
+        let response = request.send().await?;
+
+        if response.status() == 304 {
+            // Not modified, return empty vec with the same etag
+            let etag = response.headers()
+                .get("etag")
+                .and_then(|h| h.to_str().ok())
+                .unwrap_or(etag.unwrap_or(""));
+            return Ok((Vec::new(), etag.to_string()));
+        }
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Whitelist request failed (HTTP {}): {}",
+                status.as_u16(),
+                body
+            );
+        }
+
+        let etag = response.headers()
+            .get("etag")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+
+        let whitelist: Vec<WhitelistEntry> = response.json().await?;
+        Ok((whitelist, etag))
     }
 
     pub async fn open_pack_update_events(&self, pack_id: &str) -> Result<Response> {
