@@ -5,7 +5,7 @@ use tokio::process::Command;
 use runner_v2_utils::{ensure_dir, runtime_paths_v2};
 
 pub use commands::rcon::{rcon_exec, rcon_interactive};
-pub use commands::core::{ping, shutdown};
+pub use commands::core::{ping, shutdown, up};
 
 
 pub(crate) async fn connect_or_start() -> anyhow::Result<runner_ipc_v2::framing::FramedStream> {

@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 mod client;
 
@@ -12,6 +13,16 @@ struct Args {
 enum Cmd {
     Ping,
     Shutdown,
+    Up {
+        #[arg(long, value_name = "PROFILE", default_value = "default")]
+        profile: String,
+
+        #[arg(long, value_name = "PACK_BLOB")]
+        pack_blob: PathBuf,
+
+        #[arg(long, value_name = "SERVER_ROOT")]
+        server_root: Option<PathBuf>,
+    },
     Exec {
         #[arg(short = 'i', long = "interactive")]
         interactive: bool,
@@ -30,6 +41,14 @@ async fn main() -> anyhow::Result<()> {
         }
         Cmd::Shutdown => {
             let resp = client::shutdown().await?;
+            println!("{resp}");
+        }
+        Cmd::Up {
+            profile,
+            pack_blob,
+            server_root,
+        } => {
+            let resp = client::up(profile, pack_blob, server_root).await?;
             println!("{resp}");
         }
         Cmd::Exec { interactive, command } => {
