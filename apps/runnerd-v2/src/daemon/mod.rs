@@ -44,17 +44,52 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
         std::process::exit(0);
     });
 
-    // Signal handler for SIGINT (simulate SIGKILL: force kill MC server)
+    // Signal handler for SIGINT: attempt graceful shutdown on first Ctrl-C, escalate on subsequent presses
     let state_for_sigint = state.clone();
     tokio::spawn(async move {
-        signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap().recv().await;
-        info!("Received SIGINT, force killing Minecraft server...");
-        let mut guard = state_for_sigint.lock().await;
-        if let Some(child) = guard.child.as_mut() {
-            let _ = child.kill().await;
-            info!("Minecraft server process killed.");
+        let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap();
+        use std::time::{Instant, Duration as StdDuration};
+        let mut last = None::<Instant>;
+        let mut count = 0usize;
+        // define a window in which successive Ctrl-C presses count towards escalation
+        let window = StdDuration::from_secs(10);
+
+        loop {
+            // wait for a SIGINT
+            sigint.recv().await;
+            let now = Instant::now();
+            if let Some(prev) = last {
+                if now.duration_since(prev) > window {
+                    count = 0; // reset if outside the window
+                }
+            }
+            last = Some(now);
+            count = count.saturating_add(1);
+
+            if count == 1 {
+                info!("Received SIGINT (Ctrl-C): attempting graceful shutdown. Press Ctrl-C two more times within 10s to force kill.");
+                let state_clone = state_for_sigint.clone();
+                tokio::spawn(async move {
+                    if let Err(err) = crate::supervisor::stop_server(false, state_clone.clone()).await {
+                        warn!("SIGINT graceful shutdown failed: {}", err.message);
+                        let _ = crate::supervisor::stop_server(true, state_clone).await;
+                    }
+                    info!("Graceful shutdown complete. Exiting daemon.");
+                    std::process::exit(0);
+                });
+            } else if count == 2 {
+                warn!("Received second Ctrl-C: press once more to force immediate kill.");
+            } else {
+                // third (or more) Ctrl-C within window -> force kill immediately
+                warn!("Received Ctrl-C {} times: force killing Minecraft server...", count);
+                let mut guard = state_for_sigint.lock().await;
+                if let Some(child) = guard.child.as_mut() {
+                    let _ = child.kill().await;
+                    info!("Minecraft server process killed.");
+                }
+                std::process::exit(1);
+            }
         }
-        std::process::exit(1);
     });
     let mut shutting_down = false;
     loop {
