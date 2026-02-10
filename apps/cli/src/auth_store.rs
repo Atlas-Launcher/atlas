@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
-use atlas_auth::device_code::{
+use atlas_client::device_code::{
     DEFAULT_ATLAS_DEVICE_CLIENT_ID, DEFAULT_ATLAS_HUB_URL, normalize_hub_url,
 };
 use serde::{Deserialize, Serialize};

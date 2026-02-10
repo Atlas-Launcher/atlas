@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use atlas_auth::device_code::{DEFAULT_ATLAS_HUB_URL, normalize_hub_url};
+use atlas_client::device_code::{DEFAULT_ATLAS_HUB_URL, normalize_hub_url};
 use protocol::config::atlas::AtlasConfig;
 use protocol::pack::{BuildInput, BuildOutput, build_pack_bytes as build_binary};
 
