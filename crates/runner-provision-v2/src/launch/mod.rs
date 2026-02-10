@@ -6,10 +6,15 @@ use protocol::PackBlob;
 mod plan;
 pub use plan::LaunchPlan;
 
-pub fn derive_launch_plan(_pack: &PackBlob, staging_current: &Path) -> Result<LaunchPlan, ProvisionError> {
+pub fn derive_launch_plan(
+    _pack: &PackBlob,
+    staging_current: &Path,
+    java_bin: &Path,
+) -> Result<LaunchPlan, ProvisionError> {
     let run_sh = staging_current.join("run.sh");
     if run_sh.exists() {
         let mut argv = extract_run_sh_command(&run_sh)?;
+        apply_java_path(&mut argv, java_bin);
         if !argv.iter().any(|arg| arg.eq_ignore_ascii_case("nogui")) {
             argv.push("nogui".to_string());
         }
@@ -24,7 +29,7 @@ pub fn derive_launch_plan(_pack: &PackBlob, staging_current: &Path) -> Result<La
         return Ok(LaunchPlan {
             cwd_rel: ".".into(),
             argv: vec![
-                "java".into(),
+                java_bin.to_string_lossy().to_string(),
                 "-jar".into(),
                 "fabric-server-launch.jar".into(),
                 "nogui".into(),
@@ -37,7 +42,7 @@ pub fn derive_launch_plan(_pack: &PackBlob, staging_current: &Path) -> Result<La
         return Ok(LaunchPlan {
             cwd_rel: ".".into(),
             argv: vec![
-                "java".into(),
+                java_bin.to_string_lossy().to_string(),
                 "-jar".into(),
                 "server.jar".into(),
                 "nogui".into(),
@@ -101,6 +106,20 @@ fn extract_run_sh_command(path: &Path) -> Result<Vec<String>, ProvisionError> {
     Err(ProvisionError::Invalid(
         "failed to extract command from run.sh".to_string(),
     ))
+}
+
+fn apply_java_path(argv: &mut [String], java_bin: &Path) {
+    let java_path = java_bin.to_string_lossy();
+    for arg in argv.iter_mut() {
+        if arg.eq_ignore_ascii_case("java") {
+            *arg = java_path.to_string();
+            break;
+        }
+    }
+}
+
+pub fn apply_java_path_to_plan(plan: &mut LaunchPlan, java_bin: &Path) {
+    apply_java_path(&mut plan.argv, java_bin);
 }
 
 fn split_shell_words(input: &str) -> Vec<String> {

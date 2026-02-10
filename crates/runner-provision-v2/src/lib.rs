@@ -3,6 +3,7 @@ pub mod errors;
 pub mod deps;
 pub mod apply;
 pub mod launch;
+pub mod java;
 
 pub use deps::provider::DependencyProvider;
 
