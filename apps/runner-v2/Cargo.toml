@@ -12,6 +12,7 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 atlas-client = { path = "../../crates/atlas-client" }
 dialoguer = { version = "0.11", features = ["fuzzy-select"]}
+dirs = "5"
 
 runner-core-v2 = { path = "../../crates/runner-core-v2" }
 runner-ipc-v2  = { path = "../../crates/runner-ipc-v2" }
