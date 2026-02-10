@@ -78,9 +78,10 @@ pub async fn ensure_watchers(state: SharedState) {
     }
 
     // Spawn supervisor as an async task on the current runtime; this avoids cross-runtime deadlocks
-    // and keeps all async locking on the same runtime.
+    // and keeps all async locking on the same runtime. We store watcher flags in state above
+    // (so other code can signal/observe) and don't keep the task JoinHandle in state.
     let supervisor_state = state.clone();
-    let supervisor_handle = tokio::spawn(async move {
+    let _ = tokio::spawn(async move {
         let mut failures: u32 = 0;
         loop {
             watcher_done_flag.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -187,13 +188,7 @@ pub async fn ensure_watchers(state: SharedState) {
         }
     });
 
-    // Store the supervisor handle so the daemon can wait for it during shutdown
-    {
-        let mut guard = state.lock().await;
-        guard.watcher_handle = Some(supervisor_handle);
-    }
-
-    info!("started watcher supervisor thread");
+    info!("started watcher supervisor task");
 }
 
 #[derive(Debug, Deserialize)]
@@ -562,4 +557,3 @@ async fn write_whitelist_etag_to_disk(server_root: &PathBuf, etag: &str) -> Resu
         .await
         .map_err(|err| format!("failed to write whitelist etag file: {err}"))
 }
-
