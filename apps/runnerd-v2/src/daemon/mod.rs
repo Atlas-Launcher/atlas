@@ -14,6 +14,7 @@ use crate::supervisor::{
     ensure_watchers,
     execute_rcon_command,
     start_server,
+    start_server_from_deploy,
     stop_server,
     LogStore,
     ServerState,
@@ -23,6 +24,10 @@ use crate::supervisor::{
 pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()> {
     let state: SharedState = Arc::new(Mutex::new(ServerState::new(logs)));
     let start_ms = crate::supervisor::now_millis();
+    let auto_state = state.clone();
+    tokio::spawn(async move {
+        start_server_from_deploy(auto_state).await;
+    });
     loop {
         let (stream, _addr) = listener.accept().await?;
         let state = Arc::clone(&state);

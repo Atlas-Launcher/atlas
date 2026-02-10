@@ -9,7 +9,7 @@ use runner_v2_rcon::{load_rcon_settings, RconClient};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::config;
 use super::logs::LogStore;
@@ -17,6 +17,94 @@ use super::monitor::ensure_monitor;
 use super::state::{ServerState, SharedState};
 use super::updates::{ensure_watchers, sync_whitelist_to_root};
 use super::util::{default_server_root, now_millis};
+
+pub async fn start_server_from_deploy(state: SharedState) {
+    {
+        let guard = state.lock().await;
+        if guard.is_running() {
+            return;
+        }
+    }
+
+    let deploy = match config::load_deploy_key() {
+        Ok(Some(value)) => value,
+        Ok(None) => {
+            warn!("deploy key not configured; skipping auto-start");
+            return;
+        }
+        Err(err) => {
+            warn!("failed to load deploy key config: {err}");
+            return;
+        }
+    };
+
+    let mut hub = match HubClient::new(&deploy.hub_url) {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("failed to create hub client: {err}");
+            return;
+        }
+    };
+    hub.set_service_token(deploy.deploy_key.clone());
+    let hub = Arc::new(hub);
+
+    info!("auto-starting server from deploy key");
+    let build = match hub.get_build_blob(&deploy.pack_id, &deploy.channel).await {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("download build failed: {err}");
+            return;
+        }
+    };
+
+    let profile = "default".to_string();
+    let server_root = default_server_root(&profile);
+    let launch_plan = match apply_pack_blob(&server_root, &build.bytes).await {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("provision failed: {}", err.message);
+            return;
+        }
+    };
+
+    if let Err(err) = sync_whitelist_to_root(hub.clone(), &deploy.pack_id, &server_root).await {
+        warn!("whitelist sync failed on start: {err}");
+    }
+
+    let env = BTreeMap::new();
+    let logs = {
+        let guard = state.lock().await;
+        guard.logs.clone()
+    };
+    let child = match spawn_server(&launch_plan, &server_root, &env, logs).await {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("failed to start server: {err}");
+            return;
+        }
+    };
+
+    let pid = child.id().unwrap_or_default() as i32;
+    let started_at_ms = now_millis();
+    let mut guard = state.lock().await;
+    guard.child = Some(child);
+    guard.profile = Some(profile.clone());
+    guard.server_root = Some(server_root);
+    guard.env = env;
+    guard.launch_plan = Some(launch_plan);
+    guard.restart_attempts = 0;
+    guard.restart_disabled = false;
+    guard.last_start_ms = Some(started_at_ms);
+    guard.status = ServerStatus::Running {
+        profile,
+        pid,
+        started_at_ms,
+        meta: Default::default(),
+    };
+
+    ensure_watchers(state.clone()).await;
+    ensure_monitor(state.clone()).await;
+}
 
 pub async fn build_status(
     daemon_start_ms: u64,
