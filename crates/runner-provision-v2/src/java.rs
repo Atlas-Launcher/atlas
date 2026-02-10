@@ -2,9 +2,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flate2::read::GzDecoder;
-
+use reqwest::Client;
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
+use tokio::io::AsyncWriteExt;
+use log::info;
 use crate::errors::ProvisionError;
-
+use crate::hashing::{sha256_extracted_tree, verify_extracted_jdk_hash};
 const JAVA_DIR_NAME: &str = "java";
 
 pub async fn ensure_java_for_minecraft(
@@ -31,7 +35,14 @@ pub async fn ensure_java_for_minecraft(
     let java_bin = java_bin_path(&install_dir);
 
     if java_bin.exists() {
-        return Ok(java_bin);
+        if let Err(e) = verify_extracted_jdk_hash(&install_dir, &java_bin).await {
+            // corrupted/modified install: remove and reinstall
+            info!("java runtime at {} failed verification: {e}, reinstalling", install_dir.display());
+            let _ = tokio::fs::remove_dir_all(&install_dir).await;
+            // fall through to reinstall
+        } else {
+            return Ok(java_bin);
+        }
     }
 
     tokio::fs::create_dir_all(&install_dir).await?;
@@ -55,6 +66,24 @@ pub async fn ensure_java_for_minecraft(
             java_bin.display()
         )));
     }
+
+    let checksum_path = install_dir.join("java.hash");
+
+    // Compute & write a checksum of the extracted JDK tree.
+    // Exclude the checksum file itself (and any temp files if you want).
+    let install_dir_clone = install_dir.clone();
+    let checksum_path_clone = checksum_path.clone();
+
+    let tree_hash = tokio::task::spawn_blocking(move || {
+        sha256_extracted_tree(&install_dir_clone, &[checksum_path_clone])
+    })
+        .await
+        .map_err(|e| ProvisionError::Invalid(format!("java hash task failed: {e}")))??;
+
+    // Atomic write
+    let tmp_hash = install_dir.join("java.hash.tmp");
+    tokio::fs::write(&tmp_hash, format!("{tree_hash}\n")).await?;
+    tokio::fs::rename(&tmp_hash, &checksum_path).await?;
 
     Ok(java_bin)
 }
@@ -93,7 +122,27 @@ fn version_at_least(version: &str, target: (u32, u32, u32)) -> bool {
     (major, minor, patch) >= target
 }
 
-async fn download_jdk_archive(major: u32, dest: &Path) -> Result<(), ProvisionError> {
+#[derive(Debug, Deserialize)]
+struct Asset {
+    binaries: Vec<Binary>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Binary {
+    architecture: String,
+    os: String,
+    image_type: String,
+    jvm_impl: String,
+    package: Package,
+}
+
+#[derive(Debug, Deserialize)]
+struct Package {
+    link: String,
+    checksum: String, // sha256 hex
+    // checksum_link: Option<String>,
+}
+pub async fn download_jdk_archive(major: u32, dest: &Path) -> Result<(), ProvisionError> {
     let os = match std::env::consts::OS {
         "linux" => "linux",
         "macos" => "mac",
@@ -103,6 +152,7 @@ async fn download_jdk_archive(major: u32, dest: &Path) -> Result<(), ProvisionEr
             )))
         }
     };
+
     let arch = match std::env::consts::ARCH {
         "x86_64" => "x64",
         "aarch64" => "aarch64",
@@ -113,20 +163,107 @@ async fn download_jdk_archive(major: u32, dest: &Path) -> Result<(), ProvisionEr
         }
     };
 
-    let url = format!(
-        "https://api.adoptium.net/v3/binary/latest/{major}/ga/{os}/{arch}/jdk/hotspot/normal/eclipse"
+    let client = Client::new();
+
+    // 1) Fetch metadata so we can get the sha256 for the exact artifact.
+    //
+    // Using feature_releases assets endpoint; filter via query params to reduce ambiguity.
+    // vendor=adoptium, image_type=jdk, jvm_impl=hotspot, heap_size=normal
+    let meta_url = format!(
+        "https://api.adoptium.net/v3/assets/feature_releases/{major}/ga\
+?architecture={arch}&heap_size=normal&image_type=jdk&jvm_impl=hotspot&os={os}&vendor=adoptium"
     );
-    let response = reqwest::get(url)
+
+    let assets: Vec<Asset> = client
+        .get(&meta_url)
+        .send()
         .await
-        .map_err(|err| ProvisionError::Invalid(format!("java download failed: {err}")))?
+        .map_err(|e| ProvisionError::Invalid(format!("adoptium metadata fetch failed: {e}")))?
         .error_for_status()
-        .map_err(|err| ProvisionError::Invalid(format!("java download failed: {err}")))?;
-    let bytes = response
-        .bytes()
+        .map_err(|e| ProvisionError::Invalid(format!("adoptium metadata fetch failed: {e}")))?
+        .json()
         .await
-        .map_err(|err| ProvisionError::Invalid(format!("java download failed: {err}")))?;
-    tokio::fs::write(dest, &bytes).await?;
+        .map_err(|e| ProvisionError::Invalid(format!("adoptium metadata parse failed: {e}")))?;
+
+    let asset0 = assets
+        .get(0)
+        .ok_or_else(|| ProvisionError::Invalid("no adoptium assets returned".into()))?;
+
+    // Find the best matching binary entry (defensive in case API returns extras).
+    let bin = asset0
+        .binaries
+        .iter()
+        .find(|b| {
+            b.architecture == arch
+                && b.os == os
+                && b.image_type == "jdk"
+                && b.jvm_impl == "hotspot"
+        })
+        .ok_or_else(|| {
+            ProvisionError::Invalid(format!(
+                "no matching adoptium binary found for {major} {os} {arch} jdk hotspot"
+            ))
+        })?;
+
+    let download_url = &bin.package.link;
+    let expected_sha256 = normalize_hex(&bin.package.checksum).ok_or_else(|| {
+        ProvisionError::Invalid(format!(
+            "invalid checksum format from API: {}",
+            bin.package.checksum
+        ))
+    })?;
+
+    // 2) Download while hashing, then write to dest.
+    let mut resp = client
+        .get(download_url)
+        .send()
+        .await
+        .map_err(|e| ProvisionError::Invalid(format!("java download failed: {e}")))?
+        .error_for_status()
+        .map_err(|e| ProvisionError::Invalid(format!("java download failed: {e}")))?;
+
+    // Write to a temp file first so we don't leave a corrupt dest on mismatch.
+    let tmp_path = dest.with_extension("tmp");
+    let mut file = tokio::fs::File::create(&tmp_path).await?;
+
+    let mut hasher = Sha256::new();
+
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| ProvisionError::Invalid(format!("java download failed: {e}")))? {
+        hasher.update(&chunk);
+        file.write_all(&chunk).await?;
+    }
+
+    file.flush().await?;
+
+    let actual = hasher.finalize();
+    let actual_hex = hex::encode(actual);
+
+    // 3) Verify checksum
+    if actual_hex != expected_sha256 {
+        // Clean up temp file
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(ProvisionError::Invalid(format!(
+            "sha256 mismatch: expected {expected_sha256}, got {actual_hex}"
+        )));
+    }
+
+    // Atomically move into place
+    tokio::fs::rename(&tmp_path, dest).await?;
+
     Ok(())
+}
+
+/// Normalize sha256 hex: lowercase, strip whitespace.
+fn normalize_hex(s: &str) -> Option<String> {
+    let t = s.trim().to_ascii_lowercase();
+    if t.len() == 64 && t.chars().all(|c| c.is_ascii_hexdigit()) {
+        Some(t)
+    } else {
+        None
+    }
 }
 
 fn extract_jdk_tar(archive_path: &Path, install_dir: &Path) -> Result<(), ProvisionError> {
