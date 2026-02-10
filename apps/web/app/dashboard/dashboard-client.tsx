@@ -97,7 +97,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   useEffect(() => {
     const loadPacks = async () => {
       setLoading(true);
-      const response = await fetch("/api/packs");
+      const response = await fetch("/api/v1/packs");
       const data = await response.json();
       setLoading(false);
 

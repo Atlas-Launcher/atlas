@@ -42,7 +42,7 @@ export async function POST(request: Request) {
         expiresInSeconds: 900,
       });
       const origin = new URL(request.url).origin;
-      uploadUrl = `${origin}/api/storage/upload?token=${encodeURIComponent(token)}`;
+      uploadUrl = `${origin}/api/v1/storage/upload?token=${encodeURIComponent(token)}`;
     }
 
     return NextResponse.json({
