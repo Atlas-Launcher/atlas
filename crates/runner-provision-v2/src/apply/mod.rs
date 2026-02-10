@@ -16,6 +16,7 @@ mod marker;
 mod pointers;
 mod loader;
 mod eula;
+mod server_properties;
 
 pub async fn ensure_applied_from_packblob_bytes(
     server_root: &Path,
@@ -39,6 +40,7 @@ pub async fn ensure_applied_from_packblob_bytes(
         launch::apply_java_path_to_plan(&mut plan, &java_bin);
         let current_dir = server_root.join("current");
         eula::ensure_eula(&current_dir).await?;
+        server_properties::ensure_whitelist_enforced(&current_dir).await?;
         launch::write_launch_plan_to_dir(&current_dir, &plan).await?;
         return Ok(plan);
     }
@@ -74,8 +76,9 @@ pub async fn ensure_applied_from_packblob_bytes(
     // 6) Preserve selected files from existing current -> staging/current
     preserve::preserve_from_existing(server_root, &staging_current).await?;
 
-    // 7) Ensure EULA is accepted
+    // 7) Ensure EULA + whitelist are enforced
     eula::ensure_eula(&staging_current).await?;
+    server_properties::ensure_whitelist_enforced(&staging_current).await?;
 
     // 8) Write launch plan + applied marker into staging/current/.runner/
     let launch_plan = launch::derive_launch_plan(&pack, &staging_current, &java_bin)?;
