@@ -1,0 +1,9 @@
+[package]
+name = "runner-v2-rcon"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+tokio = { version = "1", features = ["fs", "rt", "sync", "macros"] }
+minecraft-client-rs = "0.1.3"
