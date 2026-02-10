@@ -1,5 +1,6 @@
 use anyhow::{Result, bail, Context};
 use crate::hub::{HubClient, whitelist::WhitelistSync};
+use atlas_client::sse::SseParser;
 use crate::reconcile::Reconciler;
 use crate::supervisor::Supervisor;
 use crate::hub::whitelist::InstanceConfig;
@@ -62,20 +63,12 @@ async fn listen_whitelist_events(
 ) -> Result<()> {
     let response = hub.open_whitelist_events(pack_id).await?;
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut parser = SseParser::new();
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-        loop {
-            let Some(split_at) = buffer.find("\n\n") else {
-                break;
-            };
-            let raw = buffer[..split_at].to_string();
-            buffer.drain(..split_at + 2);
-
-            if should_trigger_whitelist_sync(&raw, pack_id) {
+        for payload in parser.push_chunk(&chunk) {
+            if should_trigger_whitelist_sync(&payload, pack_id) {
                 let _ = updates.send(()).await;
             }
         }
@@ -84,20 +77,12 @@ async fn listen_whitelist_events(
     bail!("Whitelist stream ended")
 }
 
-fn should_trigger_whitelist_sync(raw: &str, pack_id: &str) -> bool {
-    let data_lines = raw.lines().filter_map(|line| {
-        if line.starts_with(":") {
-            return None;
-        }
-        line.strip_prefix("data:").map(|rest| rest.trim_start())
-    });
-
-    let payload = data_lines.collect::<Vec<_>>().join("\n");
+fn should_trigger_whitelist_sync(payload: &str, pack_id: &str) -> bool {
     if payload.is_empty() {
         return false;
     }
 
-    if let Ok(event) = serde_json::from_str::<WhitelistPushEvent>(&payload) {
+    if let Ok(event) = serde_json::from_str::<WhitelistPushEvent>(payload) {
         return event.pack_id == pack_id && event.event_type.as_deref() != Some("ready");
     }
 
@@ -128,20 +113,12 @@ async fn listen_pack_update_events(
 ) -> Result<()> {
     let response = hub.open_pack_update_events(pack_id).await?;
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut parser = SseParser::new();
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-        loop {
-            let Some(split_at) = buffer.find("\n\n") else {
-                break;
-            };
-            let raw = buffer[..split_at].to_string();
-            buffer.drain(..split_at + 2);
-
-            if should_trigger_pack_update(&raw, pack_id, channel) {
+        for payload in parser.push_chunk(&chunk) {
+            if should_trigger_pack_update(&payload, pack_id, channel) {
                 let _ = updates.send(()).await;
             }
         }
@@ -150,20 +127,12 @@ async fn listen_pack_update_events(
     bail!("Pack update stream ended")
 }
 
-fn should_trigger_pack_update(raw: &str, pack_id: &str, channel: &str) -> bool {
-    let data_lines = raw.lines().filter_map(|line| {
-        if line.starts_with(":") {
-            return None;
-        }
-        line.strip_prefix("data:").map(|rest| rest.trim_start())
-    });
-
-    let payload = data_lines.collect::<Vec<_>>().join("\n");
+fn should_trigger_pack_update(payload: &str, pack_id: &str, channel: &str) -> bool {
     if payload.is_empty() {
         return false;
     }
 
-    if let Ok(event) = serde_json::from_str::<PackUpdateEvent>(&payload) {
+    if let Ok(event) = serde_json::from_str::<PackUpdateEvent>(payload) {
         let channel_matches = event
             .channel
             .as_deref()
