@@ -107,6 +107,8 @@ pub async fn start_server_from_deploy(state: SharedState) {
         return;
     }
 
+    info!("server auto-started successfully");
+
     // Save the new build_id and pack_blob
     if let Some(build_id) = artifact.build_id {
         if let Err(err) = save_current_build_id(&server_root, &build_id).await {
