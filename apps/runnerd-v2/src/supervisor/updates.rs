@@ -60,16 +60,6 @@ pub async fn ensure_watchers(state: SharedState) {
         }
     }
 
-    // Start a single dedicated watcher worker thread which runs a current-thread tokio runtime
-    // and executes both the whitelist and pack-update loops concurrently. This keeps all
-    // watcher logic in one place and avoids requiring Send for internal non-Send futures.
-    let worker_state_whitelist = state.clone();
-    let worker_state_update = state.clone();
-    let worker_whitelist_config = config.clone();
-    let worker_update_config = config.clone();
-    let worker_hub_url = hub_url.clone();
-    let worker_deploy_key = hub_deploy_key.clone();
-
     // create watcher stop and done flags and persist into shared state so other code can signal shutdown and observe completion
     let watcher_stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let watcher_done_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -79,85 +69,118 @@ pub async fn ensure_watchers(state: SharedState) {
         guard.watcher_done = Some(watcher_done_flag.clone());
     }
 
-    let handle = std::thread::Builder::new()
-        .name("atlas-watcher-worker".into())
+    // Spawn a supervisor thread that will start the worker, join it, and restart it if it exits
+    // unexpectedly while watcher_stop is not set. We store the supervisor handle in state so
+    // the daemon can join it during shutdown.
+    let supervisor_state = state.clone();
+    let supervisor_handle = std::thread::Builder::new()
+        .name("atlas-watcher-supervisor".into())
         .spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to create watcher worker runtime");
+            loop {
+                // reset done flag
+                watcher_done_flag.store(false, std::sync::atomic::Ordering::Relaxed);
 
-            rt.block_on(async move {
-                // Whitelist loop future
-                let whitelist_fut = async {
-                    // construct local HubClient for this task
-                    let mut local_hub = match HubClient::new(&worker_hub_url) {
-                        Ok(h) => h,
-                        Err(err) => {
-                            warn!("watcher worker: failed to create hub client for whitelist: {err}");
-                            return;
-                        }
-                    };
-                    local_hub.set_service_token(worker_deploy_key.clone());
-                    let local_hub = Arc::new(local_hub);
+                // Spawn the actual worker thread which runs a current-thread tokio runtime
+                let worker_stop = watcher_stop_flag.clone();
+                let worker_done = watcher_done_flag.clone();
+                let whub = hub_url.clone();
+                let wdeploy = hub_deploy_key.clone();
+                let w_whitelist_cfg = config.clone();
+                let w_update_cfg = config.clone();
+                let w_state_whitelist = supervisor_state.clone();
+                let w_state_update = supervisor_state.clone();
 
-                    let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 1 minute
-                    loop {
-                        if watcher_stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                            info!("watcher worker: whitelist loop exiting due to stop request");
-                            break;
-                        }
-                        match poll_whitelist(local_hub.clone(), &worker_whitelist_config, worker_state_whitelist.clone()).await {
-                            Ok(()) => {},
-                            Err(err) => warn!("whitelist poll error: {err}"),
-                        }
-                        sleep(poll_interval).await;
-                    }
-                };
+                let worker = std::thread::Builder::new()
+                    .name("atlas-watcher-worker".into())
+                    .spawn(move || {
+                        let rt = tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .expect("failed to create watcher worker runtime");
 
-                // Pack update loop future
-                let update_fut = async {
-                    // construct local HubClient for this task
-                    let mut local_hub = match HubClient::new(&worker_hub_url) {
-                        Ok(h) => h,
-                        Err(err) => {
-                            warn!("watcher worker: failed to create hub client for updates: {err}");
-                            return;
-                        }
-                    };
-                    local_hub.set_service_token(worker_deploy_key.clone());
-                    let local_hub = Arc::new(local_hub);
+                        rt.block_on(async move {
+                            // Whitelist loop
+                            let whitelist_fut = async {
+                                let mut local_hub = match HubClient::new(&whub) {
+                                    Ok(h) => h,
+                                    Err(err) => {
+                                        warn!("watcher worker: failed to create hub client for whitelist: {err}");
+                                        return;
+                                    }
+                                };
+                                local_hub.set_service_token(wdeploy.clone());
+                                let local_hub = Arc::new(local_hub);
 
-                    let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 5 minutes
-                    loop {
-                        if watcher_stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                            info!("watcher worker: update loop exiting due to stop request");
-                            break;
-                        }
-                        match poll_pack_update(local_hub.clone(), &worker_update_config, worker_state_update.clone()).await {
-                            Ok(()) => {},
-                            Err(err) => warn!("pack update poll error: {err}"),
-                        }
-                        sleep(poll_interval).await;
-                    }
-                };
+                                let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS);
+                                loop {
+                                    if worker_stop.load(std::sync::atomic::Ordering::Relaxed) {
+                                        info!("watcher worker: whitelist loop exiting due to stop request");
+                                        break;
+                                    }
+                                    if let Err(err) = poll_whitelist(local_hub.clone(), &w_whitelist_cfg, w_state_whitelist.clone()).await {
+                                        warn!("whitelist poll error: {err}");
+                                    }
+                                    sleep(poll_interval).await;
+                                }
+                            };
 
-                // Run both loops concurrently; they are infinite loops and will run until process exit.
-                tokio::join!(whitelist_fut, update_fut);
+                            // Update loop
+                            let update_fut = async {
+                                let mut local_hub = match HubClient::new(&whub) {
+                                    Ok(h) => h,
+                                    Err(err) => {
+                                        warn!("watcher worker: failed to create hub client for updates: {err}");
+                                        return;
+                                    }
+                                };
+                                local_hub.set_service_token(wdeploy.clone());
+                                let local_hub = Arc::new(local_hub);
 
-                // mark done before returning from the thread runtime
+                                let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS);
+                                loop {
+                                    if worker_stop.load(std::sync::atomic::Ordering::Relaxed) {
+                                        info!("watcher worker: update loop exiting due to stop request");
+                                        break;
+                                    }
+                                    if let Err(err) = poll_pack_update(local_hub.clone(), &w_update_cfg, w_state_update.clone()).await {
+                                        warn!("pack update poll error: {err}");
+                                    }
+                                    sleep(poll_interval).await;
+                                }
+                            };
+
+                            tokio::join!(whitelist_fut, update_fut);
+
+                            // mark done
+                            worker_done.store(true, std::sync::atomic::Ordering::Relaxed);
+                        });
+                    })
+                    .expect("failed to spawn watcher worker");
+
+                // Wait for the worker to exit
+                let _ = worker.join();
+
+                // mark done
                 watcher_done_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-            });
-        })
-        .expect("failed to spawn watcher worker thread");
 
-    // Store the handle so the daemon can wait for it during shutdown
+                // If stop requested, break the supervisor loop and exit; otherwise, restart after a short delay
+                if watcher_stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    info!("watcher supervisor: stop requested, exiting");
+                    break;
+                }
+                warn!("watcher supervisor: worker exited unexpectedly, restarting in 1s");
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        })
+        .expect("failed to spawn watcher supervisor thread");
+
+    // Store the supervisor handle so the daemon can wait for it during shutdown
     {
         let mut guard = state.lock().await;
-        guard.watcher_handle = Some(handle);
+        guard.watcher_handle = Some(supervisor_handle);
     }
 
-    info!("started watcher worker thread");
+    info!("started watcher supervisor thread");
 }
 
 #[derive(Debug, Deserialize)]
