@@ -2,7 +2,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::io;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
-use runner_core_v2::proto::{Envelope, Request, Response};
+use runner_core_v2::proto::{Envelope, Request, Response, Outbound};
 
 pub type FramedStream = Framed<tokio::net::UnixStream, LengthDelimitedCodec>;
 
@@ -16,6 +16,18 @@ pub async fn send_request(framed: &mut FramedStream, req: &Envelope<Request>) ->
     framed.send(bytes.into()).await
 }
 
+pub async fn read_request(framed: &mut FramedStream) -> io::Result<Option<Envelope<Request>>> {
+    let frame = match framed.next().await {
+        None => return Ok(None),
+        Some(r) => r?,
+    };
+
+    let req = serde_json::from_slice::<Envelope<Request>>(&frame)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    Ok(Some(req))
+}
+
+
 pub async fn read_response(framed: &mut FramedStream) -> io::Result<Envelope<Response>> {
     let frame = framed
         .next()
@@ -24,4 +36,21 @@ pub async fn read_response(framed: &mut FramedStream) -> io::Result<Envelope<Res
 
     serde_json::from_slice::<Envelope<Response>>(&frame)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+pub async fn send_outbound(framed: &mut FramedStream, msg: &Outbound) -> io::Result<()> {
+    let bytes = serde_json::to_vec(msg)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    framed.send(bytes.into()).await
+}
+
+pub async fn read_outbound(framed: &mut FramedStream) -> io::Result<Option<Outbound>> {
+    let frame = match framed.next().await {
+        None => return Ok(None),
+        Some(r) => r?,
+    };
+
+    let msg = serde_json::from_slice::<Outbound>(&frame)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    Ok(Some(msg))
 }
