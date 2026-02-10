@@ -102,6 +102,32 @@ async fn handle_conn(
                 }
             }
 
+            Request::LogsTail { lines } => {
+                let logs = {
+                    let guard = state.lock().await;
+                    guard.logs.clone()
+                };
+                let payload = Response::LogsTail {
+                    lines: logs.tail_server(lines),
+                    truncated: false,
+                };
+                let out = Outbound::Response(Envelope { id: req_id, payload });
+                framing::send_outbound(&mut framed, &out).await?;
+            }
+
+            Request::DaemonLogsTail { lines } => {
+                let logs = {
+                    let guard = state.lock().await;
+                    guard.logs.clone()
+                };
+                let payload = Response::LogsTail {
+                    lines: logs.tail_daemon(lines),
+                    truncated: false,
+                };
+                let out = Outbound::Response(Envelope { id: req_id, payload });
+                framing::send_outbound(&mut framed, &out).await?;
+            }
+
             Request::RconExec { command } => {
                 match execute_rcon_command(&state, &command).await {
                     Ok(text) => {
