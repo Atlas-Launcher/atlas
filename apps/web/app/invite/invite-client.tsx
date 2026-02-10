@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-type InviteStep = "account" | "download" | "link" | "done";
+type InviteStep = "account" | "setup" | "done";
 
 interface InviteClientProps {
   code: string | null;
@@ -43,24 +43,19 @@ const steps: { id: InviteStep; label: string; detail: string }[] = [
     detail: "Set up your Atlas login.",
   },
   {
-    id: "download",
+    id: "setup",
     label: "Download launcher",
-    detail: "Grab the installer.",
-  },
-  {
-    id: "link",
-    label: "Link launcher",
-    detail: "Finish linking in the app.",
+    detail: "Get the Atlas Launcher app.",
   },
   {
     id: "done",
-    label: "Finish",
-    detail: "Sign in on the launcher.",
+    label: "You're ready to go!",
+    detail: "Open the launcher and start playing.",
   },
 ];
 
 function isInviteStep(value: string | null): value is InviteStep {
-  return value === "account" || value === "download" || value === "link" || value === "done";
+  return value === "account" || value === "setup" || value === "done";
 }
 
 export default function InviteClient({ code, signedIn }: InviteClientProps) {
@@ -81,7 +76,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
   const initialStep = useMemo<InviteStep>(() => {
     if (isInviteStep(stepParam)) return stepParam;
     if (!signedIn) return "account";
-    return "account";
+    return "setup";
   }, [signedIn, stepParam]);
   const [manualStep, setManualStep] = useState<InviteStep>(initialStep);
   const resolvedStep = useMemo<InviteStep>(() => {
@@ -142,6 +137,12 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
       setInviteError("Unable to accept invite.");
     });
   }, [code, inviteStatus, signedInState]);
+
+  useEffect(() => {
+    if (inviteStatus === "accepted" && resolvedStep === "account") {
+      setStepAndUrl("setup");
+    }
+  }, [inviteStatus, resolvedStep]);
 
   const setStepAndUrl = (nextStep: InviteStep) => {
     if (!code) {
@@ -316,7 +317,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                     </div>
                   ) : null}
                   <Button
-                    onClick={() => setStepAndUrl("download")}
+                    onClick={() => setStepAndUrl("setup")}
                     disabled={inviteStatus === "loading"}
                   >
                     Continue
@@ -378,15 +379,15 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
           </Card>
         ) : null}
 
-        {resolvedStep === "download" ? (
+        {resolvedStep === "setup" ? (
           <Card>
             <CardHeader>
-              <CardTitle>Download the Atlas Launcher</CardTitle>
-              <CardDescription>Your installer starts right away.</CardDescription>
+              <CardTitle>Download Atlas Launcher</CardTitle>
+              <CardDescription>Get the Atlas Launcher app to play.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-4 text-sm text-[var(--atlas-ink-muted)]">
-                The launcher will prompt you to sign in with Microsoft and sync your packs.
+                Download and install the Atlas Launcher to access your packs and play Minecraft.
               </div>
               <div className="flex flex-wrap gap-3">
                 <a
@@ -394,38 +395,21 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                   className="rounded-full bg-[var(--atlas-ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
                   rel="noreferrer"
                   target="_blank"
+                  onClick={() => setStepAndUrl("done")}
                 >
                   Download Launcher
                 </a>
                 <Link
                   href="/download/app"
                   className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
+                  onClick={() => setStepAndUrl("done")}
                 >
                   View all downloads
                 </Link>
               </div>
               <div className="flex flex-wrap gap-3">
                 <Button variant="outline" onClick={() => setStepAndUrl("account")}>Back</Button>
-                <Button onClick={() => setStepAndUrl("link")}>Continue</Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {resolvedStep === "link" ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Link your launcher</CardTitle>
-              <CardDescription>Finish linking inside the Atlas Launcher.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-4 text-sm text-[var(--atlas-ink-muted)]">
-                Open the launcher, sign in with Microsoft, and follow the linking prompt to connect
-                your Minecraft profile to this account.
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={() => setStepAndUrl("download")}>Back</Button>
-                <Button onClick={() => setStepAndUrl("done")}>Continue</Button>
+                <Button onClick={() => setStepAndUrl("done")}>I already have the launcher</Button>
               </div>
             </CardContent>
           </Card>
@@ -434,17 +418,18 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
         {resolvedStep === "done" ? (
           <Card>
             <CardHeader>
-              <CardTitle>You are ready to play</CardTitle>
-              <CardDescription>Finish by signing in on the launcher.</CardDescription>
+              <CardTitle>You're ready to go!</CardTitle>
+              <CardDescription>Open the Atlas Launcher to start playing.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <ol className="list-decimal space-y-2 pl-4 text-sm text-[var(--atlas-ink-muted)]">
-                <li>Open the Atlas Launcher you just downloaded.</li>
-                <li>Sign in with your Microsoft account.</li>
-                <li>Select your pack and launch.</li>
+                <li>Open the Atlas Launcher app.</li>
+                <li>Sign in with your account (if you haven't already).</li>
+                <li>Connect your Microsoft account for Minecraft.</li>
+                <li>Choose your pack and hit play!</li>
               </ol>
               <div className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={() => setStepAndUrl("download")}>Back</Button>
+                <Button variant="outline" onClick={() => setStepAndUrl("setup")}>Back</Button>
                 <Link href="/dashboard">
                   <Button>Go to dashboard</Button>
                 </Link>
