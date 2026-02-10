@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow, ProgressBarStatus, Window } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import ActivityCard from "./components/ActivityCard.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
@@ -551,6 +552,15 @@ async function refreshInstanceInstallStates() {
 }
 
 onMounted(async () => {
+  const window = getCurrentWindow();
+  try {
+    await window.setProgressBar({
+      status: ProgressBarStatus.Indeterminate,
+      progress: 10
+    });
+  } catch {
+    // Ignore if not running in a Tauri window.
+  }
   await initLaunchEvents({ status, progress, pushLog, upsertTaskFromEvent });
   await restoreSessions();
   await loadDefaultGameDir();
@@ -563,6 +573,18 @@ onMounted(async () => {
   await loadNeoForgeLoaderVersions();
   await loadMods();
   await syncAtlasPacks();
+  try {
+    const windows = await Window.getAll();
+    const loading = windows.find((entry) => entry.label === "loading");
+    if (loading) {
+      await loading.close();
+    }
+    await window.setProgressBar({ status: ProgressBarStatus.None });
+    await window.show();
+    await window.setFocus();
+  } catch {
+    // Ignore if not running in a Tauri window.
+  }
 });
 
 watch(

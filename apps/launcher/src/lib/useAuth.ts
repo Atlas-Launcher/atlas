@@ -52,7 +52,10 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   const authInFlight = ref(false);
   const atlasAuthInFlight = ref(false);
   let deviceLoginAttempt = 0;
+  let launcherLinkPollAttempt = 0;
+  let launcherLinkPollTimer: number | undefined;
   const LAUNCHER_LINK_STORAGE_KEY = "atlas.launcherLinkSession";
+  const LAUNCHER_LINK_POLL_INTERVAL_MS = 3000;
 
   const isSigningIn = computed(
     () =>
@@ -102,6 +105,105 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
   }
 
   launcherLinkSession.value = readStoredLauncherLinkSession();
+
+  function clearLauncherLinkPoll() {
+    if (launcherLinkPollTimer) {
+      window.clearTimeout(launcherLinkPollTimer);
+      launcherLinkPollTimer = undefined;
+    }
+  }
+
+  function isLauncherLinkExpired(session: LauncherLinkSession) {
+    const expiresAt = Date.parse(session.expiresAt);
+    return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+  }
+
+  async function tryCompleteLauncherLink(session: LauncherLinkSession) {
+    if (!profile.value) {
+      return {
+        success: false,
+        retryable: false,
+        message: "Missing Minecraft profile."
+      };
+    }
+    try {
+      const result = await invoke<LauncherLinkComplete>("complete_launcher_link_session", {
+        linkSessionId: session.linkSessionId,
+        proof: session.proof,
+        minecraftUuid: profile.value.id,
+        minecraftName: profile.value.name
+      });
+
+      if (result.warning) {
+        pushLog(`Launcher link warning: ${result.warning}`);
+      }
+
+      if (result.success) {
+        launcherLinkSession.value = null;
+        writeStoredLauncherLinkSession(null);
+        await restoreAtlasSession();
+        setStatus("Launcher link completed.");
+        return {
+          success: true,
+          retryable: false,
+          message: ""
+        };
+      }
+
+      return {
+        success: false,
+        retryable: false,
+        message: "Launcher link failed."
+      };
+    } catch (err) {
+      const message = String(err);
+      const retryable = /link session not claimed/i.test(message);
+      return {
+        success: false,
+        retryable,
+        message
+      };
+    }
+  }
+
+  function startLauncherLinkCompletionPoll(session: LauncherLinkSession) {
+    if (!session) {
+      return;
+    }
+    if (isLauncherLinkExpired(session)) {
+      setStatus("Launcher link expired. Request a new link code.");
+      launcherLinkSession.value = null;
+      writeStoredLauncherLinkSession(null);
+      return;
+    }
+    const attempt = ++launcherLinkPollAttempt;
+    clearLauncherLinkPoll();
+
+    const poll = async () => {
+      if (attempt !== launcherLinkPollAttempt) {
+        return;
+      }
+      if (isLauncherLinkExpired(session)) {
+        setStatus("Launcher link expired. Request a new link code.");
+        launcherLinkSession.value = null;
+        writeStoredLauncherLinkSession(null);
+        return;
+      }
+      const outcome = await tryCompleteLauncherLink(session);
+      if (outcome.success) {
+        clearLauncherLinkPoll();
+        return;
+      }
+      if (!outcome.retryable) {
+        setStatus(`Launcher link failed: ${outcome.message}`);
+        clearLauncherLinkPoll();
+        return;
+      }
+      launcherLinkPollTimer = window.setTimeout(poll, LAUNCHER_LINK_POLL_INTERVAL_MS);
+    };
+
+    launcherLinkPollTimer = window.setTimeout(poll, LAUNCHER_LINK_POLL_INTERVAL_MS);
+  }
 
   async function waitForDeviceApproval(deviceCodeValue: string, attempt: number) {
     try {

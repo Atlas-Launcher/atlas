@@ -25,6 +25,23 @@
           "x": 20,
           "y": 24
         }
+      },
+      {
+        "label": "loading",
+        "title": "Launching Atlas",
+        "width": 420,
+        "height": 260,
+        "resizable": false,
+        "decorations": false,
+        "visible": false,
+        "fullscreen": false,
+        "maximizable": false,
+        "minimizable": false,
+        "transparent": false,
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "url": "loading.html"
       }
     ],
     "security": {
