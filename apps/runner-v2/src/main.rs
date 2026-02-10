@@ -37,7 +37,7 @@ enum Cmd {
         profile: String,
 
         #[arg(long, value_name = "PACK_BLOB")]
-        pack_blob: PathBuf,
+        pack_blob: Option<PathBuf>,
 
         #[arg(long, value_name = "SERVER_ROOT")]
         server_root: Option<PathBuf>,
@@ -90,7 +90,10 @@ async fn main() -> anyhow::Result<()> {
             pack_blob,
             server_root,
         } => {
-            let resp = client::up(profile, pack_blob, server_root).await?;
+            if profile != "default" {
+                eprintln!("Ignoring --profile; runner uses a single profile: default");
+            }
+            let resp = client::up("default".to_string(), pack_blob, server_root).await?;
             println!("{resp}");
         }
         Cmd::Exec { interactive, command } => {
