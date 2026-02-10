@@ -44,24 +44,47 @@ async fn handle_conn(
     daemon_start_ms: u64,
 ) -> std::io::Result<()> {
     let mut framed = framing::framed(stream);
+    let (resp_tx, mut resp_rx) = tokio::sync::mpsc::channel::<PendingOutbound>(32);
 
     // Per-connection session state. Simplest possible.
     let mut next_session_id: SessionId = 1;
     let mut active_session: Option<SessionId> = None;
 
-    while let Some(req_env) = framing::read_request(&mut framed).await? {
+    loop {
+        tokio::select! {
+            outbound = resp_rx.recv() => {
+                let Some(outbound) = outbound else {
+                    break;
+                };
+                match outbound {
+                    PendingOutbound::Send(out) => {
+                        framing::send_outbound(&mut framed, &out).await?;
+                    }
+                    PendingOutbound::SendAndExit(out) => {
+                        framing::send_outbound(&mut framed, &out).await?;
+                        process::exit(0);
+                    }
+                }
+            }
+            req_env = framing::read_request(&mut framed) => {
+                let Some(req_env) = req_env? else {
+                    break;
+                };
         let req_id = req_env.id;
 
         match req_env.payload {
             Request::Shutdown {} => {
-                if let Err(err) = stop_server(false, state.clone()).await {
-                    warn!("shutdown stop failed: {}", err.message);
-                    let _ = stop_server(true, state.clone()).await;
-                }
-                let resp = Response::ShutdownAck {};
-                let out = Outbound::Response(Envelope { id: req_id, payload: resp });
-                framing::send_outbound(&mut framed, &out).await?;
-                process::exit(0);
+                let tx = resp_tx.clone();
+                let state = state.clone();
+                tokio::spawn(async move {
+                    if let Err(err) = stop_server(false, state.clone()).await {
+                        warn!("shutdown stop failed: {}", err.message);
+                        let _ = stop_server(true, state).await;
+                    }
+                    let resp = Response::ShutdownAck {};
+                    let out = Outbound::Response(Envelope { id: req_id, payload: resp });
+                    let _ = tx.send(PendingOutbound::SendAndExit(out)).await;
+                });
             }
 
             Request::Ping { protocol_version, .. } => {
@@ -81,35 +104,29 @@ async fn handle_conn(
             }
 
             Request::Start { profile, env } => {
-                match start_server(profile, env, state.clone()).await {
-                    Ok(resp) => {
-                        let out = Outbound::Response(Envelope { id: req_id, payload: resp });
-                        framing::send_outbound(&mut framed, &out).await?;
-                    }
-                    Err(err) => {
-                        let out = Outbound::Response(Envelope {
-                            id: req_id,
-                            payload: Response::Error(err),
-                        });
-                        framing::send_outbound(&mut framed, &out).await?;
-                    }
-                }
+                let tx = resp_tx.clone();
+                let state = state.clone();
+                tokio::spawn(async move {
+                    let payload = match start_server(profile, env, state).await {
+                        Ok(resp) => resp,
+                        Err(err) => Response::Error(err),
+                    };
+                    let out = Outbound::Response(Envelope { id: req_id, payload });
+                    let _ = tx.send(PendingOutbound::Send(out)).await;
+                });
             }
 
             Request::Stop { force, .. } => {
-                match stop_server(force, state.clone()).await {
-                    Ok(resp) => {
-                        let out = Outbound::Response(Envelope { id: req_id, payload: resp });
-                        framing::send_outbound(&mut framed, &out).await?;
-                    }
-                    Err(err) => {
-                        let out = Outbound::Response(Envelope {
-                            id: req_id,
-                            payload: Response::Error(err),
-                        });
-                        framing::send_outbound(&mut framed, &out).await?;
-                    }
-                }
+                let tx = resp_tx.clone();
+                let state = state.clone();
+                tokio::spawn(async move {
+                    let payload = match stop_server(force, state).await {
+                        Ok(resp) => resp,
+                        Err(err) => Response::Error(err),
+                    };
+                    let out = Outbound::Response(Envelope { id: req_id, payload });
+                    let _ = tx.send(PendingOutbound::Send(out)).await;
+                });
             }
 
             Request::LogsTail { lines } => {
@@ -291,7 +308,14 @@ async fn handle_conn(
                 framing::send_outbound(&mut framed, &out).await?;
             }
         }
+            }
+        }
     }
 
     Ok(())
+}
+
+enum PendingOutbound {
+    Send(Outbound),
+    SendAndExit(Outbound),
 }
