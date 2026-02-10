@@ -20,6 +20,7 @@ import type {
   Pack,
   PackMember,
   Role,
+  RunnerServiceToken,
 } from "@/app/dashboard/types";
 
 interface PackDashboardClientProps {
@@ -40,6 +41,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const [channels, setChannels] = useState<Channel[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [members, setMembers] = useState<PackMember[]>([]);
+  const [runnerTokens, setRunnerTokens] = useState<RunnerServiceToken[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -55,6 +57,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const canManageMembers = canManage;
   const canManageFriendlyName = canManage;
   const canDeletePack = canManage;
+  const canManageRunnerTokens = canManage;
 
   const packLabel = useMemo(() => pack?.slug ?? pack?.name ?? packId, [pack, packId]);
   const packName = pack?.name ?? packId;
@@ -111,10 +114,20 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
       } else {
         setInvites([]);
       }
+
+      if (canManageRunnerTokens) {
+        const tokenRes = await fetch(`/api/v1/runner/tokens?packId=${packId}`);
+        if (tokenRes.ok) {
+          const data = await tokenRes.json();
+          setRunnerTokens(data.tokens ?? []);
+        } else {
+          setRunnerTokens([]);
+        }
+      }
     };
 
     loadDetails().catch(() => setError("Unable to load pack details."));
-  }, [packId, canManageInvites]);
+  }, [packId, canManageInvites, canManageRunnerTokens]);
 
   const handleCreateInvite = async () => {
     setLoading(true);
@@ -227,6 +240,29 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
     }
 
     setMembers((prev) => prev.filter((member) => member.userId !== userId));
+  };
+
+  const handleRevokeRunnerToken = async (tokenId: string) => {
+    setLoading(true);
+    setError(null);
+    const response = await fetch(`/api/v1/runner/tokens`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packId, tokenId }),
+    });
+    const data = await response.json();
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data?.error ?? "Unable to revoke runner token.");
+      return;
+    }
+
+    setRunnerTokens((prev) =>
+      prev.map((token) =>
+        token.id === tokenId ? { ...token, revokedAt: data?.revokedAt ?? new Date().toISOString() } : token
+      )
+    );
   };
 
   const handlePromoteMember = async (userId: string) => {
@@ -449,19 +485,23 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
           </TabsContent>
 
           <TabsContent value="manage">
-            <ManageTab
-              packName={packName}
-              canManageFriendlyName={canManageFriendlyName}
-              friendlyName={friendlyName}
-              onFriendlyNameChange={setFriendlyName}
-              savingFriendlyName={savingFriendlyName}
-              onSaveFriendlyName={handleSaveFriendlyName}
-              canDeletePack={canDeletePack}
-              deleteConfirmation={deleteConfirmation}
-              onDeleteConfirmationChange={setDeleteConfirmation}
-              deletingPack={deletingPack}
-              onDeletePack={handleDeletePack}
-            />
+              <ManageTab
+                packName={packName}
+                canManageFriendlyName={canManageFriendlyName}
+                friendlyName={friendlyName}
+                onFriendlyNameChange={setFriendlyName}
+                savingFriendlyName={savingFriendlyName}
+                onSaveFriendlyName={handleSaveFriendlyName}
+                canDeletePack={canDeletePack}
+                deleteConfirmation={deleteConfirmation}
+                onDeleteConfirmationChange={setDeleteConfirmation}
+                deletingPack={deletingPack}
+                onDeletePack={handleDeletePack}
+                runnerTokens={runnerTokens}
+                canManageRunnerTokens={canManageRunnerTokens}
+                onRevokeRunnerToken={handleRevokeRunnerToken}
+                loading={loading}
+              />
           </TabsContent>
         </Tabs>
       </div>

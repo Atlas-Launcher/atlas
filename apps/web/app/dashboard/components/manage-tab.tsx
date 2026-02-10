@@ -9,6 +9,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { RunnerServiceToken } from "@/app/dashboard/types";
 
 interface ManageTabProps {
   packName: string;
@@ -22,6 +31,10 @@ interface ManageTabProps {
   onDeleteConfirmationChange: (value: string) => void;
   deletingPack: boolean;
   onDeletePack: () => void;
+  runnerTokens: RunnerServiceToken[];
+  canManageRunnerTokens: boolean;
+  onRevokeRunnerToken: (tokenId: string) => void;
+  loading: boolean;
 }
 
 export default function ManageTab({
@@ -36,7 +49,22 @@ export default function ManageTab({
   onDeleteConfirmationChange,
   deletingPack,
   onDeletePack,
+  runnerTokens,
+  canManageRunnerTokens,
+  onRevokeRunnerToken,
+  loading,
 }: ManageTabProps) {
+  const formatDate = (value?: string | null) => {
+    if (!value) {
+      return "—";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "—";
+    }
+    return date.toLocaleString();
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -91,6 +119,74 @@ export default function ManageTab({
             You do not have permission to delete this pack.
           </p>
         )}
+
+        <div className="inline-block w-[48rem] max-w-full rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Runner Service Tokens</h3>
+              <p className="text-xs text-[var(--atlas-ink-muted)]">
+                Manage deploy keys used by Atlas Runner.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Prefix</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Last Used</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[140px] text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {runnerTokens.length ? (
+                  runnerTokens.map((token) => (
+                    <TableRow key={token.id}>
+                      <TableCell className="font-medium">
+                        {token.name ?? "Unnamed token"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {token.tokenPrefix}
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
+                        {formatDate(token.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
+                        {formatDate(token.lastUsedAt)}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {token.revokedAt ? "Revoked" : "Active"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {canManageRunnerTokens ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={loading || Boolean(token.revokedAt)}
+                            onClick={() => onRevokeRunnerToken(token.id)}
+                          >
+                            {token.revokedAt ? "Revoked" : "Revoke"}
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-[var(--atlas-ink-muted)]">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-sm text-[var(--atlas-ink-muted)]">
+                      No runner service tokens found for this pack.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
