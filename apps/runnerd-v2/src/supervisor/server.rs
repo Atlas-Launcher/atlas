@@ -53,27 +53,44 @@ pub async fn start_server_from_deploy(state: SharedState) {
     let hub = Arc::new(hub);
 
     info!("auto-starting server from deploy key");
-    let build = match tokio::time::timeout(
-        std::time::Duration::from_secs(60),
-        hub.get_build_blob(&deploy.pack_id, &deploy.channel),
-    ).await {
-        Ok(Ok(value)) => value,
-        Ok(Err(err)) => {
-            warn!("download build failed: {err}");
+    let server_root = default_server_root("default");
+    let current_build_id = load_current_build_id(&server_root).await;
+    let artifact = match hub.get_launcher_artifact(&deploy.pack_id, &deploy.channel, current_build_id.as_deref()).await {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("get artifact failed: {err}");
             return;
         }
-        Err(_) => {
-            warn!("download build timed out");
+    };
+
+    if let Some(ref current) = current_build_id {
+        if artifact.build_id.as_ref() == Some(current) {
+            info!("server is already up to date (build_id: {})", current);
+            return;
+        }
+    }
+
+    let build = match hub.download_blob(&artifact.download_url).await {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("download build failed: {err}");
             return;
         }
     };
 
     let profile = "default".to_string();
-    let server_root = default_server_root(&profile);
     let env = BTreeMap::new();
 
-    if let Err(err) = start_server(profile, &build.bytes, server_root, env, state).await {
+    if let Err(err) = start_server(profile, &build, server_root.clone(), env, state).await {
         warn!("failed to auto-start server: {}", err.message);
+        return;
+    }
+
+    // Save the new build_id
+    if let Some(build_id) = artifact.build_id {
+        if let Err(err) = save_current_build_id(&server_root, &build_id).await {
+            warn!("failed to save build_id: {err}");
+        }
     }
 }
 
@@ -369,4 +386,19 @@ impl DependencyProvider for HttpDependencyProvider {
             })?;
         Ok(bytes.to_vec())
     }
+}
+
+async fn load_current_build_id(server_root: &PathBuf) -> Option<String> {
+    let path = server_root.join("current").join(".runner").join("build_id.txt");
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => Some(content.trim().to_string()),
+        Err(_) => None,
+    }
+}
+
+async fn save_current_build_id(server_root: &PathBuf, build_id: &str) -> std::io::Result<()> {
+    let dir = server_root.join("current").join(".runner");
+    tokio::fs::create_dir_all(&dir).await?;
+    let path = dir.join("build_id.txt");
+    tokio::fs::write(path, build_id).await
 }
