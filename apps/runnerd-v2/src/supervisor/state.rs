@@ -23,6 +23,7 @@ pub struct ServerState {
     pub(crate) monitor_started: bool,
     pub(crate) last_start_ms: Option<u64>,
     pub(crate) logs: LogStore,
+    pub(crate) pack_etag: Option<String>,
 }
 
 impl ServerState {
@@ -39,6 +40,7 @@ impl ServerState {
             monitor_started: false,
             last_start_ms: None,
             logs,
+            pack_etag: None,
         }
     }
 

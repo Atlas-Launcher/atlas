@@ -45,10 +45,16 @@ pub struct PackMetadata {
     pub loader: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UserPermission {
+#[derive(Debug, Deserialize)]
+pub struct PackMetadataResponse {
     pub pack_id: String,
-    pub role: String,
+    pub channel: String,
+    pub build_id: String,
+    pub version: Option<String>,
+    pub minecraft_version: Option<String>,
+    pub modloader: Option<String>,
+    pub modloader_version: Option<String>,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -440,6 +446,57 @@ impl HubClient {
     pub async fn get_whitelist(&self, pack_id: &str) -> Result<Vec<WhitelistEntry>> {
         let (whitelist, _) = self.get_whitelist_with_version(pack_id, None).await?;
         Ok(whitelist)
+    }
+
+    pub async fn get_pack_metadata_with_etag(
+        &self,
+        pack_id: &str,
+        channel: &str,
+        etag: Option<&str>,
+    ) -> Result<(Option<PackMetadataResponse>, String)> {
+        let mut url = self
+            .base_url
+            .join(&format!("/api/v1/runner/packs/{pack_id}/metadata"))?;
+        url.query_pairs_mut().append_pair("channel", channel);
+
+        let mut request = self
+            .client
+            .get(url)
+            .headers(self.get_auth_headers().await?);
+
+        if let Some(etag) = etag {
+            request = request.header("if-none-match", etag);
+        }
+
+        let response = request.send().await?;
+
+        if response.status() == 304 {
+            // Not modified, return None with the same etag
+            let etag = response.headers()
+                .get("etag")
+                .and_then(|h| h.to_str().ok())
+                .unwrap_or(etag.unwrap_or(""));
+            return Ok((None, etag.to_string()));
+        }
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Pack metadata request failed (HTTP {}): {}",
+                status.as_u16(),
+                body
+            );
+        }
+
+        let etag = response.headers()
+            .get("etag")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+
+        let metadata: PackMetadataResponse = response.json().await?;
+        Ok((Some(metadata), etag))
     }
 
     pub async fn get_whitelist_with_version(&self, pack_id: &str, etag: Option<&str>) -> Result<(Vec<WhitelistEntry>, String)> {
