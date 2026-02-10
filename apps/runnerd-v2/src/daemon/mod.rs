@@ -86,16 +86,12 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
                     let _ = child.kill().await;
                     info!("Minecraft server process killed.");
                 }
-                std::process::exit(1);
+                process::exit(1);
             }
         }
     });
 
-    let mut shutting_down = false;
     loop {
-        if shutting_down {
-            break Ok(());
-        }
         let (stream, _addr) = listener.accept().await?;
         let state = Arc::clone(&state);
         let start_ms = start_ms;

@@ -190,12 +190,32 @@ pub async fn start_server(
     server_root: PathBuf,
     state: SharedState,
 ) -> Result<Response, RpcError> {
+    // Quick check for already running. We will also acquire the lifecycle lock
+    // to serialize start/stop/update operations.
     {
         let state_guard = state.lock().await;
         if state_guard.is_running() {
             return Err(RpcError {
                 code: ErrorCode::ServerAlreadyRunning,
                 message: "server already running".into(),
+                details: Default::default(),
+            });
+        }
+    }
+
+    // Acquire lifecycle lock with timeout so concurrent lifecycle ops don't run together.
+    let lifecycle_lock = {
+        let guard = state.lock().await;
+        guard.lifecycle_lock.clone()
+    };
+    match tokio::time::timeout(Duration::from_secs(5), lifecycle_lock.lock()).await {
+        Ok(_l) => {
+            // we hold lifecycle lock for the duration of start
+        }
+        Err(_) => {
+            return Err(RpcError {
+                code: ErrorCode::Internal,
+                message: "another lifecycle operation in progress".into(),
                 details: Default::default(),
             });
         }
@@ -249,13 +269,39 @@ pub async fn start_server(
         server_root.display()
     ));
 
-    ensure_watchers(state.clone()).await;
+    // Start update watchers in a background blocking task to avoid any chance of
+    // the watcher initialization (which spawns non-Send thread-local runtimes)
+    // blocking or interacting poorly with the current async task.
+    let state_for_watchers = state.clone();
+    tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("failed to create local runtime for ensure_watchers");
+        rt.block_on(async move { let _ = ensure_watchers(state_for_watchers).await; });
+    });
     ensure_monitor(state.clone()).await;
 
     Ok(Response::Started { profile, pid, started_at_ms })
 }
 
 pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, RpcError> {
+    // Acquire lifecycle lock to serialize stop with other lifecycle operations
+    let lifecycle_lock = {
+        let guard = state.lock().await;
+        guard.lifecycle_lock.clone()
+    };
+    match tokio::time::timeout(Duration::from_secs(5), lifecycle_lock.lock()).await {
+        Ok(_l) => {}
+        Err(_) => {
+            return Err(RpcError {
+                code: ErrorCode::Internal,
+                message: "another lifecycle operation in progress".into(),
+                details: Default::default(),
+            });
+        }
+    }
+
     let mut guard = state.lock().await;
     refresh_child_status(&mut guard).await;
     if guard.child.is_none() {

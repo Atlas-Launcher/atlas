@@ -1,2 +1,4 @@
 [env]
 ATLAS_RUNNERD_PATH = { value = "target/debug/atlas-runnerd", relative = true }
+RUST_BACKTRACE = "1"
+LOG_LEVEL = "debug"

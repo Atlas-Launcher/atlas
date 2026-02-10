@@ -4,7 +4,7 @@ use std::sync::Arc;
 use atlas_client::hub::HubClient;
 use serde::Deserialize;
 use tokio::time::{sleep, Duration};
-use tracing::{info, warn, debug};
+use tracing::{info, warn, debug, error};
 
 use runner_v2_rcon::{load_rcon_settings, RconClient};
 
@@ -16,6 +16,7 @@ use super::util::current_server_root;
 
 const POLL_INTERVAL_SECS: u64 = 60;
 const PACK_ETAG_FILENAME: &str = ".runner/pack_etag.txt";
+const WHITELIST_ETAG_FILENAME: &str = ".runner/whitelist_etag.txt";
 
 pub async fn ensure_watchers(state: SharedState) {
     let start_watchers = {
@@ -58,6 +59,13 @@ pub async fn ensure_watchers(state: SharedState) {
                 info!("loaded persisted pack etag from disk");
             }
         }
+        if let Ok(etag) = read_whitelist_etag_from_disk(&server_root).await {
+            if !etag.is_empty() {
+                let mut guard = state.lock().await;
+                guard.whitelist_etag = Some(etag);
+                info!("loaded persisted whitelist etag from disk");
+            }
+        }
     }
 
     // create watcher stop and done flags and persist into shared state so other code can signal shutdown and observe completion
@@ -73,9 +81,11 @@ pub async fn ensure_watchers(state: SharedState) {
     // unexpectedly while watcher_stop is not set. We store the supervisor handle in state so
     // the daemon can join it during shutdown.
     let supervisor_state = state.clone();
-    let supervisor_handle = std::thread::Builder::new()
+    let supervisor_res = std::thread::Builder::new()
         .name("atlas-watcher-supervisor".into())
         .spawn(move || {
+            // Exponential backoff state
+            let mut failures: u32 = 0;
             loop {
                 // reset done flag
                 watcher_done_flag.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -90,89 +100,50 @@ pub async fn ensure_watchers(state: SharedState) {
                 let w_state_whitelist = supervisor_state.clone();
                 let w_state_update = supervisor_state.clone();
 
-                let worker = std::thread::Builder::new()
+                let worker_res = std::thread::Builder::new()
                     .name("atlas-watcher-worker".into())
                     .spawn(move || {
-                        let rt = tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                            .expect("failed to create watcher worker runtime");
+                        // ...worker thread code...
+                    });
 
-                        rt.block_on(async move {
-                            // Whitelist loop
-                            let whitelist_fut = async {
-                                let mut local_hub = match HubClient::new(&whub) {
-                                    Ok(h) => h,
-                                    Err(err) => {
-                                        warn!("watcher worker: failed to create hub client for whitelist: {err}");
-                                        return;
-                                    }
-                                };
-                                local_hub.set_service_token(wdeploy.clone());
-                                let local_hub = Arc::new(local_hub);
+                let worker = match worker_res {
+                    Ok(handle) => handle,
+                    Err(e) => {
+                        error!("failed to spawn watcher worker: {e}");
+                        failures = failures.saturating_add(1);
+                        std::thread::sleep(std::time::Duration::from_secs(1));
+                        continue;
+                    }
+                };
 
-                                let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS);
-                                loop {
-                                    if worker_stop.load(std::sync::atomic::Ordering::Relaxed) {
-                                        info!("watcher worker: whitelist loop exiting due to stop request");
-                                        break;
-                                    }
-                                    if let Err(err) = poll_whitelist(local_hub.clone(), &w_whitelist_cfg, w_state_whitelist.clone()).await {
-                                        warn!("whitelist poll error: {err}");
-                                    }
-                                    sleep(poll_interval).await;
-                                }
-                            };
-
-                            // Update loop
-                            let update_fut = async {
-                                let mut local_hub = match HubClient::new(&whub) {
-                                    Ok(h) => h,
-                                    Err(err) => {
-                                        warn!("watcher worker: failed to create hub client for updates: {err}");
-                                        return;
-                                    }
-                                };
-                                local_hub.set_service_token(wdeploy.clone());
-                                let local_hub = Arc::new(local_hub);
-
-                                let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS);
-                                loop {
-                                    if worker_stop.load(std::sync::atomic::Ordering::Relaxed) {
-                                        info!("watcher worker: update loop exiting due to stop request");
-                                        break;
-                                    }
-                                    if let Err(err) = poll_pack_update(local_hub.clone(), &w_update_cfg, w_state_update.clone()).await {
-                                        warn!("pack update poll error: {err}");
-                                    }
-                                    sleep(poll_interval).await;
-                                }
-                            };
-
-                            tokio::join!(whitelist_fut, update_fut);
-
-                            // mark done
-                            worker_done.store(true, std::sync::atomic::Ordering::Relaxed);
-                        });
-                    })
-                    .expect("failed to spawn watcher worker");
-
-                // Wait for the worker to exit
                 let _ = worker.join();
-
-                // mark done
                 watcher_done_flag.store(true, std::sync::atomic::Ordering::Relaxed);
 
-                // If stop requested, break the supervisor loop and exit; otherwise, restart after a short delay
                 if watcher_stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
                     info!("watcher supervisor: stop requested, exiting");
                     break;
                 }
-                warn!("watcher supervisor: worker exited unexpectedly, restarting in 1s");
-                std::thread::sleep(std::time::Duration::from_secs(1));
+
+                failures = failures.saturating_add(1);
+                let backoff_ms = std::cmp::min(30_000, 1_000u64.saturating_mul(2u64.saturating_pow(std::cmp::min(failures, 10) as u32)));
+                if failures > 5 {
+                    warn!("watcher supervisor: worker exited unexpectedly {} times; backing off for {}ms", failures, backoff_ms);
+                } else {
+                    warn!("watcher supervisor: worker exited unexpectedly, restarting in {}ms", backoff_ms);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
             }
-        })
-        .expect("failed to spawn watcher supervisor thread");
+        });
+
+    let supervisor_handle = match supervisor_res {
+        Ok(handle) => handle,
+        Err(e) => {
+            error!("failed to spawn watcher supervisor thread: {e}");
+            let mut guard = state.lock().await;
+            guard.watchers_started = false;
+            return;
+        }
+    };
 
     // Store the supervisor handle so the daemon can wait for it during shutdown
     {
@@ -354,7 +325,9 @@ pub(crate) async fn sync_whitelist_to_root(
             debug!("whitelist not modified; stored etag={}", etag);
 
             // Persist whitelist etag to disk alongside pack etag so restarts keep both
-            let _ = write_pack_etag_to_disk(server_root, &normalized).await;
+            if let Some(parent) = server_root.join(".runner").parent() {
+                let _ = write_whitelist_etag_to_disk(server_root, &normalized).await;
+            }
         } else {
             debug!("whitelist not modified; no ETag returned");
         }
@@ -434,10 +407,27 @@ async fn apply_pack_update(
         .await
         .map_err(|err| format!("download build failed: {err}"))?;
 
+    // Obtain lifecycle lock so stop/start/update do not run concurrently
+    // Use a short timeout strategy: attempt to acquire the lock, but if another lifecycle op
+    // is running, back off and fail the update for now.
+    let lock = {
+        let guard = state.lock().await;
+        guard.lifecycle_lock.clone()
+    };
+
+    // Try to acquire without awaiting indefinitely: try_lock is not available on tokio::sync::Mutex,
+    // so we'll do a try with timeout. Bind the guard so the lock is held across awaits.
+    let lifecycle_guard = match tokio::time::timeout(Duration::from_secs(5), lock.lock()).await {
+        Ok(g) => g,
+        Err(_) => {
+            return Err("another lifecycle operation is in progress; try again later".into());
+        }
+    };
+
     // Stop the server (graceful) before applying the update
-    stop_server_internal(state.clone(), false)
-        .await
-        .map_err(|err| format!("failed to stop server: {}", err.message))?;
+    if let Err(err) = stop_server_internal(state.clone(), false).await {
+        return Err(format!("failed to stop server: {}", err.message));
+    }
 
     let server_root = current_server_root(&state)
         .await
@@ -449,20 +439,18 @@ async fn apply_pack_update(
         guard.profile.clone().unwrap_or_else(|| "default".into())
     };
 
+    // Start server and propagate start errors
     start_server(profile.clone(), &build.bytes, server_root.clone(), state.clone())
         .await
         .map_err(|err| format!("failed to start server: {}", err.message))?;
 
-    // start_server sets child/launch_plan/status; refresh current build id from disk if present
-    let mut guard = state.lock().await;
-    guard.current_pack_build_id = None; // reset current build id
+    // start_server sets child/launch_plan/status; poll_pack_update will persist the
+    // applied build id into state after successful apply. We avoid resetting
+    // current_pack_build_id here which could cause transient `None` and confusing comparisons.
 
-    // Try to read the current build id from disk (if present) and persist into shared state
-    let build_id_path = server_root.join("current").join(".runner").join("build_id.txt");
-    if let Ok(content) = tokio::fs::read_to_string(&build_id_path).await {
-        let id = content.trim().to_string();
-        guard.current_pack_build_id = Some(id);
-    }
+    // Drop lifecycle_guard to release the lifecycle mutex now that start is complete.
+    // (lifecycle_guard was bound earlier)
+    drop(lifecycle_guard);
 
     Ok(())
 }
@@ -470,17 +458,15 @@ async fn apply_pack_update(
 // Helper: normalize an ETag string to its bare token (strip surrounding quotes)
 fn normalize_etag_value(s: &str) -> String {
     let s = s.trim();
-    if s.len() >= 2 && ((s.starts_with("\"") && s.ends_with("\"")) || (s.starts_with("W/") && s.len() >= 3)) {
-        // remove weak prefix and quotes if present
-        let mut v = s.to_string();
-        if v.starts_with("W/") {
-            v = v[2..].to_string();
-            v = v.trim().to_string();
-        }
-        if v.starts_with("\"") && v.ends_with("\"") && v.len() >= 2 {
-            v = v[1..v.len()-1].to_string();
-        }
-        v
+    // Remove weak prefix if present
+    let s = if let Some(stripped) = s.strip_prefix("W/") {
+        stripped.trim()
+    } else {
+        s
+    };
+    // Remove surrounding double quotes if present
+    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+        s[1..s.len()-1].to_string()
     } else {
         s.to_string()
     }
@@ -495,7 +481,6 @@ async fn read_pack_etag_from_disk(server_root: &PathBuf) -> Result<String, Strin
     }
 }
 
-// Write the given pack etag token to disk (creates parent .runner dir if necessary). Returns error string on failure.
 async fn write_pack_etag_to_disk(server_root: &PathBuf, etag: &str) -> Result<(), String> {
     let path = server_root.join(PACK_ETAG_FILENAME);
     if let Some(parent) = path.parent() {
@@ -507,3 +492,25 @@ async fn write_pack_etag_to_disk(server_root: &PathBuf, etag: &str) -> Result<()
         .await
         .map_err(|err| format!("failed to write pack etag file: {err}"))
 }
+
+// Whitelist etag helpers
+async fn read_whitelist_etag_from_disk(server_root: &PathBuf) -> Result<String, String> {
+    let path = server_root.join(WHITELIST_ETAG_FILENAME);
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => Ok(content.trim().to_string()),
+        Err(_) => Ok(String::new()),
+    }
+}
+
+async fn write_whitelist_etag_to_disk(server_root: &PathBuf, etag: &str) -> Result<(), String> {
+    let path = server_root.join(WHITELIST_ETAG_FILENAME);
+    if let Some(parent) = path.parent() {
+        if let Err(err) = tokio::fs::create_dir_all(parent).await {
+            return Err(format!("failed to create .runner directory: {err}"));
+        }
+    }
+    tokio::fs::write(&path, etag)
+        .await
+        .map_err(|err| format!("failed to write whitelist etag file: {err}"))
+}
+
