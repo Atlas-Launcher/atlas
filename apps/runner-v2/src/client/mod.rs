@@ -6,6 +6,16 @@ use runner_v2_utils::{ensure_dir, runtime_paths_v2};
 
 pub use commands::rcon::{rcon_exec, rcon_interactive};
 pub use commands::core::{ping, shutdown, up};
+pub use commands::auth::exec as auth;
+pub use commands::supervisor::{
+    daemon_logs_tail,
+    logs_tail,
+    status,
+    stop,
+    LogsTailInfo,
+    StatusInfo,
+    StopInfo,
+};
 
 
 pub(crate) async fn connect_or_start() -> anyhow::Result<runner_ipc_v2::framing::FramedStream> {
