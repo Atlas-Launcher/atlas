@@ -46,16 +46,16 @@ pub async fn ensure_fresh_atlas_session(session: AtlasSession) -> Result<AtlasSe
 pub async fn refresh_atlas_profile(session: AtlasSession) -> Result<AtlasSession, AuthError> {
     let user_info = atlas::fetch_user_info(&session.auth_base_url, &session.access_token).await?;
 
-        Ok(AtlasSession {
-                profile: AtlasProfile {
-                        id: user_info.sub,
-                        email: user_info.email,
-                        name: user_info.name,
-                        mojang_username: user_info.mojang_username,
-                        mojang_uuid: user_info.mojang_uuid,
-                },
-                ..session
-        })
+    Ok(AtlasSession {
+        profile: AtlasProfile {
+            id: user_info.sub,
+            email: user_info.email,
+            name: user_info.name,
+            mojang_username: user_info.mojang_username,
+            mojang_uuid: normalize_mojang_uuid(user_info.mojang_uuid),
+        },
+        ..session
+    })
 }
 
 fn needs_refresh(session: &AtlasSession) -> bool {
@@ -92,9 +92,13 @@ async fn refresh_atlas_session(session: &AtlasSession) -> Result<AtlasSession, A
             email: user_info.email,
             name: user_info.name,
             mojang_username: user_info.mojang_username,
-            mojang_uuid: user_info.mojang_uuid,
+            mojang_uuid: normalize_mojang_uuid(user_info.mojang_uuid),
         },
     })
+}
+
+fn normalize_mojang_uuid(value: Option<String>) -> Option<String> {
+    value.map(|raw| raw.trim().to_ascii_lowercase().replace('-', ""))
 }
 
 fn unix_timestamp() -> u64 {
