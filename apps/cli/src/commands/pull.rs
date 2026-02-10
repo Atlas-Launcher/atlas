@@ -1,13 +1,12 @@
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use atlas_client::hub::HubClient;
 use base64::Engine;
 use clap::Args;
 use dialoguer::{FuzzySelect, theme::ColorfulTheme};
-use reqwest::blocking::Client;
 use serde::Deserialize;
 
 use crate::auth_store;
@@ -31,6 +30,7 @@ struct RemotePack {
     pack_name: String,
     pack_slug: String,
     repo_url: Option<String>,
+    channel: String,
 }
 
 #[derive(Deserialize)]
@@ -47,12 +47,10 @@ struct GithubTokenResponse {
 pub fn run(args: PullArgs) -> Result<()> {
     let hub_url = auth_store::resolve_hub_url(args.hub_url.clone());
     let access_token = auth_store::require_access_token_for_hub(&hub_url)?;
-    let client = Client::builder()
-        .timeout(Duration::from_secs(20))
-        .build()
-        .context("Failed to create HTTP client")?;
+    let mut client = HubClient::new(&hub_url)?;
+    client.set_token(access_token.clone());
 
-    let packs = fetch_remote_packs(&client, &hub_url, &access_token)?;
+    let packs = fetch_remote_packs(&client)?;
     let cloneable = packs
         .into_iter()
         .filter(|pack| {
@@ -76,7 +74,7 @@ pub fn run(args: PullArgs) -> Result<()> {
         .context("Selected pack does not have an associated repository.")?;
 
     let github_token = if is_github_https_url(repo_url) {
-        request_linked_github_access_token(&client, &hub_url, &access_token)?
+        request_linked_github_access_token(&client)?
     } else {
         None
     };
@@ -93,63 +91,22 @@ pub fn run(args: PullArgs) -> Result<()> {
     Ok(())
 }
 
-fn fetch_remote_packs(
-    client: &Client,
-    hub_url: &str,
-    access_token: &str,
-) -> Result<Vec<RemotePack>> {
-    let endpoint = format!("{}/api/launcher/packs", hub_url);
-    let response = client
-        .get(endpoint)
-        .bearer_auth(access_token)
-        .send()
-        .context("Failed to fetch pack list")?;
-
-    if response.status().as_u16() == 401 {
-        bail!(
-            "Atlas Hub rejected your saved token. Run `atlas auth signout` then `atlas auth signin --hub-url {}`.",
-            hub_url
-        );
-    }
-
-    response
-        .error_for_status()
-        .context("Failed to load accessible packs from Atlas Hub")?
-        .json::<LauncherPacksResponse>()
-        .context("Failed to parse pack list response")
-        .map(|response| response.packs)
+fn fetch_remote_packs(client: &HubClient) -> Result<Vec<RemotePack>> {
+    let packs = client.blocking_list_launcher_packs()?;
+    Ok(packs
+        .into_iter()
+        .map(|pack| RemotePack {
+            pack_id: pack.pack_id,
+            pack_name: pack.pack_name,
+            pack_slug: pack.pack_slug,
+            repo_url: pack.repo_url,
+            channel: pack.channel,
+        })
+        .collect())
 }
 
-fn request_linked_github_access_token(
-    client: &Client,
-    hub_url: &str,
-    access_token: &str,
-) -> Result<Option<String>> {
-    let endpoint = format!("{}/api/launcher/github/token", hub_url);
-    let response = client
-        .get(endpoint)
-        .bearer_auth(access_token)
-        .send()
-        .context("Failed to request linked GitHub credentials")?;
-
-    let status = response.status().as_u16();
-    if status == 404 || status == 409 {
-        return Ok(None);
-    }
-
-    if !(200..300).contains(&status) {
-        let body = response.text().unwrap_or_default();
-        bail!(
-            "Failed to fetch linked GitHub credentials (HTTP {}): {}",
-            status,
-            body
-        );
-    }
-
-    let payload = response
-        .json::<GithubTokenResponse>()
-        .context("Failed to parse linked GitHub credentials response")?;
-    Ok(Some(payload.access_token))
+fn request_linked_github_access_token(client: &HubClient) -> Result<Option<String>> {
+    client.blocking_get_github_token()
 }
 
 fn select_pack(packs: &[RemotePack], args: &PullArgs) -> Result<RemotePack> {

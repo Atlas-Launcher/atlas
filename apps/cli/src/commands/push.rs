@@ -1,11 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use atlas_client::hub::HubClient;
 use base64::Engine;
 use clap::Args;
-use reqwest::blocking::Client;
 use serde::Deserialize;
 
 use crate::auth_store;
@@ -50,11 +49,9 @@ pub fn run(args: PushArgs) -> Result<()> {
         let hub_url = auth_store::resolve_hub_url(args.hub_url.clone());
         match auth_store::require_access_token_for_hub(&hub_url) {
             Ok(access_token) => {
-                let client = Client::builder()
-                    .timeout(Duration::from_secs(20))
-                    .build()
-                    .context("Failed to create HTTP client")?;
-                match request_linked_github_access_token(&client, &hub_url, &access_token) {
+                let mut client = HubClient::new(&hub_url)?;
+                client.set_token(access_token);
+                match request_linked_github_access_token(&client) {
                     Ok(token) => github_token = token,
                     Err(error) => {
                         println!(
@@ -96,42 +93,8 @@ pub fn run(args: PushArgs) -> Result<()> {
     Ok(())
 }
 
-fn request_linked_github_access_token(
-    client: &Client,
-    hub_url: &str,
-    access_token: &str,
-) -> Result<Option<String>> {
-    let endpoint = format!("{}/api/launcher/github/token", hub_url);
-    let response = client
-        .get(endpoint)
-        .bearer_auth(access_token)
-        .send()
-        .context("Failed to request linked GitHub credentials")?;
-
-    let status = response.status().as_u16();
-    if status == 401 {
-        bail!(
-            "Atlas Hub rejected your saved token. Run `atlas auth signout` then `atlas auth signin --hub-url {}`.",
-            hub_url
-        );
-    }
-    if status == 404 || status == 409 {
-        return Ok(None);
-    }
-
-    if !(200..300).contains(&status) {
-        let body = response.text().unwrap_or_default();
-        bail!(
-            "Failed to fetch linked GitHub credentials (HTTP {}): {}",
-            status,
-            body
-        );
-    }
-
-    let payload = response
-        .json::<GithubTokenResponse>()
-        .context("Failed to parse linked GitHub credentials response")?;
-    Ok(Some(payload.access_token))
+fn request_linked_github_access_token(client: &HubClient) -> Result<Option<String>> {
+    client.blocking_get_github_token()
 }
 
 fn resolve_remote_url(root: &Path, remote: &str) -> Result<String> {
