@@ -2,13 +2,13 @@
 
 ## IPC Protocol
 
-Atlas Runner uses a custom Protocol Buffer-based IPC protocol over Unix domain sockets for communication between the CLI and daemon.
+Atlas Runner uses a JSON-based IPC protocol over Unix domain sockets for communication between the CLI and daemon.
 
 ### Connection Details
 
 - **Socket Path**: `~/.atlas/runnerd/sockets/daemon.sock`
-- **Framing**: Length-prefixed messages (4-byte big-endian length + protobuf payload)
-- **Encoding**: Protocol Buffers v3
+- **Framing**: Length-prefixed messages (4-byte big-endian length + JSON payload)
+- **Encoding**: JSON with serde serialization
 
 ### Message Flow
 
@@ -23,31 +23,61 @@ Daemon → CLI: Response
 Check daemon connectivity.
 
 **Request**:
-```protobuf
-message Ping {}
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "Ping",
+    "data": {
+      "client_version": "1.0.0",
+      "protocol_version": 1
+    }
+  }
+}
 ```
 
 **Response**:
-```protobuf
-message Pong {}
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "Pong"
+  }
+}
 ```
 
 #### Start Server
 Start a Minecraft server instance.
 
 **Request**:
-```protobuf
-message Start {
-  string profile = 1;  // Server profile name (default: "default")
-  map<string, string> env = 2;  // Environment variables
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "Start",
+    "data": {
+      "profile": "default",
+      "env": {
+        "CUSTOM_VAR": "value"
+      }
+    }
+  }
 }
 ```
 
 **Response**:
-```protobuf
-message Started {
-  string profile = 1;
-  uint32 pid = 2;  // Process ID
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "Started",
+    "data": {
+      "profile": "default",
+      "pid": 12345
+    }
+  }
+}
+```
 }
 ```
 
@@ -55,17 +85,29 @@ message Started {
 Stop a running Minecraft server.
 
 **Request**:
-```protobuf
-message Stop {
-  string profile = 1;
-  bool force = 2;  // Force kill if graceful shutdown fails
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "Stop",
+    "data": {
+      "profile": "default",
+      "force": false
+    }
+  }
 }
 ```
 
 **Response**:
-```protobuf
-message Stopped {
-  string profile = 1;
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "Stopped",
+    "data": {
+      "profile": "default"
+    }
+  }
 }
 ```
 
@@ -73,28 +115,33 @@ message Stopped {
 Retrieve server status information.
 
 **Request**:
-```protobuf
-message Status {
-  string profile = 1;
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "Status",
+    "data": {
+      "profile": "default"
+    }
+  }
 }
 ```
 
 **Response**:
-```protobuf
-message Status {
-  string profile = 1;
-  enum State {
-    STOPPED = 0;
-    STARTING = 1;
-    RUNNING = 2;
-    STOPPING = 3;
-    ERROR = 4;
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "Status",
+    "data": {
+      "profile": "default",
+      "state": "RUNNING",
+      "pid": 12345,
+      "uptime_seconds": 3600,
+      "minecraft_version": "1.20.1",
+      "pack_version": "1.2.3"
+    }
   }
-  State state = 2;
-  uint32 pid = 3;
-  uint64 uptime_seconds = 4;
-  string minecraft_version = 5;
-  string pack_version = 6;
 }
 ```
 
@@ -102,23 +149,40 @@ message Status {
 Stream server log output.
 
 **Request**:
-```protobuf
-message LogsTail {
-  string profile = 1;
-  uint32 lines = 2;  // Number of recent lines to return (0 = follow)
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "LogsTail",
+    "data": {
+      "profile": "default",
+      "lines": 50
+    }
+  }
 }
 ```
 
 **Response**:
-```protobuf
-message LogsTail {
-  repeated LogLine lines = 1;
-}
-
-message LogLine {
-  uint64 timestamp = 1;  // Unix timestamp
-  string level = 2;      // Log level (INFO, WARN, ERROR)
-  string message = 3;    // Log message
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "LogsTail",
+    "data": {
+      "lines": [
+        {
+          "timestamp": 1640995200,
+          "level": "INFO",
+          "message": "Server started successfully"
+        },
+        {
+          "timestamp": 1640995260,
+          "level": "WARN",
+          "message": "Player joined: Steve"
+        }
+      ]
+    }
+  }
 }
 ```
 
@@ -126,18 +190,30 @@ message LogLine {
 Execute a command via RCON.
 
 **Request**:
-```protobuf
-message RconExec {
-  string profile = 1;
-  string command = 2;
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "RconExec",
+    "data": {
+      "profile": "default",
+      "command": "say Hello World!"
+    }
+  }
 }
 ```
 
 **Response**:
-```protobuf
-message RconResult {
-  string profile = 1;
-  string result = 2;  // Command output
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "RconResult",
+    "data": {
+      "profile": "default",
+      "result": "Said 'Hello World!' to all players"
+    }
+  }
 }
 ```
 
@@ -145,31 +221,46 @@ message RconResult {
 Update daemon configuration.
 
 **Request**:
-```protobuf
-message SaveDeployKey {
-  string hub_url = 1;
-  string pack_id = 2;
-  string channel = 3;
-  string deploy_token = 4;
-  uint64 max_ram_mb = 5;
-  bool should_autostart = 6;
-  bool eula_accepted = 7;
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "SaveDeployKey",
+    "data": {
+      "hub_url": "https://hub.atlaslauncher.com",
+      "pack_id": "my-pack",
+      "channel": "production",
+      "deploy_token": "abc123...",
+      "max_ram_mb": 4096,
+      "should_autostart": true,
+      "eula_accepted": true
+    }
+  }
 }
 ```
 
 **Response**:
-```protobuf
-message DeployKeySaved {}
+```json
+{
+  "id": "request-id",
+  "payload": {
+    "type": "DeployKeySaved",
+    "data": {}
+  }
+}
 ```
 
 ### Error Handling
 
 All requests can return an error response:
 
-```protobuf
-message Error {
-  string message = 1;
-  string code = 2;  // Error code for programmatic handling
+```json
+{
+  "id": "request-id",
+  "error": {
+    "message": "Server not found",
+    "code": "SERVER_NOT_FOUND"
+  }
 }
 ```
 
@@ -298,77 +389,6 @@ interface Dependency {
 interface Filter {
   platform: "windows" | "macos" | "linux";
   arch: "x86_64" | "aarch64";
-}
-```
-
-## Protocol Buffer Definitions
-
-### Core Protocol
-```protobuf
-syntax = "proto3";
-
-package atlas.runner.ipc.v2;
-
-// Requests
-message Request {
-  oneof payload {
-    Ping ping = 1;
-    Start start = 2;
-    Stop stop = 3;
-    Status status = 4;
-    LogsTail logs_tail = 5;
-    RconExec rcon_exec = 6;
-    SaveDeployKey save_deploy_key = 7;
-  }
-}
-
-// Responses
-message Response {
-  oneof payload {
-    Pong pong = 1;
-    Started started = 2;
-    Stopped stopped = 3;
-    Status status = 4;
-    LogsTail logs_tail = 5;
-    RconResult rcon_result = 6;
-    DeployKeySaved deploy_key_saved = 7;
-    Error error = 8;
-  }
-}
-
-// Message definitions...
-```
-
-### Distribution Format
-```protobuf
-syntax = "proto3";
-
-package atlas.protocol;
-
-message DistributionBlob {
-  Metadata metadata = 1;
-  bytes payload = 2;
-}
-
-message Metadata {
-  string pack_id = 1;
-  string version = 2;
-  string minecraft_version = 3;
-  string loader = 4;
-  repeated Dependency dependencies = 5;
-  repeated Filter platform_filters = 6;
-  uint64 created_at = 7;
-}
-
-message Dependency {
-  string url = 1;
-  string hash = 2;
-  uint64 size = 3;
-}
-
-message Filter {
-  string platform = 1;
-  string arch = 2;
 }
 ```
 
