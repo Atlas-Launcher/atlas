@@ -18,6 +18,8 @@ use super::server::{apply_pack_blob, spawn_server, stop_server_internal};
 use super::state::SharedState;
 use super::util::current_server_root;
 
+const POLL_INTERVAL_SECS: u64 = 60;
+
 pub async fn ensure_watchers(state: SharedState) {
     let start_watchers = {
         let mut guard = state.lock().await;
@@ -55,13 +57,11 @@ pub async fn ensure_watchers(state: SharedState) {
     hub.set_service_token(config.deploy_key.clone());
     let hub = Arc::new(hub);
 
-    // Disabled polling to prevent lockups
-    /*
     let whitelist_state = state.clone();
     let whitelist_hub = hub.clone();
     let whitelist_config = config.clone();
     tokio::spawn(async move {
-        let poll_interval = Duration::from_secs(300); // 5 minutes
+        let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 1 minute
         loop {
             match poll_whitelist(whitelist_hub.clone(), &whitelist_config, whitelist_state.clone()).await {
                 Ok(()) => {},
@@ -84,7 +84,6 @@ pub async fn ensure_watchers(state: SharedState) {
             sleep(poll_interval).await;
         }
     });
-    */
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,8 +109,31 @@ async fn poll_pack_update(
     config: &DeployKeyConfig,
     state: SharedState,
 ) -> Result<(), String> {
-    // Fetch latest build/channel info and apply update if needed
-    // For now, always attempt update (could cache last build/channel)
+    // First check pack metadata with ETag caching
+    let current_etag = {
+        let guard = state.lock().await;
+        guard.pack_etag.clone()
+    };
+
+    match hub.get_pack_metadata_with_etag(&config.pack_id, &config.channel, current_etag.as_deref()).await {
+        Ok((None, _)) => {
+            // Metadata hasn't changed, no update needed
+            return Ok(());
+        }
+        Ok((Some(metadata), new_etag)) => {
+            // Metadata has changed, update stored etag and proceed with update
+            let mut guard = state.lock().await;
+            guard.pack_etag = Some(new_etag);
+            drop(guard);
+
+            info!("pack update detected; applying update (build: {})", metadata.build_id);
+        }
+        Err(err) => {
+            warn!("pack metadata check failed: {err}, falling back to direct update");
+        }
+    }
+
+    // Apply the pack update
     apply_pack_update(hub, config, state).await
 }
 
