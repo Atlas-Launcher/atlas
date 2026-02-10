@@ -17,6 +17,7 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/runner-provision-v2/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/runner-v2-utils/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/atlas-client/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/runner-v2-rcon/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/apps/cli/target" />
       <excludeFolder url="file://$MODULE_DIR$/apps/launcher/src-tauri/target" />
       <excludeFolder url="file://$MODULE_DIR$/src-tauri/target" />
