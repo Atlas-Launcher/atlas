@@ -72,3 +72,13 @@ export interface UserMembership {
   accessLevel: AccessLevel;
   joinedAt?: string;
 }
+
+export interface RunnerServiceToken {
+  id: string;
+  name?: string | null;
+  tokenPrefix: string;
+  createdAt?: string | null;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+  expiresAt?: string | null;
+}
