@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::io::Write;
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 use runner_core_v2::proto::{LogLine, LogStream};
@@ -41,6 +42,9 @@ enum Cmd {
 
         #[arg(long, value_name = "SERVER_ROOT")]
         server_root: Option<PathBuf>,
+
+        #[arg(long, default_value_t = false)]
+        accept_eula: bool,
     },
     Exec {
         #[arg(short = 'i', long = "interactive")]
@@ -89,10 +93,12 @@ async fn main() -> anyhow::Result<()> {
             profile,
             pack_blob,
             server_root,
+            accept_eula,
         } => {
             if profile != "default" {
                 eprintln!("Ignoring --profile; runner uses a single profile: default");
             }
+            ensure_eula_accepted(accept_eula)?;
             let resp = client::up("default".to_string(), pack_blob, server_root).await?;
             println!("{resp}");
         }
@@ -125,6 +131,25 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+fn ensure_eula_accepted(accept_eula: bool) -> anyhow::Result<()> {
+    if accept_eula {
+        return Ok(());
+    }
+
+    println!("Minecraft EULA: https://aka.ms/MinecraftEULA");
+    print!("Do you accept the Minecraft EULA? (y/N): ");
+    std::io::Write::flush(&mut std::io::stdout())?;
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    let answer = input.trim().to_ascii_lowercase();
+    if answer == "y" || answer == "yes" {
+        return Ok(());
+    }
+
+    anyhow::bail!("EULA not accepted. Re-run with --accept-eula to proceed.");
 }
 
 async fn follow_logs(lines: usize, daemon_logs: bool) -> anyhow::Result<()> {
