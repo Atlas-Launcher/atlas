@@ -54,7 +54,7 @@ impl WhitelistSync {
         let current_etag = self.current_etag.lock().unwrap().clone();
         println!("Syncing whitelist from Hub... (current etag: {:?})", current_etag);
         
-        let (players, new_etag) = self.hub.get_whitelist_with_version(pack_id, current_etag.as_deref()).await?;
+        let (players, new_etag): (Vec<WhitelistEntry>, String) = self.hub.get_whitelist_with_version(pack_id, current_etag.as_deref()).await?;
         
         if players.is_empty() && current_etag.is_some() {
             // ETag matched, no update needed
