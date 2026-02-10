@@ -252,7 +252,11 @@ async fn apply_pack_update(
         guard.env.clone()
     };
 
-    let child = spawn_server(&launch_plan, &server_root, &env)
+    let logs = {
+        let guard = state.lock().await;
+        guard.logs.clone()
+    };
+    let child = spawn_server(&launch_plan, &server_root, &env, logs)
         .await
         .map_err(|err| format!("failed to start server: {err}"))?;
     let pid = child.id().unwrap_or_default() as i32;
