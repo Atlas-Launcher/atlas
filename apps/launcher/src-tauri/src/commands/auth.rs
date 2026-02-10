@@ -225,9 +225,14 @@ pub async fn restore_atlas_session(
         return Ok(None);
     };
 
-    let session = auth::ensure_fresh_atlas_session(session)
+    let mut session = auth::ensure_fresh_atlas_session(session)
         .await
         .map_err(|err| err.to_string())?;
+    if session.profile.mojang_uuid.as_deref().unwrap_or_default().is_empty() {
+        session = auth::refresh_atlas_profile(session)
+            .await
+            .map_err(|err| err.to_string())?;
+    }
     auth::save_atlas_session(&session).map_err(|err| err.to_string())?;
 
     let profile = session.profile.clone();

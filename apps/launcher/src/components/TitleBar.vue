@@ -53,21 +53,38 @@ function atlasIdentity(profile: AtlasProfile): string {
 }
 
 const atlasSignedIn = computed(() => !!props.atlasProfile);
-const mojangSignedIn = computed(() => !!props.profile || !!props.atlasProfile?.mojang_uuid);
+const mojangSignedIn = computed(() => !!props.profile);
+const hasLinkedMojang = computed(() => !!props.atlasProfile?.mojang_uuid);
+
+function normalizeUuid(value?: string | null) {
+  return (value ?? "").trim().toLowerCase().replace(/-/g, "");
+}
+
+const isLaunchReady = computed(() => {
+  if (!props.atlasProfile || !props.profile) {
+    return false;
+  }
+  const atlasUuid = normalizeUuid(props.atlasProfile.mojang_uuid);
+  const launcherUuid = normalizeUuid(props.profile.id);
+  if (!atlasUuid || !launcherUuid) {
+    return false;
+  }
+  return atlasUuid === launcherUuid;
+});
 
 const needsSetup = computed(() => needsLinking.value || needsLinkCompletion.value);
 
 const statusText = computed(() => {
   if (props.isSigningIn) return "Signing in";
-  if (needsSetup.value) return "Finish setup";
-  if (!atlasSignedIn.value && !mojangSignedIn.value) return "Sign in to Atlas";
   if (!atlasSignedIn.value) return "Sign in to Atlas";
-  if (!mojangSignedIn.value) return "Link Minecraft";
+  if (!mojangSignedIn.value) return "Sign in with Microsoft";
+  if (needsSetup.value) return "Finish setup";
+  if (!isLaunchReady.value) return "Finish setup";
   return "Ready";
 });
 
 const statusDotClass = computed(() => {
-  if (mojangSignedIn.value && atlasSignedIn.value) {
+  if (isLaunchReady.value) {
     return "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
   }
   if (mojangSignedIn.value || atlasSignedIn.value) {
@@ -75,9 +92,7 @@ const statusDotClass = computed(() => {
   }
   return "bg-red-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
 });
-const needsLinking = computed(
-  () => !!props.atlasProfile && !props.atlasProfile.mojang_uuid && !props.profile
-);
+const needsLinking = computed(() => !!props.atlasProfile && !hasLinkedMojang.value);
 const needsLinkCompletion = computed(() => {
   if (!props.atlasProfile) {
     return false;
