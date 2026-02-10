@@ -70,12 +70,13 @@ pub async fn ensure_watchers(state: SharedState) {
             sleep(poll_interval).await;
         }
     });
+    info!("starting whitelist watcher");
 
     let update_state = state.clone();
     let update_hub = hub.clone();
     let update_config = config.clone();
     tokio::spawn(async move {
-        let poll_interval = Duration::from_secs(300); // 5 minutes
+        let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 5 minutes
         loop {
             match poll_pack_update(update_hub.clone(), &update_config, update_state.clone()).await {
                 Ok(()) => {},
@@ -84,6 +85,7 @@ pub async fn ensure_watchers(state: SharedState) {
             sleep(poll_interval).await;
         }
     });
+    info!("starting pack update watcher");
 }
 
 #[derive(Debug, Deserialize)]
@@ -115,23 +117,74 @@ async fn poll_pack_update(
         guard.pack_etag.clone()
     };
 
-    match hub.get_pack_metadata_with_etag(&config.pack_id, &config.channel, current_etag.as_deref()).await {
-        Ok((None, _)) => {
-            // Metadata hasn't changed, no update needed
+    // Send the stored ETag as a quoted If-None-Match header (server expects quoted values).
+    let current_etag_header = current_etag.as_ref().map(|tok| format!("\"{}\"", tok));
+    info!("poll_pack_update: sending If-None-Match={:?}", current_etag_header);
+
+    match hub
+        .get_pack_metadata_with_etag(&config.pack_id, &config.channel, current_etag_header.as_deref())
+        .await
+    {
+        Ok((None, returned_etag)) => {
+            // Not modified. Persist the returned etag (normalized) so future requests send If-None-Match.
+            if !returned_etag.is_empty() {
+                let normalized = normalize_etag_value(&returned_etag);
+                let mut guard = state.lock().await;
+                guard.pack_etag = Some(normalized.clone());
+                info!("pack metadata not modified; stored etag={}", normalized);
+            } else {
+                info!("pack metadata not modified; no ETag returned");
+            }
             return Ok(());
         }
         Ok((Some(metadata), new_etag)) => {
-            // Metadata has changed, update stored etag and proceed with update
-            let mut guard = state.lock().await;
-            guard.pack_etag = Some(new_etag);
-            drop(guard);
+            // Always persist the etag (if non-empty)
+            if !new_etag.is_empty() {
+                let normalized = normalize_etag_value(&new_etag);
+                let mut guard = state.lock().await;
+                guard.pack_etag = Some(normalized.clone());
+                info!("pack metadata returned new etag={}", normalized);
+            }
 
-            info!("pack update detected; applying update (build: {})", metadata.build_id);
+            // IMPORTANT: only apply update if build actually differs
+            let current_build_id = {
+                let guard = state.lock().await;
+                guard.current_pack_build_id.clone()
+            };
+
+            if current_build_id.as_deref() == Some(metadata.build_id.as_str()) {
+                // metadata changed / revalidated, but build didn't
+                info!(
+                "pack metadata refreshed; build unchanged (build: {})",
+                metadata.build_id
+            );
+                return Ok(());
+            }
+
+            info!(
+            "pack update detected; applying update (build: {})",
+            metadata.build_id
+        );
+
+            // proceed with update: capture the build id so we can update shared state on success
+            let target_build_id = metadata.build_id.clone();
+            // Apply the pack update
+            if let Err(err) = apply_pack_update(hub, config, state.clone()).await {
+                return Err(err);
+            }
+
+            // On successful update, persist current_pack_build_id in state
+            {
+                let mut guard = state.lock().await;
+                guard.current_pack_build_id = Some(target_build_id);
+            }
+            return Ok(());
         }
         Err(err) => {
             warn!("pack metadata check failed: {err}, falling back to direct update");
         }
     }
+
 
     // Apply the pack update
     apply_pack_update(hub, config, state).await
@@ -164,20 +217,44 @@ async fn sync_whitelist(
     let server_root = current_server_root(&state)
         .await
         .ok_or_else(|| "server root not configured".to_string())?;
-    sync_whitelist_to_root(hub, pack_id, &server_root).await
+    sync_whitelist_to_root(hub, pack_id, &server_root, state).await
 }
 
 pub(crate) async fn sync_whitelist_to_root(
     hub: Arc<HubClient>,
     pack_id: &str,
     server_root: &PathBuf,
+    state: SharedState,
 ) -> Result<(), String> {
-    let players = hub
-        .get_whitelist(pack_id)
+    // Try to use ETag-aware endpoint to avoid unnecessary writes
+    let current_etag = {
+        let guard = state.lock().await;
+        guard.whitelist_etag.clone()
+    };
+
+    // Quote the bare token when sending If-None-Match to match server expectation
+    let current_etag_header = current_etag.as_ref().map(|tok| format!("\"{}\"", tok));
+
+    let (players, etag) = hub
+        .get_whitelist_with_version(pack_id, current_etag_header.as_deref())
         .await
         .map_err(|err| format!("whitelist fetch failed: {err}"))?;
+
+    // If the server returned 304 (represented by empty players vec), skip writing and persist etag
+    if players.is_empty() {
+        if !etag.is_empty() {
+            let normalized = normalize_etag_value(&etag);
+            let mut guard = state.lock().await;
+            guard.whitelist_etag = Some(normalized);
+            info!("whitelist not modified; stored etag={}", etag);
+        } else {
+            info!("whitelist not modified; no ETag returned");
+        }
+        return Ok(());
+    }
+
     let whitelist_data = players
-        .into_iter()
+        .iter()
         .map(|player| {
             serde_json::json!({
                 "name": player.name,
@@ -186,17 +263,32 @@ pub(crate) async fn sync_whitelist_to_root(
         })
         .collect::<Vec<_>>();
 
-    let path = server_root.join("current").join("whitelist.json");
     let content = serde_json::to_string_pretty(&whitelist_data)
         .map_err(|err| format!("whitelist serialize failed: {err}"))?;
+
+    let path = server_root.join("current").join("whitelist.json");
     let previous = tokio::fs::read_to_string(&path).await.ok();
     if previous.as_deref() == Some(content.as_str()) {
+        // Persist the returned etag even if content matches
+        if !etag.is_empty() {
+            let normalized = normalize_etag_value(&etag);
+            let mut guard = state.lock().await;
+            guard.whitelist_etag = Some(normalized);
+        }
         return Ok(());
     }
 
     tokio::fs::write(&path, content)
         .await
         .map_err(|err| format!("whitelist write failed: {err}"))?;
+
+    // Persist etag after successful write
+    {
+        let mut guard = state.lock().await;
+        if !etag.is_empty() {
+            guard.whitelist_etag = Some(etag);
+        }
+    }
 
     if let Ok(Some(settings)) = load_rcon_settings(&server_root.join("current")).await {
         let rcon = RconClient::new(settings.address, settings.password);
@@ -268,5 +360,32 @@ async fn apply_pack_update(
         meta: Default::default(),
     };
 
+    // Try to read the current build id from disk (if present) and persist into shared state
+    let build_id_path = server_root.join("current").join(".runner").join("build_id.txt");
+    if let Ok(content) = tokio::fs::read_to_string(&build_id_path).await {
+        let id = content.trim().to_string();
+        guard.current_pack_build_id = Some(id);
+    }
+
     Ok(())
 }
+
+// Helper: normalize an ETag string to its bare token (strip surrounding quotes)
+fn normalize_etag_value(s: &str) -> String {
+    let s = s.trim();
+    if s.len() >= 2 && ((s.starts_with("\"") && s.ends_with("\"")) || (s.starts_with("W/") && s.len() >= 3)) {
+        // remove weak prefix and quotes if present
+        let mut v = s.to_string();
+        if v.starts_with("W/") {
+            v = v[2..].to_string();
+            v = v.trim().to_string();
+        }
+        if v.starts_with("\"") && v.ends_with("\"") && v.len() >= 2 {
+            v = v[1..v.len()-1].to_string();
+        }
+        v
+    } else {
+        s.to_string()
+    }
+}
+
