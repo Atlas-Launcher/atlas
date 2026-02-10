@@ -46,7 +46,7 @@ pub async fn ensure_watchers(state: SharedState) {
     };
 
     // We'll create HubClient instances inside each watcher task instead of capturing one here.
-    let hub_url = config.hub_url.clone();
+    let hub_url = "https://atlas.nathanm.org";
     let hub_deploy_key = config.deploy_key.clone();
 
     // Try to load persisted pack etag from disk (if present). This allows the watcher to send If-None-Match
@@ -77,73 +77,115 @@ pub async fn ensure_watchers(state: SharedState) {
         guard.watcher_done = Some(watcher_done_flag.clone());
     }
 
-    // Spawn a supervisor thread that will start the worker, join it, and restart it if it exits
-    // unexpectedly while watcher_stop is not set. We store the supervisor handle in state so
-    // the daemon can join it during shutdown.
+    // Spawn supervisor as an async task on the current runtime; this avoids cross-runtime deadlocks
+    // and keeps all async locking on the same runtime.
     let supervisor_state = state.clone();
-    let supervisor_res = std::thread::Builder::new()
-        .name("atlas-watcher-supervisor".into())
-        .spawn(move || {
-            // Exponential backoff state
-            let mut failures: u32 = 0;
-            loop {
-                // reset done flag
-                watcher_done_flag.store(false, std::sync::atomic::Ordering::Relaxed);
+    let supervisor_handle = tokio::spawn(async move {
+        let mut failures: u32 = 0;
+        loop {
+            watcher_done_flag.store(false, std::sync::atomic::Ordering::Relaxed);
 
-                // Spawn the actual worker thread which runs a current-thread tokio runtime
-                let worker_stop = watcher_stop_flag.clone();
-                let worker_done = watcher_done_flag.clone();
-                let whub = hub_url.clone();
-                let wdeploy = hub_deploy_key.clone();
-                let w_whitelist_cfg = config.clone();
-                let w_update_cfg = config.clone();
-                let w_state_whitelist = supervisor_state.clone();
-                let w_state_update = supervisor_state.clone();
+            let worker_stop = watcher_stop_flag.clone();
+            let worker_done = watcher_done_flag.clone();
+            let whub = hub_url.clone();
+            let wdeploy = hub_deploy_key.clone();
+            let w_whitelist_cfg = config.clone();
+            let w_update_cfg = config.clone();
+            let w_state_whitelist = supervisor_state.clone();
+            let w_state_update = supervisor_state.clone();
 
-                let worker_res = std::thread::Builder::new()
-                    .name("atlas-watcher-worker".into())
-                    .spawn(move || {
-                        // ...worker thread code...
-                    });
+            let start = std::time::Instant::now();
 
-                let worker = match worker_res {
-                    Ok(handle) => handle,
-                    Err(e) => {
-                        error!("failed to spawn watcher worker: {e}");
-                        failures = failures.saturating_add(1);
-                        std::thread::sleep(std::time::Duration::from_secs(1));
-                        continue;
+            // Spawn worker as a tokio task; worker runs two loops concurrently and returns when they exit.
+            let worker_handle = tokio::spawn(async move {
+                // Whitelist loop
+                let whitelist_fut = async {
+                    let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS);
+                    loop {
+                        if worker_stop.load(std::sync::atomic::Ordering::Relaxed) {
+                            info!("watcher worker: whitelist loop exiting due to stop request");
+                            break;
+                        }
+
+                        match HubClient::new(&whub) {
+                            Ok(mut h) => {
+                                h.set_service_token(wdeploy.clone());
+                                let h = Arc::new(h);
+                                if let Err(err) = poll_whitelist(h, &w_whitelist_cfg, w_state_whitelist.clone()).await {
+                                    warn!("whitelist poll error: {err}");
+                                }
+                            }
+                            Err(err) => {
+                                warn!("watcher worker: failed to create hub client for whitelist: {err}");
+                                sleep(Duration::from_secs(5)).await;
+                                continue;
+                            }
+                        }
+
+                        sleep(poll_interval).await;
                     }
                 };
 
-                let _ = worker.join();
-                watcher_done_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                // Update loop
+                let update_fut = async {
+                    let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS);
+                    loop {
+                        if worker_stop.load(std::sync::atomic::Ordering::Relaxed) {
+                            info!("watcher worker: update loop exiting due to stop request");
+                            break;
+                        }
 
-                if watcher_stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                    info!("watcher supervisor: stop requested, exiting");
-                    break;
-                }
+                        match HubClient::new(&whub) {
+                            Ok(mut h) => {
+                                h.set_service_token(wdeploy.clone());
+                                let h = Arc::new(h);
+                                if let Err(err) = poll_pack_update(h, &w_update_cfg, w_state_update.clone()).await {
+                                    warn!("pack update poll error: {err}");
+                                }
+                            }
+                            Err(err) => {
+                                warn!("watcher worker: failed to create hub client for updates: {err}");
+                                sleep(Duration::from_secs(5)).await;
+                                continue;
+                            }
+                        }
 
+                        sleep(poll_interval).await;
+                    }
+                };
+
+                tokio::join!(whitelist_fut, update_fut);
+                worker_done.store(true, std::sync::atomic::Ordering::Relaxed);
+            });
+
+            // Wait for worker to finish and measure runtime
+            let _ = worker_handle.await;
+            watcher_done_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+
+            let elapsed_ms = start.elapsed().as_millis() as u64;
+            // If the worker ran for a reasonable time, treat this as non-failure and reset backoff;
+            // otherwise increment the failure counter (used to compute exponential backoff below).
+            if elapsed_ms >= 10_000 {
+                failures = 0;
+            } else {
                 failures = failures.saturating_add(1);
-                let backoff_ms = std::cmp::min(30_000, 1_000u64.saturating_mul(2u64.saturating_pow(std::cmp::min(failures, 10) as u32)));
-                if failures > 5 {
-                    warn!("watcher supervisor: worker exited unexpectedly {} times; backing off for {}ms", failures, backoff_ms);
-                } else {
-                    warn!("watcher supervisor: worker exited unexpectedly, restarting in {}ms", backoff_ms);
-                }
-                std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
             }
-        });
 
-    let supervisor_handle = match supervisor_res {
-        Ok(handle) => handle,
-        Err(e) => {
-            error!("failed to spawn watcher supervisor thread: {e}");
-            let mut guard = state.lock().await;
-            guard.watchers_started = false;
-            return;
+            if watcher_stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                info!("watcher supervisor: stop requested, exiting");
+                break;
+            }
+
+            let backoff_ms = std::cmp::min(30_000, 1_000u64.saturating_mul(2u64.saturating_pow(std::cmp::min(failures, 10) as u32)));
+            if failures > 5 {
+                warn!("watcher supervisor: worker exited unexpectedly {} times; backing off for {}ms", failures, backoff_ms);
+            } else {
+                warn!("watcher supervisor: worker exited unexpectedly, restarting in {}ms", backoff_ms);
+            }
+
+            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
         }
-    };
+    });
 
     // Store the supervisor handle so the daemon can wait for it during shutdown
     {
@@ -195,11 +237,14 @@ async fn poll_pack_update(
             // Not modified. Persist the returned etag (normalized) so future requests send If-None-Match.
             if !returned_etag.is_empty() {
                 let normalized = normalize_etag_value(&returned_etag);
-                let mut guard = state.lock().await;
-                guard.pack_etag = Some(normalized.clone());
+                // update in-memory state while holding lock, then drop before doing I/O
+                {
+                    let mut guard = state.lock().await;
+                    guard.pack_etag = Some(normalized.clone());
+                }
                 debug!("pack metadata not modified; stored etag={}", normalized);
 
-                // Persist to disk
+                // Persist to disk (do not hold state lock while awaiting)
                 if let Some(server_root) = current_server_root(&state).await {
                     let _ = write_pack_etag_to_disk(&server_root, &normalized).await;
                 }
@@ -212,11 +257,13 @@ async fn poll_pack_update(
             // Always persist the etag (if non-empty)
             if !new_etag.is_empty() {
                 let normalized = normalize_etag_value(&new_etag);
-                let mut guard = state.lock().await;
-                guard.pack_etag = Some(normalized.clone());
+                // set in-memory state then persist without holding the lock
+                {
+                    let mut guard = state.lock().await;
+                    guard.pack_etag = Some(normalized.clone());
+                }
                 debug!("pack metadata returned new etag={}", normalized);
 
-                // Persist to disk
                 if let Some(server_root) = current_server_root(&state).await {
                     let _ = write_pack_etag_to_disk(&server_root, &normalized).await;
                 }
@@ -320,12 +367,14 @@ pub(crate) async fn sync_whitelist_to_root(
     if players.is_empty() {
         if !etag.is_empty() {
             let normalized = normalize_etag_value(&etag);
-            let mut guard = state.lock().await;
-            guard.whitelist_etag = Some(normalized.clone());
+            // set in-memory state then persist without holding the lock
+            {
+                let mut guard = state.lock().await;
+                guard.whitelist_etag = Some(normalized.clone());
+            }
             debug!("whitelist not modified; stored etag={}", etag);
 
-            // Persist whitelist etag to disk alongside pack etag so restarts keep both
-            if let Some(parent) = server_root.join(".runner").parent() {
+            if let Some(_parent) = server_root.join(".runner").parent() {
                 let _ = write_whitelist_etag_to_disk(server_root, &normalized).await;
             }
         } else {
