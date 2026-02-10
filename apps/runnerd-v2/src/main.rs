@@ -4,10 +4,14 @@ use runner_v2_utils::{ensure_dir, runtime_paths_v2};
 
 mod lock;
 mod daemon;
+mod config;
+mod supervisor;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    tracing_subscriber::fmt::init();
+    let logs = supervisor::LogStore::new(2000);
+    let log_writer = logs.daemon_writer();
+    tracing_subscriber::fmt().with_writer(log_writer).init();
 
     let paths = runtime_paths_v2();
     ensure_dir(&paths.runtime_dir)?;
@@ -35,5 +39,5 @@ async fn main() -> std::io::Result<()> {
     let listener = runner_ipc_v2::socket::bind(&paths.socket_path).await?;
     info!("runnerd2 listening at {:?}", paths.socket_path);
 
-    daemon::serve(listener).await
+    daemon::serve(listener, logs).await
 }

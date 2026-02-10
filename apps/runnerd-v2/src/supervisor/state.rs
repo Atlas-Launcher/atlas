@@ -1,0 +1,50 @@
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::process::Child;
+use tokio::sync::Mutex;
+
+use runner_core_v2::proto::{ProfileId, ServerStatus};
+use runner_provision_v2::LaunchPlan;
+
+use super::logs::LogStore;
+
+pub type SharedState = Arc<Mutex<ServerState>>;
+
+pub struct ServerState {
+    pub(crate) status: ServerStatus,
+    pub(crate) child: Option<Child>,
+    pub(crate) profile: Option<ProfileId>,
+    pub(crate) server_root: Option<PathBuf>,
+    pub(crate) env: BTreeMap<String, String>,
+    pub(crate) launch_plan: Option<LaunchPlan>,
+    pub(crate) restart_attempts: u32,
+    pub(crate) restart_disabled: bool,
+    pub(crate) watchers_started: bool,
+    pub(crate) monitor_started: bool,
+    pub(crate) last_start_ms: Option<u64>,
+    pub(crate) logs: LogStore,
+}
+
+impl ServerState {
+    pub fn new(logs: LogStore) -> Self {
+        Self {
+            status: ServerStatus::Idle {},
+            child: None,
+            profile: None,
+            server_root: None,
+            env: BTreeMap::new(),
+            launch_plan: None,
+            restart_attempts: 0,
+            restart_disabled: false,
+            watchers_started: false,
+            monitor_started: false,
+            last_start_ms: None,
+            logs,
+        }
+    }
+
+    pub fn is_running(&self) -> bool {
+        matches!(self.status, ServerStatus::Running { .. } | ServerStatus::Starting { .. })
+    }
+}

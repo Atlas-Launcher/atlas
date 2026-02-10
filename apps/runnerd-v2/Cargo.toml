@@ -13,6 +13,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 async-trait = "0.1.89"
 reqwest = "0.12.12"
+dirs = "5"
+serde = { version = "1", features = ["derive"] }
+atlas-client = { path = "../../crates/atlas-client" }
+runner-v2-rcon = { path = "../../crates/runner-v2-rcon" }
 
 runner-core-v2 = { path = "../../crates/runner-core-v2" }
 runner-ipc-v2  = { path = "../../crates/runner-ipc-v2" }
