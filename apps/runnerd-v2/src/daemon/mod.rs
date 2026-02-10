@@ -2,6 +2,7 @@ use std::process;
 use std::sync::Arc;
 use tokio::net::UnixListener;
 use tokio::sync::Mutex;
+use tracing::warn;
 
 use runner_core_v2::proto::*;
 use runner_ipc_v2::framing;
@@ -48,6 +49,10 @@ async fn handle_conn(
 
         match req_env.payload {
             Request::Shutdown {} => {
+                if let Err(err) = stop_server(false, state.clone()).await {
+                    warn!("shutdown stop failed: {}", err.message);
+                    let _ = stop_server(true, state.clone()).await;
+                }
                 let resp = Response::ShutdownAck {};
                 let out = Outbound::Response(Envelope { id: req_id, payload: resp });
                 framing::send_outbound(&mut framed, &out).await?;
