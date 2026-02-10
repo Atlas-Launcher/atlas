@@ -4,10 +4,10 @@ use crate::models::{AtlasPackSyncResult, LaunchEvent};
 use crate::net::http::shared_client;
 use crate::paths::{ensure_dir, normalize_path};
 use crate::telemetry;
-use protocol::config::mods::{self, ClientOs, ModEntry, ModHashes, ModSide};
+use protocol::{DependencyKind, DependencySide, HashAlgorithm, Platform};
 use serde::Deserialize;
 use sha1::{Digest as Sha1Digest, Sha1};
-use sha2::Sha512;
+use sha2::{Sha256, Sha512};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -35,13 +35,6 @@ impl PointerKind {
             Self::Resource => ".zip",
         }
     }
-}
-
-#[derive(Debug, Clone)]
-struct PointerFile {
-    relative_path: String,
-    entry: ModEntry,
-    kind: PointerKind,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -193,14 +186,17 @@ pub async fn sync_atlas_pack(
     let blob_modloader = loader_kind_to_modloader(blob.metadata.loader).to_string();
     let mut expected_mod_paths = HashSet::<PathBuf>::new();
 
-    let mut pointer_files = Vec::new();
+    let mut raw_file_paths = HashSet::<String>::new();
+    for raw in &blob.manifest.raw_files {
+        raw_file_paths.insert(raw.path.clone());
+    }
+
     let total_files = blob.files.len() as u64;
     let mut processed_files = 0u64;
     for (relative_path, bytes) in blob.files {
-        if let Some(pointer) = parse_pointer_file(&relative_path, &bytes)? {
-            pointer_files.push(pointer);
+        if is_pointer_path(&relative_path) {
             remove_blob_file_if_exists(&minecraft_dir, &relative_path)?;
-        } else {
+        } else if !raw_file_paths.contains(&relative_path) {
             let safe_relative = sanitize_relative_path(&relative_path)?;
             if is_mod_relative_path(&safe_relative) {
                 expected_mod_paths.insert(safe_relative);
@@ -219,38 +215,27 @@ pub async fn sync_atlas_pack(
     }
 
     let mut jobs = Vec::new();
-    for pointer in pointer_files {
-        if !applies_to_this_client(&pointer.entry) {
+    for dep in &blob.manifest.dependencies {
+        if !applies_to_this_client(dep) {
             telemetry::info(format!(
-                "skipping pointer for client constraints: {}",
-                pointer.relative_path
+                "skipping dependency for client constraints: {}",
+                dep.pointer_path
             ));
             continue;
         }
 
-        let Some(url) = pointer.entry.download.url.clone() else {
+        if dep.url.trim().is_empty() {
             telemetry::warn(format!(
-                "pointer missing download url: {}",
-                pointer.relative_path
-            ));
-            continue;
-        };
-        if url.trim().is_empty() {
-            telemetry::warn(format!(
-                "pointer has empty download url: {}",
-                pointer.relative_path
+                "dependency has empty download url: {}",
+                dep.pointer_path
             ));
             continue;
         }
 
-        let relative_asset_path =
-            destination_relative_path(&pointer.relative_path, pointer.kind, Some(&url));
-        jobs.push((
-            relative_asset_path,
-            url,
-            pointer.entry.download.hashes.clone(),
-            pointer.kind,
-        ));
+        let pointer_path = dependency_pointer_path(dep);
+        let kind = dependency_kind_to_pointer_kind(dep.kind);
+        let relative_asset_path = destination_relative_path(&pointer_path, kind, Some(&dep.url));
+        jobs.push((relative_asset_path, dep));
     }
 
     let total_assets = jobs.len() as u64;
@@ -264,26 +249,25 @@ pub async fn sync_atlas_pack(
     }
     let client = shared_client().clone();
     let mut hydrated_assets = 0u64;
-    for (relative_asset_path, url, hashes, kind) in jobs {
+    for (relative_asset_path, dep) in jobs {
         let safe_relative = sanitize_relative_path(&relative_asset_path)?;
-        if kind == PointerKind::Mod && is_mod_relative_path(&safe_relative) {
+        if dependency_kind_to_pointer_kind(dep.kind) == PointerKind::Mod
+            && is_mod_relative_path(&safe_relative)
+        {
             expected_mod_paths.insert(safe_relative.clone());
         }
         let asset_path = minecraft_dir.join(&safe_relative);
         if asset_path.exists() {
-            let can_reuse = match hashes.as_ref() {
-                Some(_) => match verify_hashes(&asset_path, hashes.as_ref()) {
-                    Ok(()) => true,
-                    Err(err) => {
-                        telemetry::warn(format!(
-                            "asset changed or corrupt; redownloading {}: {}",
-                            asset_path.display(),
-                            err
-                        ));
-                        false
-                    }
-                },
-                None => true,
+            let can_reuse = match verify_dependency_hash(&asset_path, dep) {
+                Ok(()) => true,
+                Err(err) => {
+                    telemetry::warn(format!(
+                        "asset changed or corrupt; redownloading {}: {}",
+                        asset_path.display(),
+                        err
+                    ));
+                    false
+                }
             };
             if can_reuse {
                 hydrated_assets += 1;
@@ -296,8 +280,8 @@ pub async fn sync_atlas_pack(
                 continue;
             }
         }
-        download_raw(&client, &url, &asset_path, None, true).await?;
-        verify_hashes(&asset_path, hashes.as_ref())?;
+        download_raw(&client, &dep.url, &asset_path, None, true).await?;
+        verify_dependency_hash(&asset_path, dep)?;
         hydrated_assets += 1;
         emit_sync(
             window,
@@ -535,34 +519,8 @@ fn remove_blob_file_if_exists(game_dir: &Path, relative_path: &str) -> Result<()
     Ok(())
 }
 
-fn parse_pointer_file(
-    relative_path: &str,
-    bytes: &[u8],
-) -> Result<Option<PointerFile>, LibraryError> {
-    if !relative_path.ends_with(".mod.toml") && !relative_path.ends_with(".res.toml") {
-        return Ok(None);
-    }
-
-    let contents = std::str::from_utf8(bytes)
-        .map_err(|err| format!("Pointer file is not valid UTF-8 ({}): {err}", relative_path))?;
-    let kind = if relative_path.ends_with(".mod.toml") {
-        PointerKind::Mod
-    } else {
-        PointerKind::Resource
-    };
-
-    let entry = match kind {
-        PointerKind::Mod => mods::parse_mod_toml(contents)
-            .map_err(|err| format!("Invalid mod pointer file {}: {err}", relative_path))?,
-        PointerKind::Resource => protocol::config::resources::parse_resource_toml(contents)
-            .map_err(|err| format!("Invalid resource pointer file {}: {err}", relative_path))?,
-    };
-
-    Ok(Some(PointerFile {
-        relative_path: relative_path.to_string(),
-        entry,
-        kind,
-    }))
+fn is_pointer_path(relative_path: &str) -> bool {
+    relative_path.ends_with(".mod.toml") || relative_path.ends_with(".res.toml")
 }
 
 fn sanitize_relative_path(value: &str) -> Result<PathBuf, LibraryError> {
@@ -611,6 +569,28 @@ fn destination_relative_path(pointer_path: &str, kind: PointerKind, url: Option<
 
     let extension = extension_from_url(url).unwrap_or_else(|| kind.default_extension().to_string());
     format!("{}{}", base, extension)
+}
+
+fn dependency_kind_to_pointer_kind(kind: DependencyKind) -> PointerKind {
+    match kind {
+        DependencyKind::Mod => PointerKind::Mod,
+        DependencyKind::Resource => PointerKind::Resource,
+    }
+}
+
+fn dependency_pointer_path(dep: &protocol::Dependency) -> String {
+    let trimmed = dep.pointer_path.trim();
+    if !trimmed.is_empty() {
+        return trimmed.to_string();
+    }
+
+    let base = url_filename_stem(&dep.url).unwrap_or_else(|| "asset".to_string());
+    let base = slugify_filename(&base);
+
+    match dep.kind {
+        DependencyKind::Mod => format!("mods/{}.mod.toml", base),
+        DependencyKind::Resource => format!("resources/{}.res.toml", base),
+    }
 }
 
 fn extension_from_url(url: Option<&str>) -> Option<String> {
@@ -728,66 +708,48 @@ fn prune_empty_mod_subdirs(mods_dir: &Path) -> Result<(), LibraryError> {
     Ok(())
 }
 
-fn applies_to_this_client(entry: &ModEntry) -> bool {
-    match entry.metadata.side {
-        ModSide::Server => return false,
-        ModSide::Client | ModSide::Both => {}
+fn applies_to_this_client(dep: &protocol::Dependency) -> bool {
+    match dep.side {
+        DependencySide::Server => return false,
+        DependencySide::Client | DependencySide::Both => {}
     }
 
-    match current_client_os() {
-        Some(os) => !entry.metadata.disabled_client_oses.contains(&os),
+    match current_platform() {
+        Some(platform) => dep.platform.allows(platform),
         None => true,
     }
 }
 
-fn current_client_os() -> Option<ClientOs> {
+fn current_platform() -> Option<Platform> {
     match std::env::consts::OS {
-        "macos" => Some(ClientOs::Macos),
-        "windows" => Some(ClientOs::Windows),
-        "linux" => Some(ClientOs::Linux),
+        "macos" => Some(Platform::Macos),
+        "windows" => Some(Platform::Windows),
+        "linux" => Some(Platform::Linux),
         _ => None,
     }
 }
 
-fn verify_hashes(path: &Path, hashes: Option<&ModHashes>) -> Result<(), LibraryError> {
-    let Some(hashes) = hashes else {
-        return Ok(());
-    };
-
-    if let Some(expected_sha1) = hashes
-        .sha1
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    {
-        let actual = sha1_file(path)?;
-        if !actual.eq_ignore_ascii_case(expected_sha1) {
-            return Err(format!(
-                "SHA-1 mismatch for {} (expected {}, got {})",
-                path.display(),
-                expected_sha1,
-                actual
-            )
-            .into());
-        }
+fn verify_dependency_hash(path: &Path, dep: &protocol::Dependency) -> Result<(), LibraryError> {
+    let expected = dep.hash.hex.trim();
+    if expected.is_empty() {
+        return Err(format!("missing hash for dependency {}", dep.url).into());
     }
 
-    if let Some(expected_sha512) = hashes
-        .sha512
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
+    let actual = match HashAlgorithm::try_from(dep.hash.algorithm).unwrap_or(HashAlgorithm::Sha256)
     {
-        let actual = sha512_file(path)?;
-        if !actual.eq_ignore_ascii_case(expected_sha512) {
-            return Err(format!(
-                "SHA-512 mismatch for {} (expected {}, got {})",
-                path.display(),
-                expected_sha512,
-                actual
-            )
-            .into());
-        }
+        HashAlgorithm::Sha1 => sha1_file(path)?,
+        HashAlgorithm::Sha256 => sha256_file(path)?,
+        HashAlgorithm::Sha512 => sha512_file(path)?,
+    };
+
+    if !actual.eq_ignore_ascii_case(expected) {
+        return Err(format!(
+            "hash mismatch for {} (expected {}, got {})",
+            path.display(),
+            expected,
+            actual
+        )
+        .into());
     }
 
     Ok(())
@@ -807,6 +769,50 @@ fn sha512_file(path: &Path) -> Result<String, LibraryError> {
     let mut hasher = Sha512::new();
     hasher.update(&bytes);
     Ok(hex::encode(hasher.finalize()))
+}
+
+fn sha256_file(path: &Path) -> Result<String, LibraryError> {
+    let bytes = fs::read(path)
+        .map_err(|err| format!("Failed to read {} for SHA-256: {err}", path.display()))?;
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn slugify_filename(value: &str) -> String {
+    let mut out = String::new();
+    let mut last_dash = false;
+    for ch in value.chars() {
+        let normalized = ch.to_ascii_lowercase();
+        if normalized.is_ascii_alphanumeric() {
+            out.push(normalized);
+            last_dash = false;
+            continue;
+        }
+        if !last_dash {
+            out.push('-');
+            last_dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
+}
+
+fn url_filename_stem(url: &str) -> Option<String> {
+    let parsed = Url::parse(url).ok()?;
+    let last = parsed
+        .path_segments()
+        .and_then(|segments| segments.last())
+        .unwrap_or_default();
+    if last.is_empty() {
+        return None;
+    }
+
+    let stem = Path::new(last).file_stem()?.to_str()?.to_string();
+    if stem.trim().is_empty() {
+        None
+    } else {
+        Some(stem)
+    }
 }
 
 fn emit_sync(
