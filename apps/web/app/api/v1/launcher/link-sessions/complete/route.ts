@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { and, eq, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { launcherLinkSessions, users } from "@/lib/db/schema";
+import { launcherLinkSessions, users, packMembers } from "@/lib/db/schema";
+import { recomputeWhitelist } from "@/lib/packs/whitelist";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -66,6 +67,16 @@ export async function POST(request: Request) {
         updatedAt: new Date(),
       })
       .where(eq(users.id, linkSession.claimedUserId));
+
+    // Increment whitelist versions when clearing Mojang info
+    const userPacks = await db
+      .select({ packId: packMembers.packId })
+      .from(packMembers)
+      .where(eq(packMembers.userId, linkSession.claimedUserId));
+
+    for (const { packId } of userPacks) {
+      await recomputeWhitelist(packId);
+    }
   }
 
   await db
@@ -76,6 +87,16 @@ export async function POST(request: Request) {
       updatedAt: new Date(),
     })
     .where(eq(users.id, linkSession.claimedUserId));
+
+  // Increment whitelist versions for all packs this user is a member of
+  const userPacks = await db
+    .select({ packId: packMembers.packId })
+    .from(packMembers)
+    .where(eq(packMembers.userId, linkSession.claimedUserId));
+
+  for (const { packId } of userPacks) {
+    await recomputeWhitelist(packId);
+  }
 
   await db
     .update(launcherLinkSessions)

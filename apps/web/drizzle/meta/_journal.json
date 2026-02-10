@@ -64,6 +64,20 @@
       "when": 1770601924480,
       "tag": "0008_great_doctor_doom",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1770744366965,
+      "tag": "0009_old_night_nurse",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1770744567674,
+      "tag": "0010_ambitious_wind_dancer",
+      "breakpoints": true
     }
   ]
 }

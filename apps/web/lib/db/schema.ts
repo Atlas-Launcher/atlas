@@ -202,6 +202,7 @@ export const packs = pgTable("packs", {
   ownerId: text("owner_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  whitelistVersion: integer("whitelist_version").notNull().default(0),
 });
 
 export const packMembers = pgTable(
@@ -221,6 +222,15 @@ export const packMembers = pgTable(
     pk: primaryKey({ columns: [member.packId, member.userId] }),
   })
 );
+
+export const packWhitelists = pgTable("pack_whitelists", {
+  packId: text("pack_id")
+    .primaryKey()
+    .references(() => packs.id, { onDelete: "cascade" }),
+  version: integer("version").notNull().default(0),
+  json: text("json").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 export const builds = pgTable("builds", {
   id: uuid("id").defaultRandom().primaryKey(),
