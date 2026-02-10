@@ -53,73 +53,28 @@ pub async fn start_server_from_deploy(state: SharedState) {
     let hub = Arc::new(hub);
 
     info!("auto-starting server from deploy key");
-    let build = match hub.get_build_blob(&deploy.pack_id, &deploy.channel).await {
-        Ok(value) => value,
-        Err(err) => {
+    let build = match tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        hub.get_build_blob(&deploy.pack_id, &deploy.channel),
+    ).await {
+        Ok(Ok(value)) => value,
+        Ok(Err(err)) => {
             warn!("download build failed: {err}");
+            return;
+        }
+        Err(_) => {
+            warn!("download build timed out");
             return;
         }
     };
 
     let profile = "default".to_string();
     let server_root = default_server_root(&profile);
-    let launch_plan = match apply_pack_blob(&server_root, &build.bytes).await {
-        Ok(value) => value,
-        Err(err) => {
-            warn!("provision failed: {}", err.message);
-            return;
-        }
-    };
-
-    if let Err(err) = sync_whitelist_to_root(hub.clone(), &deploy.pack_id, &server_root).await {
-        warn!("whitelist sync failed on start: {err}");
-    }
-
     let env = BTreeMap::new();
-    let logs = {
-        let guard = state.lock().await;
-        guard.logs.clone()
-    };
-    let spawn_logs = logs.clone();
-    let child = match spawn_server(&launch_plan, &server_root, &env, spawn_logs).await {
-        Ok(value) => value,
-        Err(err) => {
-            warn!("failed to start server: {err}");
-            return;
-        }
-    };
 
-    let pid = child.id().unwrap_or_default() as i32;
-    let started_at_ms = now_millis();
-    let mut guard = state.lock().await;
-    guard.child = Some(child);
-    guard.profile = Some(profile.clone());
-    guard.server_root = Some(server_root);
-    guard.env = env;
-    guard.launch_plan = Some(launch_plan);
-    guard.restart_attempts = 0;
-    guard.restart_disabled = false;
-    guard.last_start_ms = Some(started_at_ms);
-    guard.status = ServerStatus::Running {
-        profile,
-        pid,
-        started_at_ms,
-        meta: Default::default(),
-    };
-
-    logs.push_daemon(format!(
-        "server started: profile={} pid={} root={}",
-        guard.profile.clone().unwrap_or_else(|| "default".into()),
-        pid,
-        guard
-            .server_root
-            .as_ref()
-            .map(|root| root.display().to_string())
-            .unwrap_or_else(|| "<unknown>".to_string())
-    ));
-
-    ensure_watchers(state.clone()).await;
-    ensure_monitor(state.clone()).await;
+    if let Err(err) = start_server(profile, &build.bytes, server_root, env, state).await {
+        warn!("failed to auto-start server: {}", err.message);
+    }
 }
 
 pub async fn build_status(
@@ -141,6 +96,8 @@ pub async fn build_status(
 
 pub async fn start_server(
     profile: ProfileId,
+    pack_blob_bytes: &[u8],
+    server_root: PathBuf,
     env: BTreeMap<String, String>,
     state: SharedState,
 ) -> Result<Response, RpcError> {
@@ -155,30 +112,7 @@ pub async fn start_server(
         }
     }
 
-    let pack_blob_path = env
-        .get("ATLAS_PACK_BLOB")
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| RpcError {
-            code: ErrorCode::BadRequest,
-            message: "ATLAS_PACK_BLOB is required".into(),
-            details: Default::default(),
-        })?;
-
-    let server_root = env
-        .get("ATLAS_SERVER_ROOT")
-        .map(|value| PathBuf::from(value))
-        .unwrap_or_else(|| default_server_root(&profile));
-
-    let pack_blob = tokio::fs::read(&pack_blob_path)
-        .await
-        .map_err(|err| RpcError {
-            code: ErrorCode::IoError,
-            message: format!("failed to read pack blob: {err}"),
-            details: Default::default(),
-        })?;
-
-    let launch_plan = apply_pack_blob(&server_root, &pack_blob).await?;
+    let launch_plan = apply_pack_blob(&server_root, pack_blob_bytes).await?;
     if let Ok(Some(deploy)) = config::load_deploy_key() {
         if let Ok(mut hub) = HubClient::new(&deploy.hub_url) {
             hub.set_service_token(deploy.deploy_key.clone());
@@ -391,16 +325,28 @@ pub(crate) async fn spawn_server(
     Ok(child)
 }
 
-#[derive(Default)]
-struct HttpDependencyProvider;
+struct HttpDependencyProvider {
+    client: reqwest::Client,
+}
 
+impl Default for HttpDependencyProvider {
+    fn default() -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap(),
+        }
+    }
+}
 #[async_trait::async_trait]
 impl DependencyProvider for HttpDependencyProvider {
     async fn fetch(
         &self,
         dep: &protocol::Dependency,
     ) -> Result<Vec<u8>, runner_provision_v2::errors::ProvisionError> {
-        let response = reqwest::get(&dep.url)
+        let response = self.client.get(&dep.url)
+            .send()
             .await
             .map_err(|err| {
                 runner_provision_v2::errors::ProvisionError::Invalid(
