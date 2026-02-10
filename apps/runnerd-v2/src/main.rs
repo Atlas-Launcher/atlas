@@ -13,7 +13,14 @@ async fn main() -> std::io::Result<()> {
     ensure_dir(&paths.runtime_dir)?;
 
     // single-instance lock
-    let _guard = lock::acquire_lock(&paths.lock_path)?;
+    let _guard = match lock::acquire_lock(&paths.lock_path) {
+        Ok(guard) => guard,
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+            warn!("daemon already running (lock held), exiting");
+            return Ok(());
+        }
+        Err(e) => return Err(e),
+    };
 
     // if a socket file exists, see if a daemon is alive
     if paths.socket_path.exists() {
