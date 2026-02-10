@@ -243,7 +243,11 @@ pub async fn resolve_by_project_id(
                 version: file.display_name.clone(),
                 file_id: Some(file.id.to_string()),
                 url: Some(download_url),
-                hashes: Some(ModHashes { sha1, sha512: None }),
+                hashes: Some(ModHashes {
+                    sha1,
+                    sha256: None,
+                    sha512: None,
+                }),
             },
         },
         dependencies,
