@@ -6,7 +6,7 @@ members = [
   "apps/runner",
   "apps/runner-v2",
   "apps/runnerd-v2",
-  "crates/atlas-auth",
+  "crates/atlas-client",
   "crates/mod-resolver",
   "crates/protocol",
   "crates/runner-core-v2"
