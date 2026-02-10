@@ -26,9 +26,8 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
     let state: SharedState = Arc::new(Mutex::new(ServerState::new(logs)));
     let start_ms = crate::supervisor::now_millis();
     let auto_state = state.clone();
-    tokio::spawn(async move {
-        start_server_from_deploy(auto_state).await;
-    });
+    // Run auto-start synchronously in this task to avoid requiring `start_server_from_deploy` to be Send.
+    start_server_from_deploy(auto_state).await;
 
     // Signal handler for SIGTERM (graceful shutdown)
     let state_for_signal = state.clone();
@@ -91,6 +90,7 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
             }
         }
     });
+
     let mut shutting_down = false;
     loop {
         if shutting_down {
@@ -385,7 +385,17 @@ async fn handle_conn(
 
                 match save_deploy_key(&config) {
                     Ok(()) => {
-                        ensure_watchers(state.clone()).await;
+                        // ensure_watchers may be non-Send; run it on a current-thread runtime inside spawn_blocking
+                        let state_for_watchers = state.clone();
+                        tokio::task::spawn_blocking(move || {
+                            let rt = tokio::runtime::Builder::new_current_thread()
+                                .enable_all()
+                                .build()
+                                .expect("failed to create local runtime for ensure_watchers");
+                            rt.block_on(async move {
+                                let _ = ensure_watchers(state_for_watchers).await;
+                            });
+                        });
                         let resp = Response::DeployKeySaved {};
                         let out = Outbound::Response(Envelope { id: req_id, payload: resp });
                         framing::send_outbound(&mut framed, &out).await?;
