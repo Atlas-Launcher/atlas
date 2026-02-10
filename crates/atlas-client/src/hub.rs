@@ -112,6 +112,7 @@ struct RunnerServiceTokenRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunnerServiceTokenResponse {
+    #[serde(default)]
     pub id: Option<String>,
     pub pack_id: String,
     pub token: String,
@@ -266,10 +267,65 @@ impl HubClient {
             );
         }
 
-        response
-            .json()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse runner service token")
+            .context("Failed to read runner service token response")?;
+
+        if std::env::var("ATLAS_DEBUG_RUNNER_TOKENS").is_ok() {
+            eprintln!("Runner service token response: {body}");
+        }
+
+        let value = serde_json::from_str::<serde_json::Value>(&body).map_err(|err| {
+            anyhow::anyhow!(
+                "Failed to parse runner service token JSON: {}. Body: {}",
+                err,
+                body
+            )
+        })?;
+
+        let pack_id = value
+            .get("packId")
+            .or_else(|| value.get("pack_id"))
+            .and_then(|val| val.as_str())
+            .map(|val| val.to_string())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Runner service token response missing packId. Body: {}",
+                    body
+                )
+            })?;
+        let token = value
+            .get("token")
+            .and_then(|val| val.as_str())
+            .map(|val| val.to_string())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Runner service token response missing token. Body: {}",
+                    body
+                )
+            })?;
+        let prefix = value
+            .get("prefix")
+            .and_then(|val| val.as_str())
+            .map(|val| val.to_string())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Runner service token response missing prefix. Body: {}",
+                    body
+                )
+            })?;
+        let id = value
+            .get("id")
+            .and_then(|val| val.as_str())
+            .map(|val| val.to_string());
+
+        Ok(RunnerServiceTokenResponse {
+            id,
+            pack_id,
+            token,
+            prefix,
+        })
     }
 
     pub async fn get_pack_metadata(&self, pack_id: &str) -> Result<PackMetadata> {
