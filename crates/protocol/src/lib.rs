@@ -12,7 +12,8 @@ pub use crate::error::ProtocolError;
 pub use crate::pack::*;
 pub use crate::platform::{Platform, PlatformFilter};
 pub use crate::types::{
-    ByteMap, Dependency, Hash, HashAlgorithm, Loader, Manifest, PackBlob, PackMetadata,
+    ByteMap, Dependency, DependencyKind, DependencySide, Hash, HashAlgorithm, Loader, Manifest,
+    PackBlob, PackMetadata,
 };
 
 #[cfg(test)]
@@ -33,6 +34,9 @@ mod tests {
                 version: "1.2.3".to_string(),
                 minecraft_version: "1.20.1".to_string(),
                 loader: Loader::Fabric,
+                loader_version: "0.15.0".to_string(),
+                name: "Atlas Pack".to_string(),
+                description: "Test pack".to_string(),
             },
             manifest: Manifest {
                 dependencies: vec![Dependency {
@@ -42,6 +46,9 @@ mod tests {
                         hex: "deadbeef".to_string(),
                     },
                     platform: PlatformFilter::default(),
+                    kind: DependencyKind::Mod,
+                    side: DependencySide::Both,
+                    pointer_path: "mods/example.mod.toml".to_string(),
                 }],
             },
             files,

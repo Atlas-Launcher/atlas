@@ -9,6 +9,7 @@ prost = "0.13"
 zstd = "0.13"
 thiserror = "1.0"
 toml = "0.8"
+hex = "0.4.3"
 
 [build-dependencies]
 prost-build = "0.13"
