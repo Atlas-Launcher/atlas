@@ -108,6 +108,27 @@ pub async fn up(
                 config.eula_accepted = Some(true);
             }
         }
+        if config.max_ram.is_none() {
+            // first run, prompt for channel
+            println!("Select channel to follow:");
+            println!("1. production (stable releases)");
+            println!("2. beta (pre-release testing)");
+            println!("3. dev (latest development builds)");
+            print!("Enter choice (1-3, default 1): ");
+            std::io::Write::flush(&mut std::io::stdout())?;
+            let channel = tokio::task::spawn_blocking(|| {
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input).unwrap();
+                let choice = input.trim().parse::<u32>().unwrap_or(1);
+                match choice {
+                    1 => "production".to_string(),
+                    2 => "beta".to_string(),
+                    3 => "dev".to_string(),
+                    _ => "production".to_string(),
+                }
+            }).await.unwrap();
+            config.channel = channel;
+        }
         let max_ram_val = if let Some(arg_val) = max_ram {
             arg_val
         } else if let Some(existing) = config.max_ram {
@@ -172,6 +193,8 @@ struct DeployKeyConfig {
     should_autostart: Option<bool>,
     #[serde(default)]
     eula_accepted: Option<bool>,
+    #[serde(default)]
+    first_run: Option<bool>,
 }
 
 fn save_deploy_key(config: &DeployKeyConfig) -> anyhow::Result<()> {
