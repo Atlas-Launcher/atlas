@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::process::Child;
 use tokio::sync::Mutex;
+use std::sync::atomic::AtomicBool;
 
 use runner_core_v2::proto::{ProfileId, ServerStatus};
 use runner_provision_v2::LaunchPlan;
@@ -25,6 +26,7 @@ pub struct ServerState {
     pub(crate) pack_etag: Option<String>,
     pub(crate) whitelist_etag: Option<String>,
     pub(crate) current_pack_build_id: Option<String>,
+    pub(crate) watcher_stop: Option<Arc<AtomicBool>>,
 }
 
 impl ServerState {
@@ -44,6 +46,7 @@ impl ServerState {
             pack_etag: None,
             whitelist_etag: None,
             current_pack_build_id: None,
+            watcher_stop: None,
         }
     }
 
