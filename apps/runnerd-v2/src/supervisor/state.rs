@@ -32,6 +32,8 @@ pub struct ServerState {
     pub(crate) watcher_handle: Option<JoinHandle<()>>,
     // Flag set by watcher worker when it has fully exited
     pub(crate) watcher_done: Option<Arc<AtomicBool>>,
+    // Serialize start/stop/update operations so only one lifecycle operation runs at once
+    pub(crate) lifecycle_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl ServerState {
@@ -54,6 +56,7 @@ impl ServerState {
             watcher_stop: None,
             watcher_handle: None,
             watcher_done: None,
+            lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
