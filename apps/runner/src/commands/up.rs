@@ -23,14 +23,6 @@ use rand::RngCore;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WhitelistPushEvent {
-    pack_id: String,
-    #[serde(rename = "type")]
-    event_type: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct PackUpdateEvent {
     pack_id: String,
     #[serde(rename = "type")]
@@ -53,55 +45,6 @@ async fn sync_whitelist_and_reload(
         }
         Ok(false) => {}
         Err(err) => println!("Whitelist sync failed: {err}"),
-    }
-}
-
-async fn listen_whitelist_events(
-    hub: Arc<HubClient>,
-    pack_id: &str,
-    updates: &mpsc::Sender<()>,
-) -> Result<()> {
-    let response = hub.open_whitelist_events(pack_id).await?;
-    let mut stream = response.bytes_stream();
-    let mut parser = SseParser::new();
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        for payload in parser.push_chunk(&chunk) {
-            if should_trigger_whitelist_sync(&payload, pack_id) {
-                let _ = updates.send(()).await;
-            }
-        }
-    }
-
-    bail!("Whitelist stream ended")
-}
-
-fn should_trigger_whitelist_sync(payload: &str, pack_id: &str) -> bool {
-    if payload.is_empty() {
-        return false;
-    }
-
-    if let Ok(event) = serde_json::from_str::<WhitelistPushEvent>(payload) {
-        return event.pack_id == pack_id && event.event_type.as_deref() != Some("ready");
-    }
-
-    false
-}
-
-async fn run_whitelist_push_listener(
-    hub: Arc<HubClient>,
-    pack_id: String,
-    updates: mpsc::Sender<()>,
-) {
-    let mut backoff = Duration::from_secs(2);
-    loop {
-        if let Err(err) = listen_whitelist_events(hub.clone(), &pack_id, &updates).await {
-            println!("Whitelist push stream error: {err}");
-        }
-
-        sleep(backoff).await;
-        backoff = (backoff * 2).min(Duration::from_secs(60));
     }
 }
 
@@ -267,13 +210,6 @@ async fn run_server() -> Result<()> {
     let mut child = supervisor.spawn().await?;
     let mut restart_backoff = Duration::from_secs(2);
 
-    let (whitelist_tx, mut whitelist_rx) = mpsc::channel::<()>(8);
-    tokio::spawn(run_whitelist_push_listener(
-        hub.clone(),
-        config.pack_id.clone(),
-        whitelist_tx,
-    ));
-
     let (update_tx, mut update_rx) = mpsc::channel::<()>(4);
     tokio::spawn(run_pack_update_listener(
         hub.clone(),
@@ -289,11 +225,6 @@ async fn run_server() -> Result<()> {
         tokio::select! {
             _ = ticker.tick() => {
                 sync_whitelist_and_reload(&whitelist, &config.pack_id, &runtime_dir).await;
-            }
-            update = whitelist_rx.recv() => {
-                if update.is_some() {
-                    sync_whitelist_and_reload(&whitelist, &config.pack_id, &runtime_dir).await;
-                }
             }
             update = update_rx.recv() => {
                 if update.is_some() {
