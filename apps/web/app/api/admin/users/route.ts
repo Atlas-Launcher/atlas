@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { desc } from "drizzle-orm";
-
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
@@ -17,7 +15,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const result = await db
+  const allUsers = await db
     .select({
       id: users.id,
       name: users.name,
@@ -26,7 +24,7 @@ export async function GET(request: Request) {
       createdAt: users.createdAt,
     })
     .from(users)
-    .orderBy(desc(users.createdAt));
+    .orderBy(users.createdAt);
 
-  return NextResponse.json({ users: result });
+  return NextResponse.json({ users: allUsers });
 }

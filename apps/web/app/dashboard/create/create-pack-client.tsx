@@ -75,7 +75,7 @@ export default function CreatePackClient() {
     slug?: string;
     repoUrl?: string;
   }) => {
-    const response = await fetch("/api/packs", {
+    const response = await fetch("/api/v1/packs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

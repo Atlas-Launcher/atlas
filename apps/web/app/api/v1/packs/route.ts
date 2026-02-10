@@ -7,7 +7,13 @@ import { accounts, packMembers, packs } from "@/lib/db/schema";
 import { hasRole } from "@/lib/auth/roles";
 import { createPackWithDefaults } from "@/lib/packs/create-pack";
 
-
+function getAtlasHubUrl(request: Request) {
+  return (
+    process.env.ATLAS_HUB_URL?.trim() ??
+    process.env.BETTER_AUTH_URL?.trim() ??
+    new URL(request.url).origin
+  );
+}
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -59,6 +65,10 @@ export async function POST(request: Request) {
   }
 
   // If importing a repo, validate it has atlas.toml and configure it
+  let existingAtlasToml: any = null;
+  let parsed: { owner: string; repo: string } | null = null;
+  let account: any = null;
+
   if (repoUrl) {
     const {
       parseGithubRepoUrl,
@@ -69,7 +79,7 @@ export async function POST(request: Request) {
       "@/lib/github/app"
     );
 
-    const parsed = parseGithubRepoUrl(repoUrl);
+    parsed = parseGithubRepoUrl(repoUrl);
     if (!parsed) {
       return NextResponse.json(
         { error: "Invalid GitHub repository URL." },
@@ -78,7 +88,7 @@ export async function POST(request: Request) {
     }
 
     // Get the user's GitHub account
-    const [account] = await db
+    [account] = await db
       .select()
       .from(accounts)
       .where(
@@ -100,102 +110,80 @@ export async function POST(request: Request) {
       const userResponse = await fetch("https://api.github.com/user", {
         headers: {
           Authorization: `Bearer ${account.accessToken}`,
-          Accept: "application/vnd.github+json",
         },
       });
-      if (!userResponse.ok) {
-        throw new Error("Failed to get GitHub user info");
-      }
-      const userData = await userResponse.json();
-      githubUsername = userData.login;
-    } catch {
-      return NextResponse.json(
-        { error: "Unable to verify GitHub account. Please re-link your GitHub account." },
-        { status: 400 }
-      );
-    }
 
-    // Get installation token for repo access
-    let installationToken: string;
-    try {
-      installationToken = await getInstallationTokenForUser(githubUsername);
-    } catch (error) {
-      if (error instanceof GitHubAppNotInstalledError) {
-        const appSlug =
-          process.env.GITHUB_APP_SLUG ||
-          process.env.NEXT_PUBLIC_GITHUB_APP_SLUG ||
-          "atlas-launcher";
+      if (!userResponse.ok) {
         return NextResponse.json(
-          {
-            error:
-              "The Atlas Launcher GitHub App is not installed on your account. Install it to import repositories.",
-            code: "GITHUB_APP_NOT_INSTALLED",
-            installUrl: `https://github.com/apps/${appSlug}/installations/new`,
-          },
-          { status: 403 }
+          { error: "Failed to get GitHub user info." },
+          { status: 500 }
         );
       }
-      throw error;
+
+      const userData = await userResponse.json();
+      githubUsername = userData.login;
+    } catch (error) {
+      return NextResponse.json(
+        { error: "Failed to get GitHub user info." },
+        { status: 500 }
+      );
     }
 
     // Check if atlas.toml exists
-    const atlasToml = await checkAtlasTomlExists({
-      token: installationToken,
-      owner: parsed.owner,
-      repo: parsed.repo,
-    });
-
-    if (!atlasToml) {
+    try {
+      existingAtlasToml = await checkAtlasTomlExists({ token: account.accessToken, owner: parsed.owner, repo: parsed.repo });
+      if (!existingAtlasToml) {
+        return NextResponse.json(
+          { error: "Repository does not contain atlas.toml configuration." },
+          { status: 400 }
+        );
+      }
+    } catch (error) {
       return NextResponse.json(
-        {
-          error:
-            "This repository does not contain an atlas.toml file. Please use the 'New GitHub Repository' option to create a properly configured pack repository.",
-          code: "MISSING_ATLAS_TOML",
-        },
+        { error: "Repository does not contain atlas.toml configuration." },
         { status: 400 }
       );
     }
+  }
 
-    // Create the pack first so we have the ID
-    const created = await createPackWithDefaults({
-      ownerId: session.user.id,
+  // Create the pack
+  try {
+    const pack = await createPackWithDefaults({
       name,
       description,
       repoUrl,
       slug,
+      ownerId: session.user.id,
     });
 
-    // Configure the repository
-    const hubUrl =
-      process.env.ATLAS_HUB_URL?.trim() ??
-      process.env.BETTER_AUTH_URL?.trim() ??
-      new URL(request.url).origin;
+    // If importing a repo, configure it for Atlas
+    if (repoUrl && parsed && account && existingAtlasToml) {
+      const { configureRepoForAtlas } = await import("@/lib/github/repo-config");
 
-    try {
-      await configureRepoForAtlas({
-        token: installationToken,
-        owner: parsed.owner,
-        repo: parsed.repo,
-        packId: created.id,
-        hubUrl,
-        existingAtlasToml: atlasToml,
-      });
-    } catch (error) {
-      // Log but don't fail - the pack was created, repo config can be retried
-      console.error("Failed to configure repository:", error);
+      // Configure the repo for Atlas
+      try {
+        await configureRepoForAtlas({
+          token: account.accessToken,
+          owner: parsed.owner,
+          repo: parsed.repo,
+          packId: pack.id,
+          hubUrl: getAtlasHubUrl(request),
+          existingAtlasToml,
+        });
+      } catch (error) {
+        return NextResponse.json(
+          { error: "Failed to configure repository for Atlas." },
+          { status: 500 }
+        );
+      }
     }
 
-    return NextResponse.json({ pack: created }, { status: 201 });
+    return NextResponse.json({ pack }, { status: 201 });
+  } catch (error) {
+    console.error("Failed to create pack:", error);
+    return NextResponse.json(
+      { error: "Failed to create pack." },
+      { status: 500 }
+    );
   }
-
-  // Non-import flow (no repoUrl) - just create the pack
-  const created = await createPackWithDefaults({
-    ownerId: session.user.id,
-    name,
-    description,
-    repoUrl,
-    slug,
-  });
-
-  return NextResponse.json({ pack: created }, { status: 201 });
 }

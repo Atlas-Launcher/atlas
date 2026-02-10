@@ -64,7 +64,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
 
   useEffect(() => {
     const loadPack = async () => {
-      const response = await fetch("/api/packs");
+      const response = await fetch("/api/v1/packs");
       const data = await response.json();
       if (!response.ok) {
         setError(data?.error ?? "Unable to load pack.");
@@ -85,10 +85,10 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   useEffect(() => {
     const loadDetails = async () => {
       const [buildRes, channelRes, memberRes, inviteRes] = await Promise.all([
-        fetch(`/api/packs/${packId}/builds`),
-        fetch(`/api/packs/${packId}/channels`),
-        fetch(`/api/packs/${packId}/members`),
-        canManageInvites ? fetch(`/api/packs/${packId}/invites`) : Promise.resolve(null),
+        fetch(`/api/v1/packs/${packId}/builds`),
+        fetch(`/api/v1/packs/${packId}/channels`),
+        fetch(`/api/v1/packs/${packId}/members`),
+        canManageInvites ? fetch(`/api/v1/packs/${packId}/invites`) : Promise.resolve(null),
       ]);
 
       if (buildRes.ok) {
@@ -132,7 +132,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const handleCreateInvite = async () => {
     setLoading(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}/invites`, {
+    const response = await fetch(`/api/v1/packs/${packId}/invites`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -158,7 +158,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const handleDeleteInvite = async (inviteId: string) => {
     setLoading(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}/invites`, {
+    const response = await fetch(`/api/v1/packs/${packId}/invites`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ inviteId }),
@@ -177,7 +177,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const handlePromotion = async (channel: Channel["name"], buildId: string) => {
     setLoading(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}/channels`, {
+    const response = await fetch(`/api/v1/packs/${packId}/channels`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ channel, buildId }),
@@ -202,7 +202,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const handleToggleForceReinstall = async (buildId: string, forceReinstall: boolean) => {
     setLoading(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}/builds`, {
+    const response = await fetch(`/api/v1/packs/${packId}/builds`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ buildId, forceReinstall }),
@@ -228,7 +228,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const handleRevokeMember = async (userId: string) => {
     setLoading(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}/members/${userId}`, {
+    const response = await fetch(`/api/v1/packs/${packId}/members/${userId}`, {
       method: "DELETE",
     });
     const data = await response.json();
@@ -268,7 +268,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const handlePromoteMember = async (userId: string) => {
     setLoading(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}/members/${userId}`, {
+    const response = await fetch(`/api/v1/packs/${packId}/members/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role: "creator" }),
@@ -295,7 +295,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const handleDemoteMember = async (userId: string) => {
     setLoading(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}/members/${userId}`, {
+    const response = await fetch(`/api/v1/packs/${packId}/members/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role: "player" }),
@@ -322,7 +322,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const handleUpdateAccessLevel = async (userId: string, accessLevel: AccessLevel) => {
     setLoading(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}/members/${userId}`, {
+    const response = await fetch(`/api/v1/packs/${packId}/members/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ accessLevel }),
@@ -363,7 +363,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
 
     setDeletingPack(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}`, { method: "DELETE" });
+    const response = await fetch(`/api/v1/packs/${packId}`, { method: "DELETE" });
     const data = await response
       .json()
       .catch(() => ({ error: "Unable to delete pack." }));
@@ -391,7 +391,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
 
     setSavingFriendlyName(true);
     setError(null);
-    const response = await fetch(`/api/packs/${packId}`, {
+    const response = await fetch(`/api/v1/packs/${packId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ friendlyName: trimmed }),

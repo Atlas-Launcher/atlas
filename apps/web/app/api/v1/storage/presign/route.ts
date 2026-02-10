@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         expiresInSeconds: 900,
       });
       const origin = new URL(request.url).origin;
-      const url = `${origin}/api/storage/download?token=${encodeURIComponent(token)}`;
+      const url = `${origin}/api/v1/storage/download?token=${encodeURIComponent(token)}`;
       return NextResponse.json({ url, key, provider: artifactRef.provider });
     }
 
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
         expiresInSeconds: 900,
       });
       const origin = new URL(request.url).origin;
-      url = `${origin}/api/storage/upload?token=${encodeURIComponent(token)}`;
+      url = `${origin}/api/v1/storage/upload?token=${encodeURIComponent(token)}`;
     }
 
     return NextResponse.json({
