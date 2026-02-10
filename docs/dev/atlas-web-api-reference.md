@@ -331,12 +331,6 @@ Remove a player from the whitelist.
 }
 ```
 
-#### GET `/v1/packs/[packId]/whitelist/stream`
-Stream whitelist changes (Server-Sent Events).
-
-**Authentication**: Required
-**Permissions**: Pack member
-
 ### Invites (`/v1/invites`)
 
 #### POST `/v1/invites/accept`
@@ -965,8 +959,6 @@ Rate limit headers are included in responses:
 ## WebSocket Support
 
 Some endpoints support real-time updates via WebSockets:
-
-- `/v1/packs/[packId]/whitelist/stream`: Server-Sent Events for whitelist changes
 
 ## SDKs and Libraries
 
