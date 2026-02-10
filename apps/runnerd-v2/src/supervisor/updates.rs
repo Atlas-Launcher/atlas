@@ -7,7 +7,7 @@ use atlas_client::sse::SseParser;
 use futures_util::StreamExt;
 use serde::Deserialize;
 use tokio::time::{sleep, Duration};
-use tracing::{info, warn};
+use tracing::{info, warn, debug};
 
 use runner_core_v2::proto::ServerStatus;
 use runner_v2_rcon::{load_rcon_settings, RconClient};
@@ -19,6 +19,7 @@ use super::state::SharedState;
 use super::util::current_server_root;
 
 const POLL_INTERVAL_SECS: u64 = 60;
+const PACK_ETAG_FILENAME: &str = ".runner/pack_etag.txt";
 
 pub async fn ensure_watchers(state: SharedState) {
     let start_watchers = {
@@ -57,6 +58,18 @@ pub async fn ensure_watchers(state: SharedState) {
     hub.set_service_token(config.deploy_key.clone());
     let hub = Arc::new(hub);
 
+    // Try to load persisted pack etag from disk (if present). This allows the watcher to send If-None-Match
+    // on the very first poll instead of always sending None.
+    if let Some(server_root) = current_server_root(&state).await {
+        if let Ok(etag) = read_pack_etag_from_disk(&server_root).await {
+            if !etag.is_empty() {
+                let mut guard = state.lock().await;
+                guard.pack_etag = Some(etag);
+                info!("loaded persisted pack etag from disk");
+            }
+        }
+    }
+
     let whitelist_state = state.clone();
     let whitelist_hub = hub.clone();
     let whitelist_config = config.clone();
@@ -70,7 +83,7 @@ pub async fn ensure_watchers(state: SharedState) {
             sleep(poll_interval).await;
         }
     });
-    info!("starting whitelist watcher");
+    info!("started whitelist watcher");
 
     let update_state = state.clone();
     let update_hub = hub.clone();
@@ -85,7 +98,7 @@ pub async fn ensure_watchers(state: SharedState) {
             sleep(poll_interval).await;
         }
     });
-    info!("starting pack update watcher");
+    info!("started pack update watcher");
 }
 
 #[derive(Debug, Deserialize)]
@@ -119,7 +132,7 @@ async fn poll_pack_update(
 
     // Send the stored ETag as a quoted If-None-Match header (server expects quoted values).
     let current_etag_header = current_etag.as_ref().map(|tok| format!("\"{}\"", tok));
-    info!("poll_pack_update: sending If-None-Match={:?}", current_etag_header);
+    debug!("poll_pack_update: sending If-None-Match={:?}", current_etag_header);
 
     match hub
         .get_pack_metadata_with_etag(&config.pack_id, &config.channel, current_etag_header.as_deref())
@@ -131,9 +144,14 @@ async fn poll_pack_update(
                 let normalized = normalize_etag_value(&returned_etag);
                 let mut guard = state.lock().await;
                 guard.pack_etag = Some(normalized.clone());
-                info!("pack metadata not modified; stored etag={}", normalized);
+                debug!("pack metadata not modified; stored etag={}", normalized);
+
+                // Persist to disk
+                if let Some(server_root) = current_server_root(&state).await {
+                    let _ = write_pack_etag_to_disk(&server_root, &normalized).await;
+                }
             } else {
-                info!("pack metadata not modified; no ETag returned");
+                debug!("pack metadata not modified; no ETag returned");
             }
             return Ok(());
         }
@@ -143,7 +161,12 @@ async fn poll_pack_update(
                 let normalized = normalize_etag_value(&new_etag);
                 let mut guard = state.lock().await;
                 guard.pack_etag = Some(normalized.clone());
-                info!("pack metadata returned new etag={}", normalized);
+                debug!("pack metadata returned new etag={}", normalized);
+
+                // Persist to disk
+                if let Some(server_root) = current_server_root(&state).await {
+                    let _ = write_pack_etag_to_disk(&server_root, &normalized).await;
+                }
             }
 
             // IMPORTANT: only apply update if build actually differs
@@ -154,7 +177,7 @@ async fn poll_pack_update(
 
             if current_build_id.as_deref() == Some(metadata.build_id.as_str()) {
                 // metadata changed / revalidated, but build didn't
-                info!(
+                debug!(
                 "pack metadata refreshed; build unchanged (build: {})",
                 metadata.build_id
             );
@@ -245,10 +268,13 @@ pub(crate) async fn sync_whitelist_to_root(
         if !etag.is_empty() {
             let normalized = normalize_etag_value(&etag);
             let mut guard = state.lock().await;
-            guard.whitelist_etag = Some(normalized);
-            info!("whitelist not modified; stored etag={}", etag);
+            guard.whitelist_etag = Some(normalized.clone());
+            debug!("whitelist not modified; stored etag={}", etag);
+
+            // Persist whitelist etag to disk alongside pack etag so restarts keep both
+            let _ = write_pack_etag_to_disk(server_root, &normalized).await;
         } else {
-            info!("whitelist not modified; no ETag returned");
+            debug!("whitelist not modified; no ETag returned");
         }
         return Ok(());
     }
@@ -389,3 +415,24 @@ fn normalize_etag_value(s: &str) -> String {
     }
 }
 
+// Read persisted pack etag from disk for a given server root. Returns Ok(String) with empty string if missing.
+async fn read_pack_etag_from_disk(server_root: &PathBuf) -> Result<String, String> {
+    let path = server_root.join(PACK_ETAG_FILENAME);
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => Ok(content.trim().to_string()),
+        Err(_) => Ok(String::new()),
+    }
+}
+
+// Write the given pack etag token to disk (creates parent .runner dir if necessary). Returns error string on failure.
+async fn write_pack_etag_to_disk(server_root: &PathBuf, etag: &str) -> Result<(), String> {
+    let path = server_root.join(PACK_ETAG_FILENAME);
+    if let Some(parent) = path.parent() {
+        if let Err(err) = tokio::fs::create_dir_all(parent).await {
+            return Err(format!("failed to create .runner directory: {err}"));
+        }
+    }
+    tokio::fs::write(&path, etag)
+        .await
+        .map_err(|err| format!("failed to write pack etag file: {err}"))
+}
