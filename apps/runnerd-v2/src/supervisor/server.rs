@@ -191,16 +191,18 @@ pub(crate) async fn stop_server_internal(state: SharedState, force: bool) -> Res
         let _ = rcon.execute("stop").await;
     }
 
-    let mut guard = state.lock().await;
-    if let Some(child) = guard.child.as_mut() {
+    let mut child = {
+        let mut guard = state.lock().await;
+        guard.child.take()
+    };
+
+    if let Some(ref mut child) = child {
         if !force {
             for _ in 0..20 {
                 if let Ok(Some(_)) = child.try_wait() {
                     return Ok(());
                 }
-                drop(guard);
                 sleep(Duration::from_millis(500)).await;
-                guard = state.lock().await;
             }
         }
 

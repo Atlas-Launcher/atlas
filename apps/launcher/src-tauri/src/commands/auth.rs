@@ -1,14 +1,18 @@
 use crate::auth;
 use crate::config;
-use crate::models::{AtlasProfile, DeviceCodeResponse, Profile};
+use crate::models::{
+    AtlasProfile,
+    DeviceCodeResponse,
+    LauncherLinkComplete,
+    LauncherLinkSession,
+    Profile,
+};
 use crate::settings;
 use crate::state::AppState;
 use crate::telemetry;
 use atlas_client::hub::{
-    HubClient, LauncherLinkComplete, LauncherLinkCompleteRequest, LauncherLinkSession,
-    LauncherMinecraftPayload,
+    HubClient, LauncherLinkCompleteRequest, LauncherMinecraftPayload,
 };
-use serde::{Deserialize, Serialize};
 
 #[tauri::command]
 pub async fn start_device_code() -> Result<DeviceCodeResponse, String> {
@@ -252,10 +256,6 @@ pub fn atlas_sign_out(state: tauri::State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
-pub use atlas_client::hub::LauncherLinkSession;
-
-pub use atlas_client::hub::LauncherLinkComplete;
-
 #[tauri::command]
 pub async fn create_launcher_link_session(
     state: tauri::State<'_, AppState>,
@@ -269,6 +269,7 @@ pub async fn create_launcher_link_session(
     let hub = HubClient::new(&hub_url).map_err(|err| err.to_string())?;
     hub.create_launcher_link_session()
         .await
+        .map(LauncherLinkSession::from)
         .map_err(|err| err.to_string())
 }
 
@@ -302,6 +303,7 @@ pub async fn complete_launcher_link_session(
     let mut result = hub
         .complete_launcher_link_session(&payload)
         .await
+        .map(LauncherLinkComplete::from)
         .map_err(|err| err.to_string())?;
 
     let mut warning: Option<String> = None;

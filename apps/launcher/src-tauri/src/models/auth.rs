@@ -70,3 +70,42 @@ pub struct AtlasSession {
     pub client_id: String,
     pub auth_base_url: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherLinkSession {
+    pub link_session_id: String,
+    pub link_code: String,
+    pub proof: String,
+    pub expires_at: String,
+}
+
+impl From<atlas_client::hub::LauncherLinkSession> for LauncherLinkSession {
+    fn from(value: atlas_client::hub::LauncherLinkSession) -> Self {
+        Self {
+            link_session_id: value.link_session_id,
+            link_code: value.link_code,
+            proof: value.proof,
+            expires_at: value.expires_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherLinkComplete {
+    pub success: bool,
+    pub user_id: String,
+    #[serde(default)]
+    pub warning: Option<String>,
+}
+
+impl From<atlas_client::hub::LauncherLinkComplete> for LauncherLinkComplete {
+    fn from(value: atlas_client::hub::LauncherLinkComplete) -> Self {
+        Self {
+            success: value.success,
+            user_id: value.user_id,
+            warning: value.warning,
+        }
+    }
+}

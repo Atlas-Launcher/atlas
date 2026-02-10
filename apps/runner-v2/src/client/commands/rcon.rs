@@ -43,7 +43,7 @@ pub async fn rcon_interactive(mut framed: framing::FramedStream) -> anyhow::Resu
     send_request(&mut framed, &open_req).await?;
 
     let (session, prompt) = loop {
-        let msg = framing::read_outbound(&mut framed).await?
+        let msg: Outbound = framing::read_outbound(&mut framed).await?
             .context("daemon closed connection")?;
         match msg {
             Outbound::Response(env) if env.id == open_id => match env.payload {
@@ -97,7 +97,8 @@ pub async fn rcon_interactive(mut framed: framing::FramedStream) -> anyhow::Resu
 
             // daemon output
             msg = framing::read_outbound(&mut framed) => {
-                let msg: Outbound = msg?.context("daemon closed connection")?;
+                let msg: Option<Outbound> = msg?;
+                let msg = msg.context("daemon closed connection")?;
                 match msg {
                     Outbound::Event(Event::RconOut { session: sid, text }) if sid == session => {
                         println!("{text}");
