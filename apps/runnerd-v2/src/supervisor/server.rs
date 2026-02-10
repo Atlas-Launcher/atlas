@@ -310,26 +310,21 @@ pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, Rp
         guard.watchers_started = false;
     }
 
-    // If there is a watcher thread handle, wait for it to finish (with timeout)
-    let watcher_handle_opt = guard.watcher_handle.take();
+    // Wait for watcher to signal done via the atomic flag (up to 10s).
     let watcher_done_opt = guard.watcher_done.clone();
     drop(guard);
 
-    if let Some(handle) = watcher_handle_opt {
-        // Wait up to 10 seconds for the watcher async task to finish. Use tokio::time::timeout
-        // so we don't block the runtime indefinitely.
-        match tokio::time::timeout(std::time::Duration::from_secs(10), handle).await {
-            Ok(join_res) => match join_res {
-                Ok(_) => {
-                    info!("watcher worker task finished");
+    if let Some(done_flag) = watcher_done_opt {
+        match tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                if done_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
                 }
-                Err(join_err) => {
-                    warn!("watcher worker task panicked or was cancelled: {:?}", join_err);
-                }
-            },
-            Err(_) => {
-                warn!("timed out waiting for watcher worker task to exit");
+                tokio::time::sleep(Duration::from_millis(200)).await;
             }
+        }).await {
+            Ok(_) => info!("watcher worker signaled done"),
+            Err(_) => warn!("timed out waiting for watcher worker to signal done"),
         }
     }
 
