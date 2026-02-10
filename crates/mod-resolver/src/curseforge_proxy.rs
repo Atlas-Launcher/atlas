@@ -68,7 +68,7 @@ pub async fn search(
 ) -> Result<Vec<SearchCandidate>> {
     let class_id = class_id_for(pack_type)?;
     let loader_id = loader_id_for(loader)?;
-    let base = format!("{}/api/curseforge", proxy_base_url.trim_end_matches('/'));
+    let base = format!("{}/api/v1/curseforge", proxy_base_url.trim_end_matches('/'));
 
     let mut search_url = reqwest::Url::parse(&format!("{base}/mods/search"))
         .context("Failed to build CurseForge proxy search URL")?;
@@ -130,7 +130,7 @@ pub async fn resolve_by_project_id(
         .context("CurseForge project id must be numeric")?;
     let class_id = class_id_for(pack_type)?;
     let loader_id = loader_id_for(loader)?;
-    let base = format!("{}/api/curseforge", proxy_base_url.trim_end_matches('/'));
+    let base = format!("{}/api/v1/curseforge", proxy_base_url.trim_end_matches('/'));
 
     let mut files_url = reqwest::Url::parse(&format!("{base}/mods/{mod_id}/files"))
         .context("Failed to build CurseForge proxy files URL")?;

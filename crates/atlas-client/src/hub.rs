@@ -57,6 +57,7 @@ pub struct LauncherPack {
     pub pack_id: String,
     pub pack_name: String,
     pub pack_slug: String,
+    pub repo_url: Option<String>,
     pub channel: String,
 }
 
@@ -347,7 +348,7 @@ impl HubClient {
     }
 
     pub async fn list_launcher_packs(&self) -> Result<Vec<LauncherPack>> {
-        let url = self.base_url.join("/api/launcher/packs")?;
+        let url = self.base_url.join("/api/v1/launcher/packs")?;
         let response = self
             .client
             .get(url)
@@ -366,7 +367,7 @@ impl HubClient {
     pub async fn check_creator_permission(&self, pack_id: &str) -> Result<bool> {
         let url = self
             .base_url
-            .join(&format!("/api/v1/packs/{pack_id}/check-access"))?;
+            .join(&format!("/api/v1/packs/{pack_id}/access"))?;
         let response = self
             .client
             .get(url)
@@ -392,7 +393,7 @@ impl HubClient {
     ) -> Result<LauncherArtifactResponse> {
         let mut url = self
             .base_url
-            .join(&format!("/api/launcher/packs/{pack_id}/artifact"))?;
+            .join(&format!("/api/v1/launcher/packs/{pack_id}/artifact"))?;
         url.query_pairs_mut().append_pair("channel", channel);
         if let Some(value) = current_build_id {
             url.query_pairs_mut().append_pair("currentBuildId", value);
@@ -523,7 +524,7 @@ impl HubClient {
     }
 
     pub async fn create_launcher_link_session(&self) -> Result<LauncherLinkSession> {
-        let url = self.base_url.join("/api/launcher/link-sessions")?;
+        let url = self.base_url.join("/api/v1/launcher/link-sessions")?;
         let response = self
             .client
             .post(url)
@@ -541,7 +542,7 @@ impl HubClient {
         &self,
         payload: &LauncherLinkCompleteRequest,
     ) -> Result<LauncherLinkComplete> {
-        let url = self.base_url.join("/api/launcher/link-sessions/complete")?;
+        let url = self.base_url.join("/api/v1/launcher/link-sessions/complete")?;
         let response = self
             .client
             .post(url)
@@ -569,6 +570,217 @@ impl HubClient {
             .await
             .context("Failed to parse Mojang info")
     }
+
+    /// Downloads the CI workflow template from the Atlas Hub.
+    ///
+    /// This endpoint fetches the GitHub Actions workflow template that should be used
+    /// for CI/CD builds. The workflow is served from the configured template repository.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `CiWorkflowResponse` containing the workflow file content and path.
+    pub async fn download_ci_workflow(&self) -> Result<CiWorkflowResponse> {
+        let url = self.base_url.join("/download/ci/workflow")?;
+        let response = self
+            .client
+            .get(url)
+            .headers(self.get_auth_headers().await?)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        let workflow_path = response
+            .headers()
+            .get("x-atlas-workflow-path")
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(".github/workflows/atlas-build.yml")
+            .to_string();
+
+        let content = response
+            .text()
+            .await
+            .context("Failed to read CI workflow download response")?;
+
+        Ok(CiWorkflowResponse {
+            workflow_path,
+            content,
+        })
+    }
+
+    /// Retrieves the linked GitHub access token for the authenticated user.
+    ///
+    /// This endpoint returns the GitHub OAuth access token that was linked to the user's
+    /// Atlas account. This token can be used to authenticate GitHub API requests on behalf
+    /// of the user.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(String)` containing the GitHub access token if the user has linked
+    /// their GitHub account, or `None` if no GitHub account is linked.
+    pub async fn get_github_token(&self) -> Result<Option<String>> {
+        let url = self.base_url.join("/api/v1/launcher/github/token")?;
+        let response = self
+            .client
+            .get(url)
+            .headers(self.get_auth_headers().await?)
+            .send()
+            .await?;
+
+        let status = response.status().as_u16();
+        if status == 404 || status == 409 {
+            return Ok(None);
+        }
+        if !(200..300).contains(&status) {
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Failed to fetch linked GitHub credentials (HTTP {}): {}",
+                status,
+                body
+            );
+        }
+
+        let payload: GithubTokenResponse = response.json().await?;
+        Ok(Some(payload.access_token))
+    }
+
+    /// Generates a presigned URL for CI artifact uploads.
+    ///
+    /// This endpoint creates a unique build ID and returns presigned upload URLs
+    /// that can be used to upload build artifacts to storage. The build will be
+    /// associated with the specified pack.
+    ///
+    /// # Parameters
+    ///
+    /// * `pack_id` - The ID of the pack for which the build artifacts will be uploaded
+    ///
+    /// # Returns
+    ///
+    /// Returns a `CiPresignResponse` containing the build ID, artifact key, and upload URL.
+    pub async fn presign_ci_upload(&self, pack_id: &str) -> Result<CiPresignResponse> {
+        let url = self.base_url.join("/api/v1/ci/presign")?;
+        let response = self
+            .client
+            .post(url)
+            .headers(self.get_auth_headers().await?)
+            .json(&CiPresignRequest {
+                pack_id: pack_id.to_string(),
+            })
+            .send()
+            .await?
+            .error_for_status()?;
+
+        response
+            .json::<CiPresignResponse>()
+            .await
+            .context("Failed to parse CI presign response")
+    }
+
+    /// Completes a CI build and updates pack channels.
+    ///
+    /// This endpoint finalizes a CI build by storing build metadata and updating
+    /// the specified pack channel to point to the new build. The build artifact
+    /// must have been previously uploaded using the presigned URL from `presign_ci_upload`.
+    ///
+    /// # Parameters
+    ///
+    /// * `request` - The completion request containing build metadata and channel information
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on successful completion.
+    pub async fn complete_ci_build(&self, request: &CiCompleteRequest) -> Result<()> {
+        let url = self.base_url.join("/api/v1/ci/complete")?;
+        self.client
+            .post(url)
+            .headers(self.get_auth_headers().await?)
+            .json(request)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
+
+    // Blocking versions for synchronous CLI usage
+
+    /// Downloads the CI workflow template (blocking version).
+    ///
+    /// Synchronous wrapper for `download_ci_workflow()` that blocks the current thread
+    /// until the operation completes. Useful for synchronous CLI applications.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `CiWorkflowResponse` containing the workflow file content and path.
+    pub fn blocking_download_ci_workflow(&self) -> Result<CiWorkflowResponse> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(self.download_ci_workflow())
+        })
+    }
+
+    /// Retrieves the linked GitHub access token (blocking version).
+    ///
+    /// Synchronous wrapper for `get_github_token()` that blocks the current thread
+    /// until the operation completes. Useful for synchronous CLI applications.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(String)` containing the GitHub access token if the user has linked
+    /// their GitHub account, or `None` if no GitHub account is linked.
+    pub fn blocking_get_github_token(&self) -> Result<Option<String>> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(self.get_github_token())
+        })
+    }
+
+    /// Generates a presigned URL for CI artifact uploads (blocking version).
+    ///
+    /// Synchronous wrapper for `presign_ci_upload()` that blocks the current thread
+    /// until the operation completes. Useful for synchronous CLI applications.
+    ///
+    /// # Parameters
+    ///
+    /// * `pack_id` - The ID of the pack for which the build artifacts will be uploaded
+    ///
+    /// # Returns
+    ///
+    /// Returns a `CiPresignResponse` containing the build ID, artifact key, and upload URL.
+    pub fn blocking_presign_ci_upload(&self, pack_id: &str) -> Result<CiPresignResponse> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(self.presign_ci_upload(pack_id))
+        })
+    }
+
+    /// Completes a CI build (blocking version).
+    ///
+    /// Synchronous wrapper for `complete_ci_build()` that blocks the current thread
+    /// until the operation completes. Useful for synchronous CLI applications.
+    ///
+    /// # Parameters
+    ///
+    /// * `request` - The completion request containing build metadata and channel information
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` on successful completion.
+    pub fn blocking_complete_ci_build(&self, request: &CiCompleteRequest) -> Result<()> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(self.complete_ci_build(request))
+        })
+    }
+
+    /// Lists launcher packs (blocking version).
+    ///
+    /// Synchronous wrapper for `list_launcher_packs()` that blocks the current thread
+    /// until the operation completes. Useful for synchronous CLI applications.
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of `LauncherPack` objects representing available packs.
+    pub fn blocking_list_launcher_packs(&self) -> Result<Vec<LauncherPack>> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(self.list_launcher_packs())
+        })
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -590,4 +802,74 @@ pub struct LauncherMinecraftPayload {
 pub struct WhitelistEntry {
     pub uuid: String,
     pub name: String,
+}
+
+/// Response from downloading a CI workflow template.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CiWorkflowResponse {
+    /// The recommended path where the workflow file should be placed in the repository
+    pub workflow_path: String,
+    /// The YAML content of the workflow file
+    pub content: String,
+}
+
+/// Response containing a GitHub access token.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubTokenResponse {
+    /// The GitHub OAuth access token
+    pub access_token: String,
+}
+
+/// Request for presigning a CI artifact upload.
+#[derive(Debug, Serialize)]
+pub struct CiPresignRequest {
+    /// The ID of the pack for which artifacts will be uploaded
+    #[serde(rename = "packId")]
+    pub pack_id: String,
+}
+
+/// Response from presigning a CI artifact upload.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CiPresignResponse {
+    /// Unique identifier for this build
+    pub build_id: String,
+    /// Encoded key for the artifact in storage
+    pub artifact_key: String,
+    /// Presigned URL for uploading the artifact
+    pub upload_url: String,
+}
+
+/// Request to complete a CI build.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CiCompleteRequest {
+    /// The ID of the pack this build belongs to
+    pub pack_id: String,
+    /// The build ID returned from the presign request
+    pub build_id: String,
+    /// The artifact key returned from the presign request
+    pub artifact_key: String,
+    /// Version string for this build
+    pub version: String,
+    /// Optional Git commit hash
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_hash: Option<String>,
+    /// Optional Git commit message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_message: Option<String>,
+    /// Optional Minecraft version this build targets
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minecraft_version: Option<String>,
+    /// Optional modloader type (e.g., "fabric", "forge")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modloader: Option<String>,
+    /// Optional modloader version
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modloader_version: Option<String>,
+    /// Size of the uploaded artifact in bytes
+    pub artifact_size: u64,
+    /// Channel to update with this build ("dev", "beta", or "production")
+    pub channel: String,
 }
