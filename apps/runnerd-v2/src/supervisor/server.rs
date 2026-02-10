@@ -361,14 +361,16 @@ pub(crate) async fn stop_server_internal(state: SharedState, force: bool) -> Res
 
     if let Some(ref mut child) = child {
         if !force {
-            for _ in 0..20 {
+            // Wait up to 30 seconds (60 * 500ms) for the server process to exit gracefully
+            info!("attempting graceful shutdown, waiting up to 30 seconds for process to exit...");
+            for _ in 0..60 {
                 if let Ok(Some(_)) = child.try_wait() {
                     return Ok(());
                 }
                 sleep(Duration::from_millis(500)).await;
             }
         }
-
+        
         child.kill().await.map_err(|err| RpcError {
             code: ErrorCode::IoError,
             message: format!("failed to kill server: {err}"),
