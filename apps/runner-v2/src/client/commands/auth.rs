@@ -4,9 +4,6 @@ use atlas_client::hub::{HubClient, LauncherPack};
 use dialoguer::{theme::ColorfulTheme, FuzzySelect, Input};
 use std::io::{self, IsTerminal};
 use std::time::Duration;
-use crate::client::connect_or_start;
-use runner_core_v2::proto::{Envelope, Request, Response};
-use runner_ipc_v2::framing;
 
 pub async fn exec(
     hub_url: Option<String>,
@@ -75,26 +72,8 @@ async fn save_deploy_key(
     deploy_key: &str,
     prefix: &str,
 ) -> Result<()> {
-    let mut framed = connect_or_start().await?;
-    let req = Envelope {
-        id: 1,
-        payload: Request::SaveDeployKey {
-            hub_url: hub_url.to_string(),
-            pack_id: pack_id.to_string(),
-            channel: channel.to_string(),
-            deploy_key: deploy_key.to_string(),
-            prefix: Some(prefix.to_string()),
-        },
-    };
-
-    framing::send_request(&mut framed, &req).await?;
-    let resp = framing::read_response(&mut framed).await?;
-
-    match resp.payload {
-        Response::DeployKeySaved {} => Ok(()),
-        Response::Error(err) => Err(anyhow::anyhow!("save deploy key failed: {}", err.message)),
-        other => Err(anyhow::anyhow!("unexpected response: {other:?}")),
-    }
+    write_deploy_key_file(hub_url, pack_id, channel, deploy_key, prefix)?;
+    Ok(())
 }
 
 fn normalize_channel(channel: Option<String>) -> String {
@@ -102,6 +81,36 @@ fn normalize_channel(channel: Option<String>) -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "production".to_string())
+}
+
+fn write_deploy_key_file(
+    hub_url: &str,
+    pack_id: &str,
+    channel: &str,
+    deploy_key: &str,
+    prefix: &str,
+) -> Result<()> {
+    let base = dirs::data_dir()
+        .or_else(dirs::home_dir)
+        .ok_or_else(|| anyhow::anyhow!("Unable to resolve a writable data directory"))?;
+    let dir = base.join("atlas").join("runnerd");
+    std::fs::create_dir_all(&dir)
+        .map_err(|err| anyhow::anyhow!("Failed to create runnerd config dir: {err}"))?;
+    let path = dir.join("deploy.json");
+
+    let payload = serde_json::json!({
+        "hub_url": hub_url,
+        "pack_id": pack_id,
+        "channel": channel,
+        "deploy_key": deploy_key,
+        "prefix": prefix,
+    });
+    let content = serde_json::to_string_pretty(&payload)
+        .map_err(|err| anyhow::anyhow!("Failed to serialize deploy key config: {err}"))?;
+    std::fs::write(&path, content)
+        .map_err(|err| anyhow::anyhow!("Failed to write deploy key config: {err}"))?;
+
+    Ok(())
 }
 
 async fn resolve_pack_id(hub: &HubClient, pack_id: Option<String>) -> Result<String> {
