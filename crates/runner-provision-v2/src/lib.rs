@@ -4,6 +4,7 @@ pub mod deps;
 pub mod apply;
 pub mod launch;
 pub mod java;
+mod hashing;
 
 pub use deps::provider::DependencyProvider;
 
