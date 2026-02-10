@@ -139,7 +139,7 @@ export default function CreatePackClient() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch("/api/github/repos", {
+      const response = await fetch("/api/v1/github/repos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -166,7 +166,7 @@ export default function CreatePackClient() {
     const loadOwners = async () => {
       setGithubLoading(true);
       setGithubError(null);
-      const response = await fetch("/api/github/owners");
+      const response = await fetch("/api/v1/github/owners");
       const data = await response.json();
       if (!mounted) {
         return;

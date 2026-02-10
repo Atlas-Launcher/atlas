@@ -36,7 +36,7 @@ export default function LauncherLinkClient({ code, signedIn }: LauncherLinkClien
     }
 
     const claim = async () => {
-      const response = await fetch("/api/launcher/link-sessions/claim", {
+      const response = await fetch("/api/v1/launcher/link-sessions/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),

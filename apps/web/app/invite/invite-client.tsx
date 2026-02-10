@@ -95,7 +95,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
     }
     const loadPreview = async () => {
       setPreviewError(null);
-      const response = await fetch(`/api/invites/preview?code=${encodeURIComponent(code)}`);
+      const response = await fetch(`/api/v1/invites/preview?code=${encodeURIComponent(code)}`);
       const data = await response.json();
       if (!response.ok) {
         setPreviewError(data?.error ?? "Unable to load invite details.");
@@ -115,7 +115,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
     const acceptInvite = async () => {
       setInviteStatus("loading");
       setInviteError(null);
-      const response = await fetch("/api/invites/accept", {
+      const response = await fetch("/api/v1/invites/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
