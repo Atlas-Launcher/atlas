@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use sysinfo::System;
 use atlas_client::hub::HubClient;
 use runner_core_v2::proto::*;
 use runner_provision_v2::{ensure_applied_from_packblob_bytes, DependencyProvider, LaunchPlan};
@@ -17,6 +18,34 @@ use super::monitor::ensure_monitor;
 use super::state::{ServerState, SharedState};
 use super::updates::{ensure_watchers, sync_whitelist_to_root};
 use super::util::{default_server_root, now_millis};
+
+fn get_default_max_ram() -> u32 {
+    let mut system = System::new();
+    system.refresh_memory();
+    let total_gb = (system.total_memory() / 1024 / 1024 / 1024) as u32;
+    if total_gb <= 8 {
+        (total_gb.saturating_sub(2)).max(1)
+    } else {
+        #[cfg(target_os = "macos")]
+        {
+            8
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if total_gb == 16 {
+                14
+            } else if total_gb >= 24 {
+                16
+            } else {
+                8
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        {
+            8
+        }
+    }
+}
 
 pub async fn start_server_from_deploy(state: SharedState) {
     {
@@ -41,6 +70,11 @@ pub async fn start_server_from_deploy(state: SharedState) {
             return;
         }
     };
+
+    if !deploy.should_autostart.unwrap_or(false) {
+        info!("auto-start disabled in config");
+        return;
+    }
 
     let mut hub = match HubClient::new(&deploy.hub_url) {
         Ok(value) => value,
@@ -100,9 +134,8 @@ pub async fn start_server_from_deploy(state: SharedState) {
     };
 
     let profile = "default".to_string();
-    let env = BTreeMap::new();
 
-    if let Err(err) = start_server(profile, &build, server_root.clone(), env, state).await {
+    if let Err(err) = start_server(profile, &build, server_root.clone(), state).await {
         warn!("failed to auto-start server: {}", err.message);
         return;
     }
@@ -141,7 +174,6 @@ pub async fn start_server(
     profile: ProfileId,
     pack_blob_bytes: &[u8],
     server_root: PathBuf,
-    env: BTreeMap<String, String>,
     state: SharedState,
 ) -> Result<Response, RpcError> {
     {
@@ -155,7 +187,7 @@ pub async fn start_server(
         }
     }
 
-    let launch_plan = apply_pack_blob(&server_root, pack_blob_bytes).await?;
+    let launch_plan = apply_pack_blob(&server_root, &pack_blob_bytes).await?;
     if let Ok(Some(deploy)) = config::load_deploy_key() {
         if let Ok(mut hub) = HubClient::new(&deploy.hub_url) {
             hub.set_service_token(deploy.deploy_key.clone());
@@ -170,7 +202,7 @@ pub async fn start_server(
         guard.logs.clone()
     };
     let spawn_logs = logs.clone();
-    let child = spawn_server(&launch_plan, &server_root, &env, spawn_logs).await.map_err(|err| RpcError {
+    let child = spawn_server(&launch_plan, &server_root, &BTreeMap::new(), spawn_logs).await.map_err(|err| RpcError {
         code: ErrorCode::Internal,
         message: format!("failed to start server: {err}"),
         details: Default::default(),
@@ -184,7 +216,6 @@ pub async fn start_server(
         guard.child = Some(child);
         guard.profile = Some(profile.clone());
         guard.server_root = Some(server_root.clone());
-        guard.env = env.clone();
         guard.launch_plan = Some(launch_plan);
         guard.restart_attempts = 0;
         guard.restart_disabled = false;
@@ -275,13 +306,26 @@ pub(crate) async fn apply_pack_blob(
     pack_blob: &[u8],
 ) -> Result<LaunchPlan, RpcError> {
     let provider = HttpDependencyProvider::default();
-    ensure_applied_from_packblob_bytes(server_root, pack_blob, &provider)
+    let mut launch_plan = ensure_applied_from_packblob_bytes(server_root, pack_blob, &provider)
         .await
         .map_err(|err| RpcError {
             code: ErrorCode::InvalidConfig,
             message: format!("provision failed: {err}"),
             details: Default::default(),
-        })
+        })?;
+
+    // Add RAM limits if specified in config
+    if let Ok(Some(deploy_config)) = config::load_deploy_key() {
+        let max_ram = deploy_config.max_ram.unwrap_or_else(get_default_max_ram);
+        // Find the position after "java" and insert -Xmx and -Xms
+        if let Some(java_pos) = launch_plan.argv.iter().position(|arg| arg == "java") {
+            let insert_pos = java_pos + 1;
+            launch_plan.argv.insert(insert_pos, format!("-Xmx{}m", max_ram));
+            launch_plan.argv.insert(insert_pos, format!("-Xms{}m", max_ram));
+        }
+    }
+
+    Ok(launch_plan)
 }
 
 pub(crate) async fn stop_server_internal(state: SharedState, force: bool) -> Result<(), RpcError> {

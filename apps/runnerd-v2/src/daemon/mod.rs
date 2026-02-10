@@ -169,7 +169,7 @@ async fn handle_conn(
                         .get("ATLAS_SERVER_ROOT")
                         .map(|value| std::path::PathBuf::from(value))
                         .unwrap_or_else(|| default_server_root(&profile));
-                    let payload = match crate::supervisor::start_server(profile, &pack_blob_bytes, server_root, env, state).await {
+                    let payload = match crate::supervisor::start_server(profile, &pack_blob_bytes, server_root, state).await {
                         Ok(resp) => resp,
                         Err(err) => Response::Error(err),
                     };
@@ -343,6 +343,9 @@ async fn handle_conn(
                     channel,
                     deploy_key,
                     prefix,
+                    max_ram: None,
+                    should_autostart: None,
+                    eula_accepted: None,
                 };
 
                 match save_deploy_key(&config) {

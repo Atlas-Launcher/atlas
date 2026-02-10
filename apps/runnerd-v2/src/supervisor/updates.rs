@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -240,10 +241,7 @@ async fn apply_pack_update(
         .await
         .map_err(|err| err.message)?;
 
-    let env = {
-        let guard = state.lock().await;
-        guard.env.clone()
-    };
+    let env = BTreeMap::new();
 
     let logs = {
         let guard = state.lock().await;

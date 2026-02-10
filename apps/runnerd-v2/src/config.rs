@@ -11,6 +11,12 @@ pub struct DeployKeyConfig {
     pub deploy_key: String,
     #[serde(default)]
     pub prefix: Option<String>,
+    #[serde(default)]
+    pub max_ram: Option<u32>,
+    #[serde(default)]
+    pub should_autostart: Option<bool>,
+    #[serde(default)]
+    pub eula_accepted: Option<bool>,
 }
 
 pub fn save_deploy_key(config: &DeployKeyConfig) -> Result<(), String> {

@@ -15,6 +15,7 @@ async-trait = "0.1.89"
 reqwest = "0.12.12"
 dirs = "5"
 serde = { version = "1", features = ["derive"] }
+sysinfo = "0.33"
 atlas-client = { path = "../../crates/atlas-client" }
 runner-v2-rcon = { path = "../../crates/runner-v2-rcon" }
 
