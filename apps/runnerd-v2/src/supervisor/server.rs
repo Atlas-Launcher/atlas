@@ -63,18 +63,39 @@ pub async fn start_server_from_deploy(state: SharedState) {
         }
     };
 
-    if let Some(ref current) = current_build_id {
+    let build = if let Some(ref current) = current_build_id {
         if artifact.build_id.as_ref() == Some(current) {
             info!("server is already up to date (build_id: {})", current);
-            return;
+            // Load stored pack_blob
+            match load_pack_blob(&server_root).await {
+                Some(blob) => blob,
+                None => {
+                    warn!("no stored pack blob, downloading");
+                    match hub.download_blob(&artifact.download_url).await {
+                        Ok(blob) => blob,
+                        Err(err) => {
+                            warn!("download build failed: {err}");
+                            return;
+                        }
+                    }
+                }
+            }
+        } else {
+            match hub.download_blob(&artifact.download_url).await {
+                Ok(blob) => blob,
+                Err(err) => {
+                    warn!("download build failed: {err}");
+                    return;
+                }
+            }
         }
-    }
-
-    let build = match hub.download_blob(&artifact.download_url).await {
-        Ok(value) => value,
-        Err(err) => {
-            warn!("download build failed: {err}");
-            return;
+    } else {
+        match hub.download_blob(&artifact.download_url).await {
+            Ok(blob) => blob,
+            Err(err) => {
+                warn!("download build failed: {err}");
+                return;
+            }
         }
     };
 
@@ -86,10 +107,13 @@ pub async fn start_server_from_deploy(state: SharedState) {
         return;
     }
 
-    // Save the new build_id
+    // Save the new build_id and pack_blob
     if let Some(build_id) = artifact.build_id {
         if let Err(err) = save_current_build_id(&server_root, &build_id).await {
             warn!("failed to save build_id: {err}");
+        }
+        if let Err(err) = save_pack_blob(&server_root, &build).await {
+            warn!("failed to save pack_blob: {err}");
         }
     }
 }
@@ -401,4 +425,19 @@ async fn save_current_build_id(server_root: &PathBuf, build_id: &str) -> std::io
     tokio::fs::create_dir_all(&dir).await?;
     let path = dir.join("build_id.txt");
     tokio::fs::write(path, build_id).await
+}
+
+async fn load_pack_blob(server_root: &PathBuf) -> Option<Vec<u8>> {
+    let path = server_root.join("current").join(".runner").join("pack_blob.bin");
+    match tokio::fs::read(&path).await {
+        Ok(blob) => Some(blob),
+        Err(_) => None,
+    }
+}
+
+async fn save_pack_blob(server_root: &PathBuf, blob: &[u8]) -> std::io::Result<()> {
+    let dir = server_root.join("current").join(".runner");
+    tokio::fs::create_dir_all(&dir).await?;
+    let path = dir.join("pack_blob.bin");
+    tokio::fs::write(path, blob).await
 }

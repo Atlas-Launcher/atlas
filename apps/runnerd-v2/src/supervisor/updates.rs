@@ -54,6 +54,8 @@ pub async fn ensure_watchers(state: SharedState) {
     hub.set_service_token(config.deploy_key.clone());
     let hub = Arc::new(hub);
 
+    // Disabled polling to prevent lockups
+    /*
     let whitelist_state = state.clone();
     let whitelist_hub = hub.clone();
     let whitelist_config = config.clone();
@@ -81,6 +83,7 @@ pub async fn ensure_watchers(state: SharedState) {
             sleep(poll_interval).await;
         }
     });
+    */
 }
 
 #[derive(Debug, Deserialize)]
