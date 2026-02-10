@@ -14,6 +14,6 @@
     "release:launcher": "turbo run release:launcher --filter=atlas --"
   },
   "devDependencies": {
-    "turbo": "^2.0.0"
+    "turbo": "^2.8.3"
   }
 }
