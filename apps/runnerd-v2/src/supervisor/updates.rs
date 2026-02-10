@@ -1,20 +1,16 @@
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use atlas_client::hub::HubClient;
-use atlas_client::sse::SseParser;
-use futures_util::StreamExt;
 use serde::Deserialize;
 use tokio::time::{sleep, Duration};
 use tracing::{info, warn, debug};
 
-use runner_core_v2::proto::ServerStatus;
 use runner_v2_rcon::{load_rcon_settings, RconClient};
 
 use crate::config::DeployKeyConfig;
 
-use super::server::{apply_pack_blob, spawn_server, stop_server_internal};
+use super::server::{start_server, stop_server_internal};
 use super::state::SharedState;
 use super::util::current_server_root;
 
@@ -48,15 +44,9 @@ pub async fn ensure_watchers(state: SharedState) {
         }
     };
 
-    let mut hub = match HubClient::new(&config.hub_url) {
-        Ok(value) => value,
-        Err(err) => {
-            warn!("failed to create hub client: {err}");
-            return;
-        }
-    };
-    hub.set_service_token(config.deploy_key.clone());
-    let hub = Arc::new(hub);
+    // We'll create HubClient instances inside each watcher task instead of capturing one here.
+    let hub_url = config.hub_url.clone();
+    let hub_deploy_key = config.deploy_key.clone();
 
     // Try to load persisted pack etag from disk (if present). This allows the watcher to send If-None-Match
     // on the very first poll instead of always sending None.
@@ -71,32 +61,69 @@ pub async fn ensure_watchers(state: SharedState) {
     }
 
     let whitelist_state = state.clone();
-    let whitelist_hub = hub.clone();
     let whitelist_config = config.clone();
-    tokio::spawn(async move {
-        let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 1 minute
-        loop {
-            match poll_whitelist(whitelist_hub.clone(), &whitelist_config, whitelist_state.clone()).await {
-                Ok(()) => {},
-                Err(err) => warn!("whitelist poll error: {err}"),
+    let whitelist_hub_url = hub_url.clone();
+    let whitelist_deploy_key = hub_deploy_key.clone();
+    tokio::task::spawn_blocking(move || {
+        // Run the async watcher loop on a dedicated current-thread runtime to avoid Send requirements
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("failed to create local runtime for whitelist watcher");
+        rt.block_on(async move {
+            // construct local HubClient for this task so the task doesn't capture a non-Send client
+            let mut local_hub = match HubClient::new(&whitelist_hub_url) {
+                Ok(h) => h,
+                Err(err) => {
+                    warn!("whitelist watcher: failed to create hub client: {err}");
+                    return;
+                }
+            };
+            local_hub.set_service_token(whitelist_deploy_key.clone());
+            let local_hub = Arc::new(local_hub);
+
+            let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 1 minute
+            loop {
+                match poll_whitelist(local_hub.clone(), &whitelist_config, whitelist_state.clone()).await {
+                    Ok(()) => {},
+                    Err(err) => warn!("whitelist poll error: {err}"),
+                }
+                sleep(poll_interval).await;
             }
-            sleep(poll_interval).await;
-        }
+        })
     });
     info!("started whitelist watcher");
 
     let update_state = state.clone();
-    let update_hub = hub.clone();
     let update_config = config.clone();
-    tokio::spawn(async move {
-        let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 5 minutes
-        loop {
-            match poll_pack_update(update_hub.clone(), &update_config, update_state.clone()).await {
-                Ok(()) => {},
-                Err(err) => warn!("pack update poll error: {err}"),
+    let update_hub_url = hub_url.clone();
+    let update_deploy_key = hub_deploy_key.clone();
+    tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("failed to create local runtime for update watcher");
+        rt.block_on(async move {
+            // construct local HubClient for this task so the task doesn't capture a non-Send client
+            let mut local_hub = match HubClient::new(&update_hub_url) {
+                Ok(h) => h,
+                Err(err) => {
+                    warn!("update watcher: failed to create hub client: {err}");
+                    return;
+                }
+            };
+            local_hub.set_service_token(update_deploy_key.clone());
+            let local_hub = Arc::new(local_hub);
+
+            let poll_interval = Duration::from_secs(POLL_INTERVAL_SECS); // 5 minutes
+            loop {
+                match poll_pack_update(local_hub.clone(), &update_config, update_state.clone()).await {
+                    Ok(()) => {},
+                    Err(err) => warn!("pack update poll error: {err}"),
+                }
+                sleep(poll_interval).await;
             }
-            sleep(poll_interval).await;
-        }
+        })
     });
     info!("started pack update watcher");
 }
@@ -345,46 +372,35 @@ async fn apply_pack_update(
     state: SharedState,
 ) -> Result<(), String> {
     info!("pack update detected; applying update");
-    stop_server_internal(state.clone(), false)
-        .await
-        .map_err(|err| format!("failed to stop server: {}", err.message))?;
 
+    // Download the build first so we don't stop the running server unless the download succeeds.
     let build = hub
         .get_build_blob(&config.pack_id, &config.channel)
         .await
         .map_err(|err| format!("download build failed: {err}"))?;
 
+    // Stop the server (graceful) before applying the update
+    stop_server_internal(state.clone(), false)
+        .await
+        .map_err(|err| format!("failed to stop server: {}", err.message))?;
+
     let server_root = current_server_root(&state)
         .await
         .ok_or_else(|| "server root not configured".to_string())?;
-    let launch_plan = apply_pack_blob(&server_root, &build.bytes)
-        .await
-        .map_err(|err| err.message)?;
 
-    let env = BTreeMap::new();
-
-    let logs = {
+    // Use the higher-level start_server path to apply the pack and start the server.
+    let profile = {
         let guard = state.lock().await;
-        guard.logs.clone()
+        guard.profile.clone().unwrap_or_else(|| "default".into())
     };
-    let child = spawn_server(&launch_plan, &server_root, &env, logs)
-        .await
-        .map_err(|err| format!("failed to start server: {err}"))?;
-    let pid = child.id().unwrap_or_default() as i32;
-    let started_at_ms = super::util::now_millis();
 
+    start_server(profile.clone(), &build.bytes, server_root.clone(), state.clone())
+        .await
+        .map_err(|err| format!("failed to start server: {}", err.message))?;
+
+    // start_server sets child/launch_plan/status; refresh current build id from disk if present
     let mut guard = state.lock().await;
-    guard.child = Some(child);
-    guard.launch_plan = Some(launch_plan);
-    guard.restart_attempts = 0;
-    guard.last_start_ms = Some(started_at_ms);
-    let profile = guard.profile.clone().unwrap_or_else(|| "default".into());
-    guard.status = ServerStatus::Running {
-        profile,
-        pid,
-        started_at_ms,
-        meta: Default::default(),
-    };
+    guard.current_pack_build_id = None; // reset current build id
 
     // Try to read the current build id from disk (if present) and persist into shared state
     let build_id_path = server_root.join("current").join(".runner").join("build_id.txt");
