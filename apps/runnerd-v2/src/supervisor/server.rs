@@ -1,17 +1,21 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use atlas_client::hub::HubClient;
 use runner_core_v2::proto::*;
 use runner_provision_v2::{ensure_applied_from_packblob_bytes, DependencyProvider, LaunchPlan};
 use runner_v2_rcon::{load_rcon_settings, RconClient};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
+use tracing::warn;
 
+use crate::config;
 use super::logs::LogStore;
 use super::monitor::ensure_monitor;
 use super::state::{ServerState, SharedState};
-use super::updates::ensure_watchers;
+use super::updates::{ensure_watchers, sync_whitelist_to_root};
 use super::util::{default_server_root, now_millis};
 
 pub async fn build_status(
@@ -71,6 +75,15 @@ pub async fn start_server(
         })?;
 
     let launch_plan = apply_pack_blob(&server_root, &pack_blob).await?;
+    if let Ok(Some(deploy)) = config::load_deploy_key() {
+        if let Ok(mut hub) = HubClient::new(&deploy.hub_url) {
+            hub.set_service_token(deploy.deploy_key.clone());
+            let hub = Arc::new(hub);
+            if let Err(err) = sync_whitelist_to_root(hub, &deploy.pack_id, &server_root).await {
+                warn!("whitelist sync failed on start: {err}");
+            }
+        }
+    }
     let logs = {
         let guard = state.lock().await;
         guard.logs.clone()

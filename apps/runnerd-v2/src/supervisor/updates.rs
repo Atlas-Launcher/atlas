@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use atlas_client::hub::HubClient;
@@ -191,6 +192,14 @@ async fn sync_whitelist(
     let server_root = current_server_root(&state)
         .await
         .ok_or_else(|| "server root not configured".to_string())?;
+    sync_whitelist_to_root(hub, pack_id, &server_root).await
+}
+
+pub(crate) async fn sync_whitelist_to_root(
+    hub: Arc<HubClient>,
+    pack_id: &str,
+    server_root: &PathBuf,
+) -> Result<(), String> {
     let players = hub
         .get_whitelist(pack_id)
         .await
