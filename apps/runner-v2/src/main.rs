@@ -179,9 +179,21 @@ async fn follow_logs(lines: usize, daemon_logs: bool) -> anyhow::Result<()> {
 
     loop {
         let resp = if daemon_logs {
-            client::daemon_logs_tail(lines).await?
+            match client::daemon_logs_tail_follow(lines).await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    eprintln!("Daemon connection lost: {}", err);
+                    break;
+                }
+            }
         } else {
-            client::logs_tail(lines).await?
+            match client::logs_tail_follow(lines).await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    eprintln!("Daemon connection lost: {}", err);
+                    break;
+                }
+            }
         };
         for line in resp.lines {
             if line.at_ms > last_at_ms {
@@ -200,6 +212,7 @@ async fn follow_logs(lines: usize, daemon_logs: bool) -> anyhow::Result<()> {
 
         sleep(Duration::from_secs(1)).await;
     }
+    Ok(())
 }
 
 fn print_log_line(line: &LogLine) {
