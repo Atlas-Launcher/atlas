@@ -10,7 +10,7 @@ use runner_v2_rcon::{load_rcon_settings, RconClient};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
-use tracing::{info, warn};
+use tracing::{info, warn, debug};
 
 use crate::config;
 use super::logs::LogStore;
@@ -144,6 +144,39 @@ pub async fn start_server_from_deploy(state: SharedState) {
     if let Err(err) = start_server(profile, &build, server_root.clone(), state.clone()).await {
         warn!("failed to auto-start server: {}", err.message);
         return;
+    }
+
+    // If artifact requested a force reinstall or full reinstall, ensure existing current is cleared
+    // before continuing. We move it to .runner/backup/current-<ms> to keep a backup.
+    if artifact.force_reinstall.unwrap_or(false) || artifact.requires_full_reinstall.unwrap_or(false) {
+        info!("artifact requests force reinstall; clearing existing server data before auto-start");
+        let current = server_root.join("current");
+        match tokio::fs::try_exists(&current).await {
+            Ok(true) => {
+                let backup_dir = server_root.join(".runner").join("backup");
+                if let Err(err) = tokio::fs::create_dir_all(&backup_dir).await {
+                    warn!("failed to create backup dir {}: {}", backup_dir.display(), err);
+                }
+                let backup = backup_dir.join(format!("current-{}", super::util::now_millis()));
+                match tokio::fs::rename(&current, &backup).await {
+                    Ok(_) => info!("moved existing current to backup: {}", backup.display()),
+                    Err(err) => {
+                        warn!("failed to move current to backup: {}", err);
+                        if let Err(err2) = tokio::fs::remove_dir_all(&current).await {
+                            warn!("failed to remove existing current after rename failure: {}", err2);
+                        } else {
+                            info!("removed existing current directory");
+                        }
+                    }
+                }
+            }
+            Ok(false) => {
+                debug!("no existing current directory to clear");
+            }
+            Err(err) => {
+                warn!("failed to probe existing current directory: {}", err);
+            }
+        }
     }
 
     info!("server auto-started successfully");
@@ -293,27 +326,32 @@ pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, Rp
         }
     }
 
-    let mut guard = state.lock().await;
-    refresh_child_status(&mut guard).await;
-    if guard.child.is_none() {
+    // Request watcher worker to stop gracefully (if present)
+    // We set the flag under the state lock, then drop before calling the internal stop
+    // which also acquires the state lock internally.
+    let watcher_done_opt = {
+        let mut guard = state.lock().await;
+        refresh_child_status(&mut guard).await;
+
+        if let Some(ref flag) = guard.watcher_stop {
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
+            // mark watchers as not started so future start will re-create them
+            guard.watchers_started = false;
+        }
+
+        guard.watcher_done.clone()
+    };
+
+    // Stop the server (graceful or force) using the internal helper which will handle killing the child
+    if let Err(err) = stop_server_internal(state.clone(), force).await {
         return Err(RpcError {
-            code: ErrorCode::ServerNotRunning,
-            message: "server not running".into(),
-            details: Default::default(),
+            code: err.code,
+            message: format!("failed to stop server: {}", err.message),
+            details: err.details,
         });
     }
 
-    // Request watcher worker to stop gracefully (if present)
-    if let Some(ref flag) = guard.watcher_stop {
-        flag.store(true, std::sync::atomic::Ordering::Relaxed);
-        // mark watchers as not started so future start will re-create them
-        guard.watchers_started = false;
-    }
-
     // Wait for watcher to signal done via the atomic flag (up to 10s).
-    let watcher_done_opt = guard.watcher_done.clone();
-    drop(guard);
-
     if let Some(done_flag) = watcher_done_opt {
         match tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {

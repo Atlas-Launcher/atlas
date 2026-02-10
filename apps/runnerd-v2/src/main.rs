@@ -7,6 +7,7 @@ mod lock;
 mod daemon;
 mod config;
 mod supervisor;
+mod backup;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
