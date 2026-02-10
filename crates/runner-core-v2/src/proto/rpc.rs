@@ -59,6 +59,14 @@ pub enum Request {
     RconOpen {},
     RconSend { session: SessionId, command: String },
     RconClose { session: SessionId },
+
+    SaveDeployKey {
+        hub_url: String,
+        pack_id: String,
+        deploy_key: String,
+        #[serde(default)]
+        prefix: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +96,8 @@ pub enum Response {
     RconResult { text: String },
     RconOpened { session: SessionId, prompt: String },
     RconClosed { session: SessionId },
+
+    DeployKeySaved {},
 
     Error(RpcError),
 }
