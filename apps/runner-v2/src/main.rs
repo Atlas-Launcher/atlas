@@ -45,6 +45,9 @@ enum Cmd {
         #[arg(long, value_name = "SERVER_ROOT")]
         server_root: Option<PathBuf>,
 
+        #[arg(long, value_name = "MAX_RAM_MB")]
+        max_ram: Option<u32>,
+
         #[arg(long, default_value_t = false)]
         accept_eula: bool,
     },
@@ -106,13 +109,13 @@ async fn main() -> anyhow::Result<()> {
             profile,
             pack_blob,
             server_root,
+            max_ram,
             accept_eula,
         } => {
             if profile != "default" {
                 eprintln!("Ignoring --profile; runner uses a single profile: default");
             }
-            ensure_eula_accepted(accept_eula)?;
-            let resp = client::up("default".to_string(), pack_blob, server_root).await?;
+            let resp = client::up("default".to_string(), pack_blob, server_root, max_ram, accept_eula).await?;
             println!("{resp}");
         }
         Cmd::Exec { interactive, command } => {
@@ -152,25 +155,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     Ok(())
-}
-
-fn ensure_eula_accepted(accept_eula: bool) -> anyhow::Result<()> {
-    if accept_eula {
-        return Ok(());
-    }
-
-    println!("Minecraft EULA: https://aka.ms/MinecraftEULA");
-    print!("Do you accept the Minecraft EULA? (y/N): ");
-    std::io::Write::flush(&mut std::io::stdout())?;
-
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
-    let answer = input.trim().to_ascii_lowercase();
-    if answer == "y" || answer == "yes" {
-        return Ok(());
-    }
-
-    anyhow::bail!("EULA not accepted. Re-run with --accept-eula to proceed.");
 }
 
 async fn follow_logs(lines: usize, daemon_logs: bool) -> anyhow::Result<()> {
