@@ -52,7 +52,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     .from(packMembers)
     .innerJoin(users, eq(packMembers.userId, users.id))
     .where(eq(packMembers.packId, packId))
-    .orderBy(asc(users.name));
+    .orderBy(asc(users.name))
+    .limit(500); // Reasonable limit for pack members
 
   const includesCurrentUser = members.some((member) => member.userId === session.user.id);
   if (!includesCurrentUser) {
