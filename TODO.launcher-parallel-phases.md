@@ -22,12 +22,12 @@ Owner: Frontend
 ## Track B: In-App Updater UX (Phase 3)
 Owner: Frontend + Tauri integration
 
-- [ ] Add `useUpdater.ts` wrapping updater plugin check/download/install.
-- [ ] Add visible update-available banner/dialog with release info.
-- [ ] Add install progress and completion state.
-- [ ] Add restart prompt and restart action after install.
-- [ ] Add manual check action in settings.
-- [ ] Acceptance: update flow is discoverable, non-blocking, and restart is one-click.
+- [x] Add `useUpdater.ts` wrapping updater plugin check/download/install.
+- [x] Add visible update-available banner/dialog with release info.
+- [x] Add install progress and completion state.
+- [x] Add restart prompt and restart action after install.
+- [x] Add manual check action in settings.
+- [x] Acceptance: update flow is discoverable, non-blocking, and restart is one-click.
 
 ## Track C: Repair + Support Bundle backend hardening (Phases 4/5 backend)
 Owner: Backend
