@@ -139,10 +139,19 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
       pushLog(`Launcher update available: ${result.currentVersion} -> ${result.version}`);
       return true;
     } catch (err) {
-      const message = `Failed to check for updates: ${String(err)}`;
+      const rawError = String(err);
+      const isReleaseJsonError = rawError.includes("Could not fetch a valid release JSON");
+      const isNetworkError =
+        rawError.includes("Network") ||
+        rawError.includes("fetch") ||
+        rawError.includes("timed out") ||
+        rawError.includes("dns");
+      const message = isReleaseJsonError || isNetworkError
+        ? "Update service is temporarily unavailable. Try again later."
+        : `Failed to check for updates: ${rawError}`;
       errorMessage.value = message;
       setStatus(message);
-      pushLog(message);
+      pushLog(`Updater check failed: ${rawError}`);
       return false;
     } finally {
       checking.value = false;
