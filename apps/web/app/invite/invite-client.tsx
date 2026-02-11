@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -138,23 +138,29 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
     });
   }, [code, inviteStatus, signedInState]);
 
-  useEffect(() => {
-    if (inviteStatus === "accepted" && resolvedStep === "account") {
-      setStepAndUrl("setup");
-    }
-  }, [inviteStatus, resolvedStep]);
-
-  const setStepAndUrl = (nextStep: InviteStep) => {
-    if (!code) {
+  const setStepAndUrl = useCallback(
+    (nextStep: InviteStep) => {
+      if (!code) {
+        setManualStep(nextStep);
+        return;
+      }
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("code", code);
+      params.set("step", nextStep);
       setManualStep(nextStep);
-      return;
+      router.replace(`/invite?${params.toString()}`);
+    },
+    [code, router, searchParams]
+  );
+
+  useEffect(() => {
+    if (inviteStatus === "accepted" && resolvedStep === "account" && code) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("code", code);
+      params.set("step", "setup");
+      router.replace(`/invite?${params.toString()}`);
     }
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("code", code);
-    params.set("step", nextStep);
-    setManualStep(nextStep);
-    router.replace(`/invite?${params.toString()}`);
-  };
+  }, [code, inviteStatus, resolvedStep, router, searchParams]);
 
   const accountComplete = signedInState;
 
@@ -418,13 +424,13 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
         {resolvedStep === "done" ? (
           <Card>
             <CardHeader>
-              <CardTitle>You're ready to go!</CardTitle>
+              <CardTitle>You&apos;re ready to go!</CardTitle>
               <CardDescription>Open the Atlas Launcher to start playing.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <ol className="list-decimal space-y-2 pl-4 text-sm text-[var(--atlas-ink-muted)]">
                 <li>Open the Atlas Launcher app.</li>
-                <li>Sign in with your account (if you haven't already).</li>
+                <li>Sign in with your account (if you haven&apos;t already).</li>
                 <li>Connect your Microsoft account for Minecraft.</li>
                 <li>Choose your pack and hit play!</li>
               </ol>
