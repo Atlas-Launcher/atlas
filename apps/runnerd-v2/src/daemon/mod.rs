@@ -24,6 +24,9 @@ use crate::supervisor::{
 
 pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()> {
     let state: SharedState = Arc::new(Mutex::new(ServerState::new(logs)));
+    // Start daily backup scheduler (non-blocking)
+    let server_root_for_scheduler = crate::supervisor::default_server_root("default");
+    crate::backup::start_daily_scheduler(server_root_for_scheduler, state.clone());
     let start_ms = crate::supervisor::now_millis();
     let auto_state = state.clone();
     // Run auto-start synchronously in this task to avoid requiring `start_server_from_deploy` to be Send.
