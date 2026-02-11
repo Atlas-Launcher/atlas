@@ -7,17 +7,21 @@ import ActivityCard from "./components/ActivityCard.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
 import InstanceView from "./components/InstanceView.vue";
 import LibraryView from "./components/LibraryView.vue";
+import LaunchReadinessWizard from "./components/LaunchReadinessWizard.vue";
 import LauncherLinkCard from "./components/LauncherLinkCard.vue";
 import SettingsCard from "./components/SettingsCard.vue";
 import SidebarNav from "./components/SidebarNav.vue";
 import TitleBar from "./components/TitleBar.vue";
+import UpdaterBanner from "./components/UpdaterBanner.vue";
 import { initLaunchEvents } from "./lib/useLaunchEvents";
 import { useAuth } from "./lib/useAuth";
 import { useLibrary } from "./lib/useLibrary";
 import { useLauncher } from "./lib/useLauncher";
 import { useSettings } from "./lib/useSettings";
 import { useStatus } from "./lib/useStatus";
+import { useUpdater } from "./lib/useUpdater";
 import { useWorking } from "./lib/useWorking";
+import type { LaunchReadinessReport, RepairResult } from "@/types/diagnostics";
 import type { AtlasPackSyncResult, AtlasRemotePack } from "@/types/library";
 import type { InstanceConfig, ModLoaderKind } from "@/types/settings";
 
@@ -57,6 +61,7 @@ const {
   loadSettings,
   loadDefaultGameDir,
   saveSettings,
+  updateSettings,
   instances,
   activeInstance,
   defaultGameDir,
@@ -92,13 +97,43 @@ const { launchMinecraft, downloadMinecraftFiles } = useLauncher({
   run,
   resolveGameDir: resolveInstanceGameDir
 });
+const {
+  checking: updaterChecking,
+  installing: updaterInstalling,
+  installComplete: updaterInstallComplete,
+  dialogOpen: updaterDialogOpen,
+  showBanner: showUpdaterBanner,
+  updaterBusy,
+  updateInfo,
+  statusText: updaterStatusText,
+  errorMessage: updaterErrorMessage,
+  downloadedBytes: updaterDownloadedBytes,
+  totalBytes: updaterTotalBytes,
+  progressPercent: updaterProgressPercent,
+  checkForUpdates,
+  installUpdate,
+  restartNow,
+  openDialog: openUpdaterDialog,
+  closeDialog: closeUpdaterDialog,
+  dismissBanner: dismissUpdaterBanner
+} = useUpdater({ setStatus, pushLog });
 
 const activeTab = ref<"library" | "settings">("library");
 const libraryView = ref<"grid" | "detail">("grid");
 const syncingRemotePacks = ref(false);
 const instanceInstallStateById = ref<Record<string, boolean>>({});
 const tasksPanelOpen = ref(false);
+const launchReadiness = ref<LaunchReadinessReport | null>(null);
+const readinessWizardOpen = ref(false);
+const appBootstrapped = ref(false);
 const hubUrl = computed(() => (settingsAtlasHubUrl.value ?? "").trim() || import.meta.env.VITE_ATLAS_HUB_URL || "https://atlas.nathanm.org");
+const readinessNextActionLabels: Partial<Record<string, string>> = {
+  atlasLogin: "Sign in to Atlas",
+  microsoftLogin: "Sign in to Microsoft",
+  accountLink: "Link accounts",
+  filesInstalled: "Install files",
+  javaReady: "Repair runtime"
+};
 
 function normalizeUuid(value?: string | null) {
   return (value ?? "").trim().toLowerCase().replace(/-/g, "");
@@ -150,6 +185,42 @@ async function startMicrosoftSignIn() {
   await startLogin();
 }
 
+function activeInstanceGameDir(): string | null {
+  const gameDir = resolveInstanceGameDir(activeInstance.value);
+  return gameDir.trim() ? gameDir : null;
+}
+
+async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
+  try {
+    launchReadiness.value = await invoke<LaunchReadinessReport>("get_launch_readiness", {
+      gameDir: activeInstanceGameDir()
+    });
+    const autoOpen = options?.autoOpen === true;
+    if (autoOpen && launchReadiness.value && shouldAutoOpenReadinessWizard(launchReadiness.value)) {
+      readinessWizardOpen.value = true;
+    }
+  } catch (err) {
+    pushLog(`Failed to load launch readiness: ${String(err)}`);
+  }
+}
+
+function shouldAutoOpenReadinessWizard(report: LaunchReadinessReport) {
+  const dismissed = !!settings.value.launchReadinessWizard?.dismissedAt;
+  const completed = !!settings.value.launchReadinessWizard?.completedAt;
+  return !report.readyToLaunch && !dismissed && !completed;
+}
+
+async function persistReadinessWizardState(state: { dismissedAt?: string | null; completedAt?: string | null }) {
+  const nextSettings = {
+    ...settings.value,
+    launchReadinessWizard: {
+      dismissedAt: state.dismissedAt ?? settings.value.launchReadinessWizard?.dismissedAt ?? null,
+      completedAt: state.completedAt ?? settings.value.launchReadinessWizard?.completedAt ?? null
+    }
+  };
+  await updateSettings(nextSettings);
+}
+
 async function startUnifiedAuthFlow() {
   if (!atlasProfile.value) {
     await startAtlasLogin();
@@ -162,6 +233,11 @@ async function startUnifiedAuthFlow() {
   }
 
   await startLauncherLinking();
+}
+
+async function openReadinessWizard() {
+  await refreshLaunchReadiness();
+  readinessWizardOpen.value = true;
 }
 
 async function signOutMicrosoft() {
@@ -436,6 +512,7 @@ async function installSelectedVersion() {
   }
   await loadInstalledVersions();
   await refreshInstanceInstallStates();
+  await refreshLaunchReadiness();
 }
 
 async function refreshVersions() {
@@ -505,6 +582,7 @@ async function uninstallInstanceData() {
       await loadInstalledVersions();
       await refreshInstanceInstallStates();
       await loadMods();
+      await refreshLaunchReadiness();
       setStatus("Profile files removed.");
     } catch (err) {
       setStatus(`Failed to uninstall profile data: ${String(err)}`);
@@ -529,6 +607,90 @@ async function syncAtlasPacks() {
   } finally {
     syncingRemotePacks.value = false;
   }
+}
+
+async function checkForUpdatesFromSettings() {
+  await checkForUpdates({ userInitiated: true });
+}
+
+async function installLauncherUpdate() {
+  await installUpdate();
+}
+
+async function restartLauncherAfterUpdate() {
+  await restartNow();
+}
+
+async function repairRuntimeFromWizard() {
+  const instance = activeInstance.value;
+  if (!instance) {
+    setStatus("Select a profile before repairing runtime.");
+    return;
+  }
+  const gameDir = resolveInstanceGameDir(instance);
+  if (!gameDir) {
+    setStatus("Profile game directory is missing.");
+    return;
+  }
+  await runTask("Repairing runtime", async () => {
+    try {
+      const result = await invoke<RepairResult>("repair_installation", {
+        gameDir,
+        packId: instance.atlasPack?.packId ?? null,
+        channel: instance.atlasPack?.channel ?? null,
+        preserveSaves: true
+      });
+      setStatus(result.message);
+      await loadInstalledVersions();
+      await refreshInstanceInstallStates();
+      await loadMods();
+      await refreshLaunchReadiness();
+    } catch (err) {
+      setStatus(`Runtime repair failed: ${String(err)}`);
+    }
+  });
+}
+
+async function handleReadinessAction(key: string) {
+  if (key === "atlasLogin") {
+    await startAtlasLogin();
+    await refreshLaunchReadiness();
+    return;
+  }
+  if (key === "microsoftLogin") {
+    await startMicrosoftSignIn();
+    await refreshLaunchReadiness();
+    return;
+  }
+  if (key === "accountLink") {
+    await startLauncherLinking();
+    await refreshLaunchReadiness();
+    return;
+  }
+  if (key === "filesInstalled") {
+    await installSelectedVersion();
+    await refreshLaunchReadiness();
+    return;
+  }
+  if (key === "javaReady") {
+    await repairRuntimeFromWizard();
+    await refreshLaunchReadiness();
+  }
+}
+
+async function dismissReadinessWizard() {
+  readinessWizardOpen.value = false;
+  await persistReadinessWizardState({
+    dismissedAt: new Date().toISOString()
+  });
+}
+
+async function completeReadinessWizard() {
+  readinessWizardOpen.value = false;
+  await persistReadinessWizardState({
+    completedAt: new Date().toISOString(),
+    dismissedAt: null
+  });
 }
 
 async function refreshAtlasPacksFromLibrary() {
@@ -578,6 +740,7 @@ onMounted(async () => {
   await restoreSessions();
   await loadDefaultGameDir();
   await loadSettings();
+  await refreshLaunchReadiness({ autoOpen: true });
   await initDeepLink();
   await loadAvailableVersions();
   await loadInstalledVersions();
@@ -586,6 +749,8 @@ onMounted(async () => {
   await loadNeoForgeLoaderVersions();
   await loadMods();
   await syncAtlasPacks();
+  void checkForUpdates();
+  appBootstrapped.value = true;
   try {
     const windows = await Window.getAll();
     const loading = windows.find((entry) => entry.label === "loading");
@@ -607,6 +772,22 @@ watch(
       return;
     }
     await startLauncherLinkCompletionPoll(launcherLinkSession.value);
+  }
+);
+
+watch(
+  () => [
+    profile.value?.id ?? null,
+    atlasProfile.value?.id ?? null,
+    atlasProfile.value?.mojang_uuid ?? null,
+    activeInstance.value?.id ?? null,
+    activeInstance.value?.gameDir ?? null
+  ],
+  async () => {
+    if (!appBootstrapped.value) {
+      return;
+    }
+    await refreshLaunchReadiness();
   }
 );
 
@@ -695,6 +876,7 @@ watch(
       @sign-out-atlas="signOutAtlasFromMenu"
       @start-auth-flow="startUnifiedAuthFlow"
       @complete-link="completeLauncherLinkingFromMenu"
+      @open-readiness-wizard="openReadinessWizard"
     />
     
     <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-8">
@@ -709,6 +891,23 @@ watch(
 
       <!-- Main Content: Floating Pane -->
       <main class="flex flex-col min-h-0 overflow-visible">
+        <UpdaterBanner
+          :visible="showUpdaterBanner"
+          :open="updaterDialogOpen"
+          :checking="updaterChecking"
+          :installing="updaterInstalling"
+          :install-complete="updaterInstallComplete"
+          :progress-percent="updaterProgressPercent"
+          :downloaded-bytes="updaterDownloadedBytes"
+          :total-bytes="updaterTotalBytes"
+          :update-info="updateInfo"
+          :error-message="updaterErrorMessage"
+          @open="openUpdaterDialog"
+          @close="closeUpdaterDialog"
+          @dismiss="dismissUpdaterBanner"
+          @install="installLauncherUpdate"
+          @restart="restartLauncherAfterUpdate"
+        />
         <section
           v-if="activeTab === 'library'"
           class="flex-1 min-h-0 flex flex-col gap-6 overflow-visible"
@@ -779,7 +978,13 @@ watch(
             v-model:settingsDefaultJvmArgs="settingsDefaultJvmArgs"
             v-model:settingsThemeMode="settingsThemeMode"
             :working="working"
+            :updater-busy="updaterBusy"
+            :updater-status-text="updaterStatusText"
+            :updater-update-version="updateInfo?.version ?? null"
+            :updater-install-complete="updaterInstallComplete"
             @save-settings="saveSettings"
+            @check-updates="checkForUpdatesFromSettings"
+            @open-readiness-wizard="openReadinessWizard"
           />
           <ActivityCard
             title="Recent activity"
@@ -793,6 +998,15 @@ watch(
       v-if="tasksPanelOpen"
       :tasks="tasks"
       :pack-name="activeInstance?.name ?? null"
+    />
+    <LaunchReadinessWizard
+      :open="readinessWizardOpen"
+      :readiness="launchReadiness"
+      :working="working"
+      :next-action-labels="readinessNextActionLabels"
+      @action="handleReadinessAction"
+      @close="dismissReadinessWizard"
+      @complete="completeReadinessWizard"
     />
   </div>
 </template>

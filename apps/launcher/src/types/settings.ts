@@ -2,6 +2,11 @@ export type ModLoaderKind = "vanilla" | "fabric" | "neoforge";
 export type InstanceSource = "local" | "atlas";
 export type AtlasPackChannel = "dev" | "beta" | "production";
 
+export interface LaunchReadinessWizardState {
+  dismissedAt?: string | null;
+  completedAt?: string | null;
+}
+
 export interface ModLoaderConfig {
   kind: ModLoaderKind;
   loaderVersion?: string | null;
@@ -37,4 +42,5 @@ export interface AppSettings {
   instances?: InstanceConfig[];
   selectedInstanceId?: string | null;
   themeMode?: "light" | "dark" | "system" | null;
+  launchReadinessWizard?: LaunchReadinessWizardState | null;
 }

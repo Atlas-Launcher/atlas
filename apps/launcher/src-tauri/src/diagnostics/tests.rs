@@ -14,6 +14,7 @@ fn sample_settings() -> AppSettings {
         instances: vec![],
         selected_instance_id: None,
         theme_mode: Some("system".to_string()),
+        launch_readiness_wizard: Default::default(),
     }
 }
 
@@ -164,4 +165,104 @@ fn infer_pack_id_returns_only_for_matching_atlas_instance() {
 
     assert_eq!(atlas_pack_id.as_deref(), Some("pack-1"));
     assert!(local_pack_id.is_none());
+}
+
+#[test]
+fn repair_plan_prefers_local_strategy_for_local_instance_even_with_pack_id() {
+    let mut settings = sample_settings();
+    settings.instances = vec![InstanceConfig {
+        id: "local-1".to_string(),
+        name: "Local".to_string(),
+        game_dir: "/tmp/game/instances/local-1".to_string(),
+        version: None,
+        loader: ModLoaderConfig {
+            kind: ModLoaderKind::Vanilla,
+            loader_version: None,
+        },
+        java_path: String::new(),
+        memory_mb: None,
+        jvm_args: None,
+        source: InstanceSource::Local,
+        atlas_pack: Some(AtlasPackLink {
+            pack_id: "pack-should-not-be-used".to_string(),
+            pack_slug: "local".to_string(),
+            channel: "production".to_string(),
+            build_id: None,
+            build_version: None,
+            artifact_key: None,
+        }),
+    }];
+
+    let plan = resolve_repair_plan(&RepairInput {
+        settings,
+        atlas_session: Some(atlas_session_with_uuid(
+            "00112233445566778899aabbccddeeff",
+        )),
+        game_dir: "/tmp/game/instances/local-1".to_string(),
+        pack_id: Some("pack-explicit".to_string()),
+        channel: Some("staging".to_string()),
+        preserve_saves: true,
+    });
+
+    assert!(matches!(plan.strategy, RepairStrategy::LocalRuntime));
+}
+
+#[test]
+fn repair_plan_uses_atlas_strategy_for_atlas_instance() {
+    let mut settings = sample_settings();
+    settings.instances = vec![InstanceConfig {
+        id: "atlas-1".to_string(),
+        name: "Atlas".to_string(),
+        game_dir: "/tmp/game/instances/atlas-1".to_string(),
+        version: None,
+        loader: ModLoaderConfig {
+            kind: ModLoaderKind::Vanilla,
+            loader_version: None,
+        },
+        java_path: String::new(),
+        memory_mb: None,
+        jvm_args: None,
+        source: InstanceSource::Atlas,
+        atlas_pack: Some(AtlasPackLink {
+            pack_id: "pack-1".to_string(),
+            pack_slug: "atlas".to_string(),
+            channel: "production".to_string(),
+            build_id: None,
+            build_version: None,
+            artifact_key: None,
+        }),
+    }];
+
+    let plan = resolve_repair_plan(&RepairInput {
+        settings,
+        atlas_session: Some(atlas_session_with_uuid(
+            "00112233445566778899aabbccddeeff",
+        )),
+        game_dir: "/tmp/game/instances/atlas-1".to_string(),
+        pack_id: None,
+        channel: None,
+        preserve_saves: true,
+    });
+
+    assert!(matches!(
+        plan.strategy,
+        RepairStrategy::AtlasSync { .. }
+    ));
+}
+
+#[test]
+fn redaction_masks_token_values_in_line_or_json_forms() {
+    let log_text = "Authorization: Bearer abc.def.ghi access_token=secret-123 refresh_token: refresh-456";
+    let redacted = redact_sensitive(log_text);
+    assert!(!redacted.contains("abc.def.ghi"));
+    assert!(!redacted.contains("secret-123"));
+    assert!(!redacted.contains("refresh-456"));
+    assert!(redacted.contains("[REDACTED]"));
+
+    let json_text = r#"{"access_token":"abc","nested":{"authorization":"Bearer xyz","proof":"p123"}}"#;
+    let redacted_json = redact_sensitive(json_text);
+    assert!(!redacted_json.contains("\"abc\""));
+    assert!(!redacted_json.contains("xyz"));
+    assert!(!redacted_json.contains("p123"));
+    assert!(redacted_json.contains("[REDACTED]"));
 }
