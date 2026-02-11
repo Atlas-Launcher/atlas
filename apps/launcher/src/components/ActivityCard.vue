@@ -19,9 +19,11 @@ const props = defineProps<{
       <CardDescription>{{ props.description }}</CardDescription>
     </CardHeader>
     <CardContent>
-      <div class="max-h-56 overflow-y-auto pr-1">
+      <!-- min-w-0 allows this flex child to shrink instead of forcing parent width -->
+      <div class="max-h-56 overflow-y-auto pr-1 min-w-0">
         <ul class="space-y-2 text-sm text-muted-foreground">
-          <li v-for="(entry, index) in props.logs" :key="index" class="break-words whitespace-pre-wrap">
+          <!-- break-all ensures extremely long tokens (no spaces) will wrap to next line -->
+          <li v-for="(entry, index) in props.logs" :key="index" class="break-words break-all whitespace-pre-wrap max-w-full">
             {{ entry }}
           </li>
           <li v-if="props.logs.length === 0">Nothing to show yet.</li>
