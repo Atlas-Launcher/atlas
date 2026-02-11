@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onUnmounted } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertCircle, CheckCircle2, Link2, LoaderCircle, ShieldCheck, Wrench, X } from "lucide-vue-next";
 import Button from "./ui/button/Button.vue";
@@ -48,6 +48,56 @@ const orderedKeys = ["atlasLogin", "microsoftLogin", "accountLink"] as const;
 const copyStatus = ref<string | null>(null);
 const autoCompleted = ref(false);
 const signedIn = computed(() => props.atlasSignedIn || props.microsoftSignedIn);
+
+// Control showing the link code: hide it for 15 seconds when a link session is created
+const showLinkCode = ref(false);
+const linkTimerId = ref<number | null>(null);
+
+function clearLinkTimer() {
+  if (linkTimerId.value != null) {
+    clearTimeout(linkTimerId.value);
+    linkTimerId.value = null;
+  }
+}
+
+// Start/clear timer when linkSession changes
+watch(
+  () => props.linkSession,
+  (ls) => {
+    clearLinkTimer();
+    if (ls && props.open && activeStep.value?.key === "accountLink") {
+      showLinkCode.value = false;
+      // show after 15 seconds
+      linkTimerId.value = window.setTimeout(() => {
+        showLinkCode.value = true;
+        linkTimerId.value = null;
+      }, 15000) as unknown as number;
+    } else {
+      showLinkCode.value = false;
+    }
+  },
+  { immediate: true }
+);
+
+// Also react when the active step or open state changes
+watch(
+  () => [props.open, activeStep.value?.key],
+  ([open, stepKey]) => {
+    clearLinkTimer();
+    if (open && stepKey === "accountLink" && props.linkSession) {
+      showLinkCode.value = false;
+      linkTimerId.value = window.setTimeout(() => {
+        showLinkCode.value = true;
+        linkTimerId.value = null;
+      }, 15000) as unknown as number;
+    } else {
+      showLinkCode.value = false;
+    }
+  },
+  { immediate: true }
+);
+
+onUnmounted(() => clearLinkTimer());
 
 const orderedChecklist = computed(() =>
   orderedKeys
@@ -100,22 +150,23 @@ const accountLinkStatus = computed(() => {
   if (props.isSigningIn) {
     return {
       tone: "muted",
-      text: "Waiting for browser sign-in to finish..."
+      text: "Your browser has opened to complete sign-in. Finish signing in there to continue."
     } as const;
   }
 
   if (props.linkSession) {
     return {
       tone: "warning",
-      text: "Waiting for Atlas to confirm this link code."
+      text: "We’re waiting for Atlas to confirm your sign-in. This should only take a moment."
     } as const;
   }
 
   return {
     tone: "muted",
-    text: "Start this step to generate a link code."
+    text: "Click to continue. We’ll open your browser to complete sign-in."
   } as const;
 });
+
 
 watch(
   () => props.open,
@@ -189,7 +240,8 @@ watch(
                   <AlertCircle v-else class="h-4 w-4 text-amber-500" />
                   <span>{{ item.label }}</span>
                 </div>
-                <p v-if="item.detail" class="mt-1 text-xs text-muted-foreground">
+                <!-- Only show detail for steps that are active or already ready; hide for future (not started) steps -->
+                <p v-if="item.detail && (item.ready || item.key === activeStep?.key)" class="mt-1 text-xs text-muted-foreground">
                   {{ item.detail }}
                 </p>
                 <p
@@ -212,33 +264,33 @@ watch(
               </Button>
             </div>
 
+            <!-- Show account link UI only when it's the active step and not ready -->
             <div
-              v-if="item.key === 'accountLink' && !item.ready && props.linkSession"
+              v-if="item.key === 'accountLink' && !item.ready && item.key === activeStep?.key && props.linkSession && showLinkCode"
               class="mt-3 space-y-2 rounded-lg border border-border/60 bg-card/60 p-3"
             >
-              <div class="text-[11px] uppercase tracking-widest text-muted-foreground">Link code</div>
-              <div class="text-lg font-semibold tracking-[0.15em] text-foreground">{{ props.linkSession.linkCode }}</div>
-              <div class="text-xs text-muted-foreground">Expires at {{ props.linkSession.expiresAt }}</div>
-              <div class="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" :disabled="props.working" @click="copyLinkCode">
-                  <Link2 class="mr-1 h-3.5 w-3.5" />
-                  Copy code
-                </Button>
-                <Button size="sm" variant="outline" :disabled="props.working" @click="openLinkPage">
-                  Open link page
-                </Button>
-              </div>
-              <p v-if="copyStatus" class="text-xs text-muted-foreground">{{ copyStatus }}</p>
-            </div>
+               <div class="text-[11px] uppercase tracking-widest text-muted-foreground">Link code</div>
+               <div class="text-lg font-semibold tracking-[0.15em] text-foreground">{{ props.linkSession.linkCode }}</div>
+               <div class="text-xs text-muted-foreground">Expires at {{ props.linkSession.expiresAt }}</div>
+               <div class="flex flex-wrap gap-2">
+                 <Button size="sm" variant="outline" :disabled="props.working" @click="copyLinkCode">
+                   <Link2 class="mr-1 h-3.5 w-3.5" />
+                   Copy code
+                 </Button>
+                 <Button size="sm" variant="outline" :disabled="props.working" @click="openLinkPage">
+                   Open link page
+                 </Button>
+               </div>
+               <p v-if="copyStatus" class="text-xs text-muted-foreground">{{ copyStatus }}</p>
+             </div>
 
+            <!-- Only show account link status messaging for the active accountLink step -->
             <p
-              v-if="item.key === 'accountLink' && accountLinkStatus"
+              v-if="item.key === 'accountLink' && item.key === activeStep?.key && accountLinkStatus"
               class="mt-2 text-xs"
-              :class="accountLinkStatus.tone === 'success'
-                ? 'text-emerald-700 dark:text-emerald-300'
-                : accountLinkStatus.tone === 'warning'
-                  ? 'text-amber-700 dark:text-amber-300'
-                  : 'text-muted-foreground'"
+              :class="accountLinkStatus.tone === 'warning'
+                ? 'text-amber-700 dark:text-amber-300'
+                : 'text-muted-foreground'"
             >
               {{ accountLinkStatus.text }}
             </p>
