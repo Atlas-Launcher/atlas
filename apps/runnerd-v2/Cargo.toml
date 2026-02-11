@@ -24,6 +24,7 @@ runner-ipc-v2  = { path = "../../crates/runner-ipc-v2" }
 runner-v2-utils   = { path = "../../crates/runner-v2-utils" }
 runner-provision-v2 = { path = "../../crates/runner-provision-v2" }
 protocol = { path = "../../crates/protocol" }
+chrono = "0.4.43"
 
 
 [[bin]]
