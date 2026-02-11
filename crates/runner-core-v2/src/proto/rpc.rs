@@ -50,6 +50,9 @@ pub enum Request {
 
     DaemonLogsTail { lines: usize },
 
+    /// Request the daemon to create a manual backup of the current server (if configured).
+    Backup {},
+
     Subscribe {
         topics: Vec<Topic>,
         send_initial_status: bool,
@@ -101,6 +104,9 @@ pub enum Response {
     RconClosed { session: SessionId },
 
     DeployKeySaved {},
+
+    /// Response for a manual backup request containing the created backup path.
+    BackupCreated { path: String },
 
     Error(RpcError),
 }
