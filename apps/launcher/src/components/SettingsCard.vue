@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, withDefaults } from "vue";
+import { ref } from "vue";
 import Button from "./ui/button/Button.vue";
 import Card from "./ui/card/Card.vue";
 import CardHeader from "./ui/card/CardHeader.vue";

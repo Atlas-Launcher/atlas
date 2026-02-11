@@ -72,21 +72,21 @@ function updateLoaderKind(kind: ModLoaderKind) {
   emit("update", { id: props.instance.id, patch });
 }
 
-function updateVersion(version: string) {
+function updateVersion(version: any) {
   if (!props.instance || props.setupLocked) {
     return;
   }
-  const value = version === "latest" ? null : version;
+  const value = version === "latest" || version === null ? null : String(version);
   emit("update", { id: props.instance.id, patch: { version: value } });
 }
 
-function updateFabricLoaderVersion(version: string) {
+function updateFabricLoaderVersion(version: any) {
   if (!props.instance || props.setupLocked) {
     return;
   }
   const loader = {
     ...props.instance.loader,
-    loaderVersion: version === "latest" ? null : version.trim().length > 0 ? version : null
+    loaderVersion: version === "latest" || version === null ? null : String(version).trim().length > 0 ? String(version) : null
   };
   emit("update", { id: props.instance.id, patch: { loader } });
 }
