@@ -1,25 +1,29 @@
-name: runner-release
+name: launcher-release
 
 on:
   push:
     tags:
-      - "runner-v*"
+      - "launcher-v*"
 
 permissions:
   contents: write
 
 concurrency:
-  group: runner-release-${{ github.ref }}
+  group: launcher-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-runner:
-    name: Build runner-v2 (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  publish-launcher:
+    name: Build Launcher (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - platform: windows-latest
+            tauri_args: --ci
+          - platform: macos-latest
+            tauri_args: --ci
 
     steps:
       - name: Checkout
@@ -27,6 +31,18 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -36,101 +52,26 @@ jobs:
         with:
           workspaces: |
             . -> target
-          shared-key: runner-build-${{ matrix.os }}
+          shared-key: launcher-release-${{ matrix.platform }}
+          cache-all-crates: true
           cache-on-failure: true
 
-      - name: Build atlas-runner
-        run: cargo build --release --manifest-path apps/runner-v2/Cargo.toml --bin atlas-runner
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Stage atlas-runner artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-
-          VERSION="${GITHUB_REF_NAME#runner-v}"
-          BIN_PATH="target/release/atlas-runner"
-          FILE_NAME="atlas-runner-v${VERSION}-${{ runner.os }}-${{ runner.arch }}"
-
-          cp "${BIN_PATH}" "dist/${FILE_NAME}"
-          ls -lah dist
-
-      - name: Upload atlas-runner artifact
-        uses: actions/upload-artifact@v4
+      - name: Build and upload launcher bundles
+        uses: tauri-apps/tauri-action@5c73698991aa26946b2d232c344ea4d54b880ff7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          name: atlas-runner-${{ github.ref_name }}-${{ matrix.os }}
-          path: dist/atlas-runner-*
-          if-no-files-found: error
-
-  build-runnerd:
-    name: Build runnerd-v2 (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          lfs: true
-          fetch-depth: 0
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            . -> target
-          shared-key: runnerd-build-${{ matrix.os }}
-          cache-on-failure: true
-
-      - name: Build atlas-runnerd
-        run: cargo build --release --manifest-path apps/runnerd-v2/Cargo.toml --bin atlas-runnerd
-
-      - name: Stage atlas-runnerd artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-
-          VERSION="${GITHUB_REF_NAME#runner-v}"
-          BIN_PATH="target/release/atlas-runnerd"
-          FILE_NAME="atlas-runnerd-v${VERSION}-${{ runner.os }}-${{ runner.arch }}"
-
-          cp "${BIN_PATH}" "dist/${FILE_NAME}"
-          ls -lah dist
-
-      - name: Upload atlas-runnerd artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: atlas-runnerd-${{ github.ref_name }}-${{ matrix.os }}
-          path: dist/atlas-runnerd-*
-          if-no-files-found: error
-
-  release:
-    name: Release Runner v2
-    runs-on: ubuntu-latest
-    needs: [build-runner, build-runnerd]
-    steps:
-      - name: Parse version
-        id: tag
-        run: echo "version=${GITHUB_REF_NAME#runner-v}" >> "$GITHUB_OUTPUT"
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Atlas Runner v${{ steps.tag.outputs.version }}
-          tag_name: ${{ github.ref_name }}
-          files: |
-            dist/**/atlas-runner-*
-            dist/**/atlas-runnerd-*
-          fail_on_unmatched_files: true
+          projectPath: apps/launcher
+          tauriScript: pnpm tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: Atlas Launcher ${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: true
+          args: ${{ matrix.tauri_args }}
