@@ -87,39 +87,43 @@ pub fn build_launch_readiness(input: ReadinessContext) -> LaunchReadinessReport 
     let checklist = vec![
         ReadinessItem {
             key: "atlasLogin".to_string(),
-            label: "Atlas login".to_string(),
+            label: "Sign in to Atlas Hub".to_string(),
             ready: atlas_logged_in,
-            detail: (!atlas_logged_in).then_some("Sign in to Atlas Hub.".to_string()),
+            detail: (!atlas_logged_in)
+                .then_some("Sign in to your Atlas Hub account to continue.".to_string()),
         },
         ReadinessItem {
             key: "microsoftLogin".to_string(),
-            label: "Microsoft login".to_string(),
+            label: "Sign in to Microsoft".to_string(),
             ready: microsoft_logged_in,
-            detail: (!microsoft_logged_in).then_some("Sign in with Microsoft.".to_string()),
+            detail: (!microsoft_logged_in)
+                .then_some("Sign in with your Microsoft account to continue.".to_string()),
         },
         ReadinessItem {
             key: "accountLink".to_string(),
-            label: "Account link".to_string(),
+            label: "Link Accounts".to_string(),
             ready: accounts_linked,
             detail: (!accounts_linked).then_some(
-                "Atlas and Microsoft Minecraft accounts are not linked to the same UUID."
+                "Make sure your Atlas Hub and Microsoft accounts are linked to the same Minecraft profile."
                     .to_string(),
             ),
         },
         ReadinessItem {
             key: "filesInstalled".to_string(),
-            label: "Files installed".to_string(),
+            label: "Game files installed".to_string(),
             ready: files_installed,
-            detail: (!files_installed).then_some("Install or sync profile files.".to_string()),
+            detail: (!files_installed)
+                .then_some("Install or sync this profile’s game files.".to_string()),
         },
         ReadinessItem {
             key: "javaReady".to_string(),
             label: "Java ready".to_string(),
             ready: java_ready,
             detail: (!java_ready)
-                .then_some("Java runtime has not been detected for this profile.".to_string()),
+                .then_some("Install or repair Java to launch this profile.".to_string()),
         },
     ];
+
 
     LaunchReadinessReport {
         atlas_logged_in,
@@ -141,8 +145,9 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
     if !input.readiness.atlas_logged_in {
         findings.push(TroubleshooterFinding {
             code: "atlas_not_signed_in".to_string(),
-            title: "Atlas sign-in required".to_string(),
-            detail: "Atlas Hub session is missing or expired.".to_string(),
+            title: "Sign in to Atlas Hub".to_string(),
+            detail: "You’re not currently signed in to Atlas Hub, or your session has expired."
+                .to_string(),
             confidence: 100,
             suggested_actions: vec![FixAction::RelinkAccount],
         });
@@ -150,8 +155,9 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
     if !input.readiness.microsoft_logged_in {
         findings.push(TroubleshooterFinding {
             code: "microsoft_not_signed_in".to_string(),
-            title: "Microsoft sign-in required".to_string(),
-            detail: "Minecraft account session is missing or expired.".to_string(),
+            title: "Sign in to Microsoft".to_string(),
+            detail: "You’re not signed in to your Microsoft account, or your session has expired."
+                .to_string(),
             confidence: 100,
             suggested_actions: vec![FixAction::RelinkAccount],
         });
@@ -162,8 +168,8 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
     {
         findings.push(TroubleshooterFinding {
             code: "account_link_mismatch".to_string(),
-            title: "Account link mismatch".to_string(),
-            detail: "Atlas linked Mojang UUID does not match the active Microsoft profile."
+            title: "Accounts don’t match".to_string(),
+            detail: "The Microsoft account you’re signed in with isn’t the one linked to your Atlas Hub profile."
                 .to_string(),
             confidence: 100,
             suggested_actions: vec![FixAction::RelinkAccount],
@@ -172,8 +178,8 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
     if !input.readiness.files_installed {
         findings.push(TroubleshooterFinding {
             code: "files_missing".to_string(),
-            title: "Profile files are missing".to_string(),
-            detail: "The selected profile does not appear to have installed game files."
+            title: "Game files need to be installed".to_string(),
+            detail: "This profile doesn’t appear to have its game files installed yet. Try syncing or repairing the pack."
                 .to_string(),
             confidence: 95,
             suggested_actions: vec![FixAction::ResyncPack, FixAction::FullRepair],
@@ -182,8 +188,9 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
     if !input.readiness.java_ready {
         findings.push(TroubleshooterFinding {
             code: "java_missing".to_string(),
-            title: "Java runtime not ready".to_string(),
-            detail: "A usable Java runtime could not be detected.".to_string(),
+            title: "Java needs attention".to_string(),
+            detail: "We couldn’t find a working Java installation. Try repairing the runtime to continue."
+                .to_string(),
             confidence: 90,
             suggested_actions: vec![FixAction::RepairRuntime, FixAction::FullRepair],
         });
@@ -192,8 +199,9 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
     if haystack.contains("out of memory") || haystack.contains("java heap space") {
         findings.push(TroubleshooterFinding {
             code: "memory_pressure".to_string(),
-            title: "Memory settings may be too low".to_string(),
-            detail: "Recent logs suggest JVM memory pressure.".to_string(),
+            title: "Not enough memory allocated".to_string(),
+            detail: "The game ran out of memory while launching. Increasing the memory allocation may fix the issue."
+                .to_string(),
             confidence: 85,
             suggested_actions: vec![FixAction::SetSafeMemory],
         });
@@ -203,8 +211,9 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
     {
         findings.push(TroubleshooterFinding {
             code: "runtime_metadata_missing".to_string(),
-            title: "Pack runtime metadata missing".to_string(),
-            detail: "Atlas sync did not return complete runtime metadata.".to_string(),
+            title: "Incomplete pack download".to_string(),
+            detail: "Some required runtime files didn’t download correctly. Try syncing the pack again."
+                .to_string(),
             confidence: 90,
             suggested_actions: vec![FixAction::ResyncPack, FixAction::FullRepair],
         });
@@ -215,11 +224,11 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
     {
         findings.push(TroubleshooterFinding {
             code: "install_corruption_or_stale".to_string(),
-            title: "Installation may be stale or corrupted".to_string(),
-            detail: "Recent status/logs indicate incomplete or corrupted install assets."
+            title: "Installation needs repair".to_string(),
+            detail: "Some game files appear to be missing or corrupted. Running a full repair should fix this."
                 .to_string(),
             confidence: 75,
-            suggested_actions: vec![FixAction::FullRepair, FixAction::ResyncPack],
+            suggested_actions: vec![FixAction::FullRepair],
         });
     }
 
