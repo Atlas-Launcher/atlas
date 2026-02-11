@@ -16,6 +16,7 @@ jobs:
   build-runner:
     name: Build runner-v2 (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    if: startsWith(github.ref_name, 'runner-v')
     strategy:
       fail-fast: false
       matrix:
@@ -39,32 +40,32 @@ jobs:
           shared-key: runner-build-${{ matrix.os }}
           cache-on-failure: true
 
-      - name: Build atlas-runner
-        run: cargo build --release --manifest-path apps/runner-v2/Cargo.toml --bin atlas-runner
+      - name: Build runner-v2
+        run: cargo build --release -p runner-v2
 
-      - name: Stage atlas-runner artifact
+      - name: Stage runner-v2 artifact
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
 
-          VERSION="${GITHUB_REF_NAME#runner-v}"
           BIN_PATH="target/release/atlas-runner"
-          FILE_NAME="atlas-runner-v${VERSION}-${{ runner.os }}-${{ runner.arch }}"
+          FILE_NAME="atlas-runner-${{ runner.os }}-${{ runner.arch }}"
 
           cp "${BIN_PATH}" "dist/${FILE_NAME}"
           ls -lah dist
 
-      - name: Upload atlas-runner artifact
+      - name: Upload runner-v2 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: atlas-runner-${{ github.ref_name }}-${{ matrix.os }}
+          name: atlas-runner-${{ matrix.os }}
           path: dist/atlas-runner-*
           if-no-files-found: error
 
   build-runnerd:
     name: Build runnerd-v2 (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    if: startsWith(github.ref_name, 'runner-v')
     strategy:
       fail-fast: false
       matrix:
@@ -88,32 +89,32 @@ jobs:
           shared-key: runnerd-build-${{ matrix.os }}
           cache-on-failure: true
 
-      - name: Build atlas-runnerd
-        run: cargo build --release --manifest-path apps/runnerd-v2/Cargo.toml --bin atlas-runnerd
+      - name: Build runnerd-v2
+        run: cargo build --release -p runnerd-v2
 
-      - name: Stage atlas-runnerd artifact
+      - name: Stage runnerd-v2 artifact
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
 
-          VERSION="${GITHUB_REF_NAME#runner-v}"
           BIN_PATH="target/release/atlas-runnerd"
-          FILE_NAME="atlas-runnerd-v${VERSION}-${{ runner.os }}-${{ runner.arch }}"
+          FILE_NAME="atlas-runnerd-${{ runner.os }}-${{ runner.arch }}"
 
           cp "${BIN_PATH}" "dist/${FILE_NAME}"
           ls -lah dist
 
-      - name: Upload atlas-runnerd artifact
+      - name: Upload runnerd-v2 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: atlas-runnerd-${{ github.ref_name }}-${{ matrix.os }}
+          name: atlas-runnerd-${{ matrix.os }}
           path: dist/atlas-runnerd-*
           if-no-files-found: error
 
   release:
     name: Release Runner v2
     runs-on: ubuntu-latest
+    if: startsWith(github.ref_name, 'runner-v')
     needs: [build-runner, build-runnerd]
     steps:
       - name: Parse version
