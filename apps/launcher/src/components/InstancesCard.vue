@@ -7,7 +7,8 @@ import CardTitle from "./ui/card/CardTitle.vue";
 import CardDescription from "./ui/card/CardDescription.vue";
 import CardContent from "./ui/card/CardContent.vue";
 import Input from "./ui/input/Input.vue";
-import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
+// import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
+
 import {
   Select,
   SelectContent,
@@ -90,20 +91,22 @@ const groupedInstances = computed(() => {
   }));
 });
 
+/*
 function displaySource(instance: InstanceConfig) {
   return instance.source === "atlas" ? "Atlas Hub" : "Local";
 }
+*/
 
 function displayLoader(instance: InstanceConfig) {
   const kind = instance.loader?.kind ?? "vanilla";
-  if (props.instanceInstallStateById[instance.id] === false) {
+  if (!props.instanceInstallStateById[instance.id]) {
     return "Not installed";
   }
   return formatLoaderKind(kind);
 }
 
 function displayVersion(instance: InstanceConfig) {
-  if (props.instanceInstallStateById[instance.id] === false) {
+  if (!props.instanceInstallStateById[instance.id]) {
     return null
   }
   return instance.version?.trim() ? instance.version : "Latest release";
@@ -118,7 +121,7 @@ function onCardKeydown(event: KeyboardEvent, id: string) {
 }
 
 function needsRemoteInstall(instance: InstanceConfig) {
-  return instance.source === "atlas" && props.instanceInstallStateById[instance.id] === false;
+  return instance.source === "atlas" && !props.instanceInstallStateById[instance.id];
 }
 
 function quickActionLabel(instance: InstanceConfig) {
@@ -139,35 +142,39 @@ function onQuickAction(instance: InstanceConfig) {
 
 <template>
   <Card class="glass rounded-2xl border-none bg-transparent shadow-none">
-    <CardContent class="space-y-6 pt-6">
-      <div class="flex flex-wrap items-center gap-4">
-        <Tabs v-model="filter">
-          <TabsList>
-            <TabsTrigger value="all">All Profiles</TabsTrigger>
-            <TabsTrigger value="atlas">Atlas Profiles</TabsTrigger>
-            <TabsTrigger value="local">Local Profiles</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <Button
-          :disabled="props.working"
-          size="sm"
-          variant="secondary"
-          @click="emit('refresh-packs')"
-        >
-          Refresh Packs
-        </Button>
-        <!-- <Button
-          class="ml-auto"
-          :disabled="props.working"
-          size="sm"
-          variant="secondary"
-          @click="emit('create')"
-        >
-          New Local Profile
-        </Button> -->
-      </div>
+    <CardHeader class="pt-6">
+      <CardTitle>Your Instances</CardTitle>
+      <CardDescription>Manage your Minecraft profiles and installations.</CardDescription>
+    </CardHeader>
+    <CardContent class="space-y-6">
+      <!-- <div class="flex flex-wrap items-center gap-4">
+         <Tabs v-model="filter">
+            <TabsList>
+              <TabsTrigger value="all">All Profiles</TabsTrigger>
+              <TabsTrigger value="atlas">Atlas Profiles</TabsTrigger>
+              <TabsTrigger value="local">Local Profiles</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button
+            :disabled="props.working"
+            size="sm"
+            variant="secondary"
+            @click="emit('refresh-packs')"
+          >
+            Refresh Packs
+          </Button>
+          <Button
+            class="ml-auto"
+            :disabled="props.working"
+            size="sm"
+            variant="secondary"
+            @click="emit('create')"
+          >
+            New Local Profile
+          </Button>
+       </div> -->
 
-      <div class="grid gap-3 md:grid-cols-[1.3fr_0.6fr_0.6fr]">
+      <div class="grid gap-3 md:grid-cols-[1.0fr_0.6fr_0.6fr_0.3fr]">
         <Input
           :model-value="search"
           placeholder="Search profiles..."
@@ -191,6 +198,14 @@ function onQuickAction(instance: InstanceConfig) {
             <SelectItem value="loader">Group by: Loader</SelectItem>
           </SelectContent>
         </Select>
+        <Button
+            :disabled="props.working"
+            size="sm"
+            variant="secondary"
+            @click="emit('refresh-packs')"
+        >
+          Refresh Packs
+        </Button>
       </div>
 
       <div v-if="groupedInstances.length === 0" class="text-sm text-muted-foreground">
@@ -237,7 +252,8 @@ function onQuickAction(instance: InstanceConfig) {
             <div class="flex-1">
               <div class="font-semibold text-foreground">{{ instance.name }}</div>
               <div class="text-xs text-muted-foreground">
-                {{ displaySource(instance) }} · {{ displayLoader(instance) }} {{(displayVersion(instance)) ? ` · ${displayVersion(instance)}` : `` }}
+
+                <!-- {{ displaySource(instance) }} · --> {{ displayLoader(instance) }} {{(displayVersion(instance)) ? ` · ${displayVersion(instance)}` : `` }}
               </div>
             </div>
           </div>
