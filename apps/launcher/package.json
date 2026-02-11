@@ -37,6 +37,6 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.6.2",
     "vite": "^5.4.1",
-    "vue-tsc": "^1.2.0"
+    "vue-tsc": "^3.2.4"
   }
 }
