@@ -32,11 +32,11 @@ Owner: Frontend + Tauri integration
 ## Track C: Repair + Support Bundle backend hardening (Phases 4/5 backend)
 Owner: Backend
 
-- [ ] Finalize `repair_installation` behavior for local vs atlas instances.
-- [ ] Expand cache/transient cleanup rules safely (preserve saves always by default).
-- [ ] Improve redaction coverage in `create_support_bundle`.
-- [ ] Include structured root-cause + attempted-fixes summary in bundle output.
-- [ ] Add unit tests for redaction and repair decision paths.
+- [x] Finalize `repair_installation` behavior for local vs atlas instances.
+- [x] Expand cache/transient cleanup rules safely (preserve saves always by default).
+- [x] Improve redaction coverage in `create_support_bundle`.
+- [x] Include structured root-cause + attempted-fixes summary in bundle output.
+- [x] Add unit tests for redaction and repair decision paths.
 - [ ] Acceptance: one-click repair and support bundle are deterministic and privacy-safe.
 
 ## Track D: Troubleshooter Dialog UI (Phase 6)

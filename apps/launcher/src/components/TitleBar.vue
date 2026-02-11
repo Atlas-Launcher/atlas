@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onMounted, ref, computed } from "vue";
-import { X, Minus, Check, Square, Copy, ChevronDown, LogIn, LogOut } from "lucide-vue-next";
+import { X, Minus, Check, Square, Copy, ChevronDown, LogIn, LogOut, ShieldAlert } from "lucide-vue-next";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ const emit = defineEmits<{
   (event: "sign-out-atlas"): void;
   (event: "start-auth-flow"): void;
   (event: "complete-link"): void;
+  (event: "open-readiness-wizard"): void;
 }>();
 
 const isMac = ref(false);
@@ -212,6 +213,13 @@ const needsLinkCompletion = computed(() => {
               @select="emit('sign-out-microsoft')"
           >
             <LogOut class="h-3.5 w-3.5" /> Disconnect
+          </DropdownMenuItem>
+          <DropdownMenuSeparator class="bg-foreground/5 mx-1" />
+          <DropdownMenuItem
+              class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-foreground/[0.08] hover:bg-foreground/[0.12] transition-colors"
+              @select="emit('open-readiness-wizard')"
+          >
+            <ShieldAlert class="h-3.5 w-3.5 opacity-80" /> Launch readiness
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

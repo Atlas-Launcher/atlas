@@ -5,7 +5,7 @@ use crate::models::{
 };
 use crate::paths::{auth_store_dir, normalize_path};
 use crate::{launcher, library};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -46,6 +46,21 @@ pub struct SupportBundleInput {
     pub game_dir: Option<String>,
     pub recent_status: Option<String>,
     pub recent_logs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RepairStrategy {
+    AtlasSync {
+        pack_id: String,
+        channel: Option<String>,
+    },
+    LocalRuntime,
+}
+
+#[derive(Debug, Clone)]
+struct RepairPlan {
+    strategy: RepairStrategy,
+    decision_reason: String,
 }
 
 pub fn build_launch_readiness(input: ReadinessContext) -> LaunchReadinessReport {
@@ -329,20 +344,41 @@ pub async fn repair_installation(
         return Err("gameDir is required.".to_string());
     }
 
-    library::uninstall_instance_data(game_dir, input.preserve_saves)
-        .map_err(|err| err.to_string())?;
-    details.push("Uninstalled instance data with save preservation.".to_string());
+    let plan = resolve_repair_plan(&input);
+    details.push(plan.decision_reason.clone());
 
-    if let (Some(pack_id), Some(atlas_session)) =
-        (input.pack_id.as_deref(), input.atlas_session.as_ref())
-    {
+    let cleanup = cleanup_transient_paths(game_dir).map_err(|err| err.to_string())?;
+    if !cleanup.removed.is_empty() {
+        details.push(format!(
+            "Removed transient paths: {}.",
+            cleanup.removed.join(", ")
+        ));
+    }
+    if !cleanup.skipped.is_empty() {
+        details.push(format!(
+            "Skipped transient cleanup due to errors: {}.",
+            cleanup.skipped.join(", ")
+        ));
+    }
+
+    library::uninstall_instance_data(game_dir, input.preserve_saves).map_err(|err| err.to_string())?;
+    details.push(format!(
+        "Uninstalled instance data (preserve saves: {}).",
+        input.preserve_saves
+    ));
+
+    if let RepairStrategy::AtlasSync { pack_id, channel } = plan.strategy {
+        let atlas_session = input
+            .atlas_session
+            .as_ref()
+            .ok_or_else(|| "Atlas session required for Atlas repair.".to_string())?;
         let hub_url = crate::config::resolve_atlas_hub_url(&input.settings);
         let result = library::sync_atlas_pack(
             window,
             &hub_url,
             &atlas_session.access_token,
-            pack_id,
-            input.channel.as_deref(),
+            &pack_id,
+            channel.as_deref(),
             game_dir,
         )
         .await
@@ -391,11 +427,38 @@ pub fn create_support_bundle(input: SupportBundleInput) -> Result<SupportBundleR
     let redacted_launcher_log = redact_sensitive(&launcher_log_text);
     let redacted_latest_launch_log = redact_sensitive(&latest_launch_log_text);
 
+    let diagnostics = run_troubleshooter(TroubleshooterInput {
+        readiness: input.readiness.clone(),
+        recent_status: input.recent_status.clone(),
+        recent_logs: input.recent_logs.clone(),
+    });
+    let root_cause = diagnostics.findings.first().map(|finding| {
+        json!({
+            "code": finding.code,
+            "title": finding.title,
+            "detail": finding.detail,
+            "confidence": finding.confidence
+        })
+    });
+    let attempted_fixes = summarize_attempted_fixes(
+        input.recent_status.as_deref(),
+        &input.recent_logs,
+    );
+
     let report = json!({
         "generatedAtUnix": stamp,
         "readiness": input.readiness,
         "recentStatus": input.recent_status,
         "recentLogs": input.recent_logs,
+        "analysis": {
+            "rootCause": root_cause,
+            "suggestedActions": diagnostics
+                .findings
+                .iter()
+                .flat_map(|finding| finding.suggested_actions.iter())
+                .collect::<Vec<_>>(),
+            "attemptedFixes": attempted_fixes,
+        },
         "logs": {
             "launcherLog": redacted_launcher_log,
             "latestLaunchLog": redacted_latest_launch_log,
@@ -414,6 +477,7 @@ pub fn create_support_bundle(input: SupportBundleInput) -> Result<SupportBundleR
             .as_bool()
             .unwrap_or(false),
         report["recentStatus"].as_str().unwrap_or(""),
+        &report["analysis"],
     );
     let summary_path = bundle_dir.join("summary.md");
     fs::write(&summary_path, &summary).map_err(|err| format!("Failed to write summary: {err}"))?;
@@ -587,22 +651,192 @@ fn read_text_if_exists(path: &Path) -> Option<String> {
 }
 
 fn redact_sensitive(input: &str) -> String {
-    input
-        .replace("access_token", "access_token:[REDACTED]")
-        .replace("refresh_token", "refresh_token:[REDACTED]")
-        .replace("proof", "proof:[REDACTED]")
-        .replace("linkCode", "linkCode:[REDACTED]")
-        .replace("Authorization: Bearer ", "Authorization: Bearer [REDACTED]")
+    if let Ok(mut value) = serde_json::from_str::<Value>(input) {
+        redact_json_value(&mut value);
+        if let Ok(text) = serde_json::to_string_pretty(&value) {
+            return text;
+        }
+    }
+
+    input.lines().map(redact_line).collect::<Vec<_>>().join("\n")
 }
 
-fn build_summary(ready_to_launch: bool, recent_status: &str) -> String {
+fn redact_json_value(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            let keys: Vec<String> = map.keys().cloned().collect();
+            for key in keys {
+                if let Some(next) = map.get_mut(&key) {
+                    if is_sensitive_key(&key) {
+                        *next = Value::String("[REDACTED]".to_string());
+                    } else {
+                        redact_json_value(next);
+                    }
+                }
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                redact_json_value(item);
+            }
+        }
+        Value::String(text) => {
+            *text = redact_line(text);
+        }
+        _ => {}
+    }
+}
+
+fn redact_line(line: &str) -> String {
+    let mut redacted = line.to_string();
+    redacted = redact_bearer_token(&redacted);
+    redacted = redact_kv_pairs(&redacted);
+    redacted
+}
+
+fn redact_bearer_token(line: &str) -> String {
+    let marker = "bearer ";
+    let lower = line.to_ascii_lowercase();
+    let Some(start) = lower.find(marker) else {
+        return line.to_string();
+    };
+    let value_start = start + marker.len();
+    let token_end = line[value_start..]
+        .find(|c: char| c.is_whitespace() || c == ',' || c == '"' || c == '\'')
+        .map(|offset| value_start + offset)
+        .unwrap_or(line.len());
+    let mut out = String::new();
+    out.push_str(&line[..value_start]);
+    out.push_str("[REDACTED]");
+    out.push_str(&line[token_end..]);
+    out
+}
+
+fn redact_kv_pairs(line: &str) -> String {
+    let mut out = line.to_string();
+    for key in sensitive_keys() {
+        out = redact_kv_value(&out, key);
+    }
+    out
+}
+
+fn redact_kv_value(line: &str, key: &str) -> String {
+    let lower = line.to_ascii_lowercase();
+    let key_lower = key.to_ascii_lowercase();
+    let mut cursor = 0usize;
+    let mut out = String::new();
+
+    while let Some(found) = lower[cursor..].find(&key_lower) {
+        let key_start = cursor + found;
+        let key_end = key_start + key_lower.len();
+        out.push_str(&line[cursor..key_end]);
+
+        let mut value_start = key_end;
+        while let Some(ch) = line[value_start..].chars().next() {
+            if ch.is_whitespace() {
+                value_start += ch.len_utf8();
+                continue;
+            }
+            if ch == ':' || ch == '=' {
+                value_start += ch.len_utf8();
+                break;
+            }
+            out.push_str(&line[key_end..]);
+            return out;
+        }
+
+        while let Some(ch) = line[value_start..].chars().next() {
+            if ch.is_whitespace() {
+                value_start += ch.len_utf8();
+            } else {
+                break;
+            }
+        }
+
+        let value_end = line[value_start..]
+            .find(|c: char| c.is_whitespace() || c == ',' || c == ';' || c == '"' || c == '\'')
+            .map(|offset| value_start + offset)
+            .unwrap_or(line.len());
+        out.push_str(&line[key_end..value_start]);
+        out.push_str("[REDACTED]");
+        cursor = value_end;
+    }
+
+    out.push_str(&line[cursor..]);
+    out
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    let lower = key.to_ascii_lowercase();
+    sensitive_keys()
+        .iter()
+        .any(|candidate| lower.contains(candidate))
+}
+
+fn sensitive_keys() -> &'static [&'static str] {
+    &[
+        "access_token",
+        "refresh_token",
+        "authorization",
+        "id_token",
+        "service_token",
+        "deploy_key",
+        "proof",
+        "linkcode",
+        "password",
+        "secret",
+        "apikey",
+        "api_key",
+    ]
+}
+
+fn build_summary(ready_to_launch: bool, recent_status: &str, analysis: &Value) -> String {
     let readiness = if ready_to_launch {
         "Ready to launch"
     } else {
         "Not ready to launch"
     };
+    let root_cause = analysis
+        .get("rootCause")
+        .and_then(|value| value.as_object())
+        .map(|value| {
+            let title = value
+                .get("title")
+                .and_then(|field| field.as_str())
+                .unwrap_or("Unknown");
+            let confidence = value
+                .get("confidence")
+                .and_then(|field| field.as_u64())
+                .unwrap_or(0);
+            format!("{title} ({confidence}% confidence)")
+        })
+        .unwrap_or_else(|| "No clear root cause detected".to_string());
+    let attempted_fixes = analysis
+        .get("attemptedFixes")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let attempted_line = if attempted_fixes.is_empty() {
+        "None detected in recent logs/status.".to_string()
+    } else {
+        attempted_fixes
+            .iter()
+            .map(|entry| {
+                let action = entry
+                    .get("action")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("unknown");
+                let status = entry
+                    .get("status")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("unknown");
+                format!("{action} ({status})")
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
     format!(
-        "# Atlas Support Summary\n\n- Launch readiness: {readiness}\n- Recent status: {recent_status}\n- Generated by diagnostics bundle."
+        "# Atlas Support Summary\n\n- Launch readiness: {readiness}\n- Recent status: {recent_status}\n- Root cause: {root_cause}\n- Attempted fixes: {attempted_line}\n- Generated by diagnostics bundle."
     )
 }
 
@@ -632,6 +866,182 @@ pub fn infer_pack_id_for_game_dir(
                 None
             }
         })
+}
+
+fn resolve_repair_plan(input: &RepairInput) -> RepairPlan {
+    let normalized_game_dir = normalize_path(&input.game_dir);
+    let matching_instance = input
+        .settings
+        .instances
+        .iter()
+        .find(|instance| normalize_path(&instance.game_dir) == normalized_game_dir);
+
+    if let Some(instance) = matching_instance {
+        if matches!(instance.source, InstanceSource::Local) {
+            return RepairPlan {
+                strategy: RepairStrategy::LocalRuntime,
+                decision_reason:
+                    "Repair strategy: local runtime (instance source is local).".to_string(),
+            };
+        }
+
+        let pack_id = input.pack_id.clone().or_else(|| {
+            instance
+                .atlas_pack
+                .as_ref()
+                .map(|pack| pack.pack_id.clone())
+        });
+        let channel = input.channel.clone().or_else(|| {
+            instance
+                .atlas_pack
+                .as_ref()
+                .map(|pack| pack.channel.clone())
+        });
+
+        if pack_id.is_some() && input.atlas_session.is_some() {
+            return RepairPlan {
+                strategy: RepairStrategy::AtlasSync {
+                    pack_id: pack_id.unwrap_or_default(),
+                    channel,
+                },
+                decision_reason:
+                    "Repair strategy: Atlas pack sync (instance source is Atlas).".to_string(),
+            };
+        }
+
+        return RepairPlan {
+            strategy: RepairStrategy::LocalRuntime,
+            decision_reason:
+                "Repair strategy fallback: local runtime (Atlas session/pack unavailable)."
+                    .to_string(),
+        };
+    }
+
+    if let (Some(pack_id), Some(_)) = (input.pack_id.clone(), input.atlas_session.as_ref()) {
+        return RepairPlan {
+            strategy: RepairStrategy::AtlasSync {
+                pack_id,
+                channel: input.channel.clone(),
+            },
+            decision_reason: "Repair strategy: Atlas pack sync (explicit pack id provided)."
+                .to_string(),
+        };
+    }
+
+    RepairPlan {
+        strategy: RepairStrategy::LocalRuntime,
+        decision_reason: "Repair strategy: local runtime (no Atlas instance match).".to_string(),
+    }
+}
+
+struct CleanupResult {
+    removed: Vec<String>,
+    skipped: Vec<String>,
+}
+
+fn cleanup_transient_paths(game_dir: &str) -> Result<CleanupResult, String> {
+    let base_dir = normalize_path(game_dir);
+    let minecraft_dir = base_dir.join(".minecraft");
+    let mut result = CleanupResult {
+        removed: Vec::new(),
+        skipped: Vec::new(),
+    };
+    let candidates = vec![
+        base_dir.join("latest_launch.log"),
+        base_dir.join("logs"),
+        base_dir.join("crash-reports"),
+        base_dir.join("tmp"),
+        base_dir.join("downloads"),
+        minecraft_dir.join("logs"),
+        minecraft_dir.join("crash-reports"),
+        minecraft_dir.join("tmp"),
+        minecraft_dir.join("downloads"),
+    ];
+
+    for path in candidates {
+        if !path.exists() {
+            continue;
+        }
+        let outcome = if path.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+        match outcome {
+            Ok(_) => result.removed.push(path.to_string_lossy().to_string()),
+            Err(err) => result
+                .skipped
+                .push(format!("{} ({err})", path.to_string_lossy())),
+        }
+    }
+
+    cleanup_transient_error_reports(&base_dir, &mut result);
+    cleanup_transient_error_reports(&minecraft_dir, &mut result);
+    Ok(result)
+}
+
+fn cleanup_transient_error_reports(root: &Path, result: &mut CleanupResult) {
+    let entries = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = match path.file_name().and_then(|value| value.to_str()) {
+            Some(value) => value.to_ascii_lowercase(),
+            None => continue,
+        };
+        if !(name.starts_with("hs_err_pid") || name.starts_with("replay_pid")) {
+            continue;
+        }
+        match fs::remove_file(&path) {
+            Ok(_) => result.removed.push(path.to_string_lossy().to_string()),
+            Err(err) => result
+                .skipped
+                .push(format!("{} ({err})", path.to_string_lossy())),
+        }
+    }
+}
+
+fn summarize_attempted_fixes(recent_status: Option<&str>, recent_logs: &[String]) -> Vec<Value> {
+    let mut haystack = recent_status.unwrap_or_default().to_ascii_lowercase();
+    if !recent_logs.is_empty() {
+        haystack.push('\n');
+        haystack.push_str(&recent_logs.join("\n").to_ascii_lowercase());
+    }
+
+    let mut fixes = Vec::<Value>::new();
+    if haystack.contains("relink")
+        || haystack.contains("link")
+        || haystack.contains("account")
+        || haystack.contains("sign in")
+    {
+        fixes.push(json!({"action": "relinkAccount", "status": "detected"}));
+    }
+    if haystack.contains("default memory set to")
+        || haystack.contains("safe memory")
+        || haystack.contains("heap")
+    {
+        fixes.push(json!({"action": "setSafeMemory", "status": "detected"}));
+    }
+    if haystack.contains("resynced atlas pack") || haystack.contains("sync") {
+        fixes.push(json!({"action": "resyncPack", "status": "detected"}));
+    }
+    if haystack.contains("runtime repair completed")
+        || haystack.contains("downloaded base minecraft files")
+    {
+        fixes.push(json!({"action": "repairRuntime", "status": "detected"}));
+    }
+    if haystack.contains("full repair completed")
+        || haystack.contains("repair completed successfully")
+    {
+        fixes.push(json!({"action": "fullRepair", "status": "detected"}));
+    }
+    fixes
 }
 
 #[cfg(test)]

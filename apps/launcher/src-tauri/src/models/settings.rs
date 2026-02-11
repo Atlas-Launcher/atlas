@@ -19,6 +19,8 @@ pub struct AppSettings {
     pub selected_instance_id: Option<String>,
     #[serde(default)]
     pub theme_mode: Option<String>,
+    #[serde(default)]
+    pub launch_readiness_wizard: LaunchReadinessWizardState,
 }
 
 impl Default for AppSettings {
@@ -44,8 +46,18 @@ impl Default for AppSettings {
             instances: vec![instance],
             selected_instance_id: Some("default".to_string()),
             theme_mode: Some("system".to_string()),
+            launch_readiness_wizard: LaunchReadinessWizardState::default(),
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchReadinessWizardState {
+    #[serde(default)]
+    pub dismissed_at: Option<String>,
+    #[serde(default)]
+    pub completed_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

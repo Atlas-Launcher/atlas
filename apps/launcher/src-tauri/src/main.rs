@@ -97,7 +97,8 @@ fn main() {
             commands::diagnostics::run_troubleshooter,
             commands::diagnostics::apply_fix,
             commands::diagnostics::repair_installation,
-            commands::diagnostics::create_support_bundle
+            commands::diagnostics::create_support_bundle,
+            commands::restart::restart_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
