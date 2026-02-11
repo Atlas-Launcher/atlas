@@ -489,37 +489,21 @@ async fn apply_pack_update(
         guard.profile.clone().unwrap_or_else(|| "default".into())
     };
 
-    // If the build requests a force reinstall (or requires a full reinstall), clear the
-    // active `current` directory so the provisioner does not preserve or merge old files.
-    // We move `current` into `.runner/backup/current-<ms>` so a backup is retained.
+    // If the build requests a force reinstall (or requires a full reinstall), archive
+    // the current directory via the backup ops. This ensures a clean install while
+    // preserving an archival copy.
     if build.force_reinstall || build.requires_full_reinstall {
-        info!("build requests force reinstall; clearing existing server data before apply");
-        let current = server_root.join("current");
-        match tokio::fs::try_exists(&current).await {
-            Ok(true) => {
-                let backup_dir = server_root.join(".runner").join("backup");
-                if let Err(err) = tokio::fs::create_dir_all(&backup_dir).await {
-                    warn!("failed to create backup dir {}: {}", backup_dir.display(), err);
-                }
-                let backup = backup_dir.join(format!("current-{}", super::util::now_millis()));
-                match tokio::fs::rename(&current, &backup).await {
-                    Ok(_) => info!("moved existing current to backup: {}", backup.display()),
-                    Err(err) => {
-                        warn!("failed to move current to backup: {}", err);
-                        // As a last resort try to remove the directory so the installer starts clean
-                        if let Err(err2) = tokio::fs::remove_dir_all(&current).await {
-                            return Err(format!("failed to clear existing server directory: {}, {}", err, err2));
-                        } else {
-                            info!("removed existing current directory");
-                        }
-                    }
-                }
-            }
-            Ok(false) => {
-                debug!("no existing current directory to clear");
-            }
+        info!("build requests force reinstall; archiving existing server current before apply");
+        match crate::backup::ops::archive_current_for_force_reinstall(&server_root).await {
+            Ok(path) => info!("archived current to {}", path.display()),
             Err(err) => {
-                warn!("failed to probe existing current directory: {}", err);
+                warn!("archive_current_for_force_reinstall failed: {}", err);
+                // Fall back: try to remove current to allow a clean install; if that fails, abort.
+                let current = server_root.join("current");
+                match tokio::fs::remove_dir_all(&current).await {
+                    Ok(_) => info!("removed existing current directory as fallback"),
+                    Err(err2) => return Err(format!("failed to clear existing server directory: {}", err2)),
+                }
             }
         }
     }
