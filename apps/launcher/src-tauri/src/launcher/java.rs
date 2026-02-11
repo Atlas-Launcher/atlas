@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use super::download::{download_if_needed, DOWNLOAD_CONCURRENCY};
 use super::emit;
@@ -67,8 +68,15 @@ pub async fn resolve_java_path(
     version_data: &VersionData,
     java_path_override: &str,
 ) -> Result<String, LauncherError> {
+    let required_major = version_data
+        .java_version
+        .as_ref()
+        .map(|java| java.major_version);
+
     if !java_path_override.trim().is_empty() && java_path_override.trim() != "java" {
-        return Ok(java_path_override.trim().to_string());
+        let override_path = java_path_override.trim().to_string();
+        validate_java_override(&override_path, required_major)?;
+        return Ok(override_path);
     }
     let component = version_data
         .java_version
@@ -76,13 +84,14 @@ pub async fn resolve_java_path(
         .map(|java| java.component.clone())
         .unwrap_or_else(|| "jre-legacy".to_string());
 
-    ensure_java_runtime(window, game_dir, &component).await
+    ensure_java_runtime(window, game_dir, &component, required_major).await
 }
 
 async fn ensure_java_runtime(
     window: &tauri::Window,
     game_dir: &Path,
     component: &str,
+    required_major: Option<u32>,
 ) -> Result<String, LauncherError> {
     let client = shared_client().clone();
     let os_key = runtime_os_key()?;
@@ -147,14 +156,15 @@ async fn ensure_java_runtime(
                 None,
             )?;
         } else {
-        emit(
-            window,
-            "java",
-            format!("Using latest Java runtime ({chosen_component})"),
-            None,
-            None,
-        )?;
-        return Ok(java_path.to_string_lossy().to_string());
+            emit(
+                window,
+                "java",
+                format!("Using latest Java runtime ({chosen_component})"),
+                None,
+                None,
+            )?;
+            ensure_java_major_version(&java_path, required_major)?;
+            return Ok(java_path.to_string_lossy().to_string());
         }
     }
 
@@ -241,10 +251,150 @@ async fn ensure_java_runtime(
     }
     validate_runtime_install(&runtime_home, &runtime_manifest)
         .map_err(|err| format!("Java runtime validation failed after install: {err}"))?;
+    ensure_java_major_version(&java_path, required_major)?;
     fs::write(&marker_path, manifest_url)
         .map_err(|err| format!("Failed to write runtime marker: {err}"))?;
 
     Ok(java_path.to_string_lossy().to_string())
+}
+
+fn validate_java_override(path: &str, required_major: Option<u32>) -> Result<(), String> {
+    let candidate = Path::new(path);
+    let looks_like_path = candidate.is_absolute() || path.contains('/') || path.contains('\\');
+
+    if looks_like_path {
+        if !candidate.exists() {
+            return Err(format!("Configured Java path does not exist: {path}"));
+        }
+        if !candidate.is_file() {
+            return Err(format!("Configured Java path is not a file: {path}"));
+        }
+    }
+
+    let detected_major = detect_java_major_version(path)?;
+    if let Some(required) = required_major {
+        if detected_major < required {
+            return Err(format!(
+                "Configured Java runtime is too old: detected Java {detected_major}, required Java {required}."
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_java_major_version(path: &Path, required_major: Option<u32>) -> Result<(), String> {
+    let Some(required) = required_major else {
+        return Ok(());
+    };
+    let binary = path.to_string_lossy();
+    let detected = detect_java_major_version(&binary)?;
+    if detected < required {
+        return Err(format!(
+            "Java runtime version mismatch: detected Java {detected}, required Java {required}."
+        ));
+    }
+    Ok(())
+}
+
+fn detect_java_major_version(java_binary: &str) -> Result<u32, String> {
+    let mut attempts = vec![java_binary.to_string()];
+    if let Some(fallback) = java_version_fallback_binary(java_binary) {
+        if !attempts.contains(&fallback) {
+            attempts.push(fallback);
+        }
+    }
+
+    let mut last_error = String::new();
+    for candidate in attempts {
+        let output = match Command::new(&candidate).arg("-version").output() {
+            Ok(output) => output,
+            Err(err) => {
+                last_error = format!("Failed to run `{candidate} -version`: {err}");
+                continue;
+            }
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            last_error = format!("`{candidate} -version` failed: {}", stderr.trim());
+            continue;
+        }
+
+        let mut full = String::new();
+        full.push_str(&String::from_utf8_lossy(&output.stdout));
+        if !full.is_empty() && !output.stderr.is_empty() {
+            full.push('\n');
+        }
+        full.push_str(&String::from_utf8_lossy(&output.stderr));
+
+        if let Some(version) = parse_java_major_version(&full) {
+            return Ok(version);
+        }
+
+        last_error =
+            format!("Unable to parse Java major version from `{candidate} -version` output.");
+    }
+
+    if last_error.is_empty() {
+        last_error = format!("Unable to parse Java major version for `{java_binary}`.");
+    }
+    Err(last_error)
+}
+
+pub(crate) fn parse_java_major_version(output: &str) -> Option<u32> {
+    for line in output.lines() {
+        if !line.to_ascii_lowercase().contains("version") {
+            continue;
+        }
+        let Some(start) = line.find('"') else {
+            continue;
+        };
+        let rest = &line[start + 1..];
+        let Some(end) = rest.find('"') else {
+            continue;
+        };
+        let quoted = &rest[..end];
+        if let Some(major) = parse_java_major_from_version_token(quoted) {
+            return Some(major);
+        }
+    }
+
+    None
+}
+
+fn parse_java_major_from_version_token(version: &str) -> Option<u32> {
+    let mut nums = version
+        .split(|ch: char| !ch.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<u32>().ok());
+
+    let first = nums.next()?;
+    if first == 1 {
+        nums.next()
+    } else {
+        Some(first)
+    }
+}
+
+fn java_version_fallback_binary(java_binary: &str) -> Option<String> {
+    let binary_lower = java_binary.to_ascii_lowercase();
+    if binary_lower == "javaw" || binary_lower == "javaw.exe" {
+        return Some("java".to_string());
+    }
+
+    let path = Path::new(java_binary);
+    let file_name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
+    if file_name == "javaw.exe" {
+        let sibling = path.with_file_name("java.exe");
+        return Some(sibling.to_string_lossy().to_string());
+    }
+    if file_name == "javaw" {
+        let sibling = path.with_file_name("java");
+        return Some(sibling.to_string_lossy().to_string());
+    }
+
+    None
 }
 
 fn resolve_runtimes_root(game_dir: &Path) -> PathBuf {

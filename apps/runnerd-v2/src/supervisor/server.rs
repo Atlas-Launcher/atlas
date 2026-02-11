@@ -2,28 +2,28 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sysinfo::System;
 use atlas_client::hub::HubClient;
 use runner_core_v2::proto::*;
 use runner_provision_v2::{ensure_applied_from_packblob_bytes, DependencyProvider, LaunchPlan};
 use runner_v2_rcon::{load_rcon_settings, RconClient};
+use sysinfo::System;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
-use crate::config;
 use super::logs::LogStore;
 use super::monitor::ensure_monitor;
 use super::state::{ServerState, SharedState};
 use super::updates::{ensure_watchers, sync_whitelist_to_root};
 use super::util::{default_server_root, now_millis};
+use crate::config;
 
-fn get_default_max_ram() -> u32 {
+fn get_default_max_ram_mb() -> u32 {
     let mut system = System::new();
     system.refresh_memory();
     let total_gb = (system.total_memory() / 1024 / 1024 / 1024) as u32;
-    if total_gb <= 8 {
+    let target_gb = if total_gb <= 8 {
         (total_gb.saturating_sub(2)).max(1)
     } else {
         #[cfg(target_os = "macos")]
@@ -44,6 +44,88 @@ fn get_default_max_ram() -> u32 {
         {
             8
         }
+    };
+    target_gb * 1024
+}
+
+fn normalize_max_ram_mb(value: u32) -> u32 {
+    if value == 0 {
+        return get_default_max_ram_mb();
+    }
+    // Backward compatibility: older config values may be GB-like.
+    if value <= 64 {
+        return value * 1024;
+    }
+    value
+}
+
+fn is_java_command_token(value: &str) -> bool {
+    let token = value.rsplit(['/', '\\']).next().unwrap_or(value);
+    token.eq_ignore_ascii_case("java")
+        || token.eq_ignore_ascii_case("java.exe")
+        || token.eq_ignore_ascii_case("javaw.exe")
+}
+
+fn ensure_memory_flags(argv: &mut Vec<String>, max_ram_mb: u32) -> bool {
+    if !argv.iter().any(|arg| is_java_command_token(arg)) {
+        return false;
+    }
+
+    argv.retain(|arg| {
+        let lower = arg.to_ascii_lowercase();
+        !(lower.starts_with("-xmx") || lower.starts_with("-xms"))
+    });
+
+    let Some(java_pos) = argv.iter().position(|arg| is_java_command_token(arg)) else {
+        return false;
+    };
+    let insert_pos = java_pos + 1;
+
+    argv.insert(insert_pos, format!("-Xms{}m", max_ram_mb));
+    argv.insert(insert_pos + 1, format!("-Xmx{}m", max_ram_mb));
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_memory_flags, is_java_command_token, normalize_max_ram_mb};
+
+    #[test]
+    fn java_token_detection_accepts_absolute_paths() {
+        assert!(is_java_command_token("java"));
+        assert!(is_java_command_token("/opt/jdk/bin/java"));
+        assert!(is_java_command_token("C:\\Java\\bin\\java.exe"));
+        assert!(is_java_command_token("C:\\Java\\bin\\javaw.exe"));
+        assert!(!is_java_command_token("python"));
+    }
+
+    #[test]
+    fn memory_flags_insert_after_java_path_and_replace_existing() {
+        let mut argv = vec![
+            "/opt/jdk/bin/java".to_string(),
+            "-Xmx512m".to_string(),
+            "-jar".to_string(),
+            "server.jar".to_string(),
+        ];
+        ensure_memory_flags(&mut argv, 4096);
+        assert_eq!(argv[0], "/opt/jdk/bin/java");
+        assert_eq!(argv[1], "-Xms4096m");
+        assert_eq!(argv[2], "-Xmx4096m");
+        assert_eq!(argv[3], "-jar");
+    }
+
+    #[test]
+    fn normalize_max_ram_supports_legacy_gb_values() {
+        assert_eq!(normalize_max_ram_mb(8), 8192);
+        assert_eq!(normalize_max_ram_mb(4096), 4096);
+    }
+
+    #[test]
+    fn memory_flags_not_inserted_for_non_java_commands() {
+        let mut argv = vec!["python".to_string(), "server.py".to_string()];
+        let changed = ensure_memory_flags(&mut argv, 4096);
+        assert!(!changed);
+        assert_eq!(argv, vec!["python".to_string(), "server.py".to_string()]);
     }
 }
 
@@ -95,7 +177,14 @@ pub async fn start_server_from_deploy(state: SharedState) {
         guard.current_pack_build_id = Some(id.clone());
     }
 
-    let artifact = match hub.get_launcher_artifact(&deploy.pack_id, &deploy.channel, current_build_id.as_deref()).await {
+    let artifact = match hub
+        .get_launcher_artifact(
+            &deploy.pack_id,
+            &deploy.channel,
+            current_build_id.as_deref(),
+        )
+        .await
+    {
         Ok(value) => value,
         Err(err) => {
             warn!("get artifact failed: {err}");
@@ -148,14 +237,20 @@ pub async fn start_server_from_deploy(state: SharedState) {
 
     // If artifact requested a force reinstall or full reinstall, ensure existing current is cleared
     // before continuing. We move it to .runner/backup/current-<ms> to keep a backup.
-    if artifact.force_reinstall.unwrap_or(false) || artifact.requires_full_reinstall.unwrap_or(false) {
+    if artifact.force_reinstall.unwrap_or(false)
+        || artifact.requires_full_reinstall.unwrap_or(false)
+    {
         info!("artifact requests force reinstall; clearing existing server data before auto-start");
         let current = server_root.join("current");
         match tokio::fs::try_exists(&current).await {
             Ok(true) => {
                 let backup_dir = server_root.join(".runner").join("backup");
                 if let Err(err) = tokio::fs::create_dir_all(&backup_dir).await {
-                    warn!("failed to create backup dir {}: {}", backup_dir.display(), err);
+                    warn!(
+                        "failed to create backup dir {}: {}",
+                        backup_dir.display(),
+                        err
+                    );
                 }
                 let backup = backup_dir.join(format!("current-{}", super::util::now_millis()));
                 match tokio::fs::rename(&current, &backup).await {
@@ -163,7 +258,10 @@ pub async fn start_server_from_deploy(state: SharedState) {
                     Err(err) => {
                         warn!("failed to move current to backup: {}", err);
                         if let Err(err2) = tokio::fs::remove_dir_all(&current).await {
-                            warn!("failed to remove existing current after rename failure: {}", err2);
+                            warn!(
+                                "failed to remove existing current after rename failure: {}",
+                                err2
+                            );
                         } else {
                             info!("removed existing current directory");
                         }
@@ -259,7 +357,9 @@ pub async fn start_server(
         if let Ok(mut hub) = HubClient::new(&deploy.hub_url) {
             hub.set_service_token(deploy.deploy_key.clone());
             let hub = Arc::new(hub);
-            if let Err(err) = sync_whitelist_to_root(hub, &deploy.pack_id, &server_root, state.clone()).await {
+            if let Err(err) =
+                sync_whitelist_to_root(hub, &deploy.pack_id, &server_root, state.clone()).await
+            {
                 warn!("whitelist sync failed on start: {err}");
             }
         }
@@ -269,11 +369,13 @@ pub async fn start_server(
         guard.logs.clone()
     };
     let spawn_logs = logs.clone();
-    let child = spawn_server(&launch_plan, &server_root, &BTreeMap::new(), spawn_logs).await.map_err(|err| RpcError {
-        code: ErrorCode::Internal,
-        message: format!("failed to start server: {err}"),
-        details: Default::default(),
-    })?;
+    let child = spawn_server(&launch_plan, &server_root, &BTreeMap::new(), spawn_logs)
+        .await
+        .map_err(|err| RpcError {
+            code: ErrorCode::Internal,
+            message: format!("failed to start server: {err}"),
+            details: Default::default(),
+        })?;
 
     let pid = child.id().unwrap_or_default() as i32;
     let started_at_ms = now_millis();
@@ -306,7 +408,11 @@ pub async fn start_server(
     // mutually recursive async dependencies between modules.
     ensure_monitor(state.clone()).await;
 
-    Ok(Response::Started { profile, pid, started_at_ms })
+    Ok(Response::Started {
+        profile,
+        pid,
+        started_at_ms,
+    })
 }
 
 pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, RpcError> {
@@ -360,7 +466,9 @@ pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, Rp
                 }
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
-        }).await {
+        })
+        .await
+        {
             Ok(_) => info!("watcher worker signaled done"),
             Err(_) => warn!("timed out waiting for watcher worker to signal done"),
         }
@@ -369,7 +477,10 @@ pub async fn stop_server(force: bool, state: SharedState) -> Result<Response, Rp
     let mut guard = state.lock().await;
     let profile = guard.profile.clone().unwrap_or_else(|| "default".into());
     let stopped_at_ms = now_millis();
-    let exit_info = ExitInfo { code: None, signal: None };
+    let exit_info = ExitInfo {
+        code: None,
+        signal: None,
+    };
     guard.child = None;
     guard.status = ServerStatus::Exited {
         profile: profile.clone(),
@@ -425,12 +536,17 @@ pub(crate) async fn apply_pack_blob(
 
     // Add RAM limits if specified in config
     if let Ok(Some(deploy_config)) = config::load_deploy_key() {
-        let max_ram = deploy_config.max_ram.unwrap_or_else(get_default_max_ram);
-        // Find the position after "java" and insert -Xmx and -Xms
-        if let Some(java_pos) = launch_plan.argv.iter().position(|arg| arg == "java") {
-            let insert_pos = java_pos + 1;
-            launch_plan.argv.insert(insert_pos, format!("-Xmx{}m", max_ram));
-            launch_plan.argv.insert(insert_pos, format!("-Xms{}m", max_ram));
+        let max_ram_mb = deploy_config
+            .max_ram
+            .map(normalize_max_ram_mb)
+            .unwrap_or_else(get_default_max_ram_mb);
+        if ensure_memory_flags(&mut launch_plan.argv, max_ram_mb) {
+            info!(
+                "applied JVM memory flags: -Xms{}m -Xmx{}m",
+                max_ram_mb, max_ram_mb
+            );
+        } else {
+            warn!("launch plan command is not java; skipping JVM memory flags");
         }
     }
 
@@ -438,11 +554,13 @@ pub(crate) async fn apply_pack_blob(
 }
 
 pub(crate) async fn stop_server_internal(state: SharedState, force: bool) -> Result<(), RpcError> {
-    let server_root = super::util::current_server_root(&state).await.ok_or_else(|| RpcError {
-        code: ErrorCode::InvalidConfig,
-        message: "server root not configured".into(),
-        details: Default::default(),
-    })?;
+    let server_root = super::util::current_server_root(&state)
+        .await
+        .ok_or_else(|| RpcError {
+            code: ErrorCode::InvalidConfig,
+            message: "server root not configured".into(),
+            details: Default::default(),
+        })?;
 
     if let Ok(Some(settings)) = load_rcon_settings(&server_root.join("current")).await {
         let rcon = RconClient::new(settings.address, settings.password);
@@ -484,10 +602,9 @@ pub(crate) async fn spawn_server(
 ) -> Result<tokio::process::Child, std::io::Error> {
     let cwd = server_root.join("current").join(&plan.cwd_rel);
     let mut argv = plan.argv.iter();
-    let program = argv.next().ok_or_else(|| std::io::Error::new(
-        std::io::ErrorKind::InvalidInput,
-        "empty launch command",
-    ))?;
+    let program = argv.next().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "empty launch command")
+    })?;
 
     let mut cmd = Command::new(program);
     cmd.args(argv);
@@ -543,34 +660,36 @@ impl DependencyProvider for HttpDependencyProvider {
         &self,
         dep: &protocol::Dependency,
     ) -> Result<Vec<u8>, runner_provision_v2::errors::ProvisionError> {
-        let response = self.client.get(&dep.url)
+        let response = self
+            .client
+            .get(&dep.url)
             .send()
             .await
             .map_err(|err| {
-                runner_provision_v2::errors::ProvisionError::Invalid(
-                    format!("dependency download failed: {err}"),
-                )
+                runner_provision_v2::errors::ProvisionError::Invalid(format!(
+                    "dependency download failed: {err}"
+                ))
             })?
             .error_for_status()
             .map_err(|err| {
-                runner_provision_v2::errors::ProvisionError::Invalid(
-                    format!("dependency download failed: {err}"),
-                )
+                runner_provision_v2::errors::ProvisionError::Invalid(format!(
+                    "dependency download failed: {err}"
+                ))
             })?;
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|err| {
-                runner_provision_v2::errors::ProvisionError::Invalid(
-                    format!("dependency download failed: {err}"),
-                )
-            })?;
+        let bytes = response.bytes().await.map_err(|err| {
+            runner_provision_v2::errors::ProvisionError::Invalid(format!(
+                "dependency download failed: {err}"
+            ))
+        })?;
         Ok(bytes.to_vec())
     }
 }
 
 async fn load_current_build_id(server_root: &PathBuf) -> Option<String> {
-    let path = server_root.join("current").join(".runner").join("build_id.txt");
+    let path = server_root
+        .join("current")
+        .join(".runner")
+        .join("build_id.txt");
     match tokio::fs::read_to_string(&path).await {
         Ok(content) => Some(content.trim().to_string()),
         Err(_) => None,
@@ -585,7 +704,10 @@ async fn save_current_build_id(server_root: &PathBuf, build_id: &str) -> std::io
 }
 
 async fn load_pack_blob(server_root: &PathBuf) -> Option<Vec<u8>> {
-    let path = server_root.join("current").join(".runner").join("pack_blob.bin");
+    let path = server_root
+        .join("current")
+        .join(".runner")
+        .join("pack_blob.bin");
     match tokio::fs::read(&path).await {
         Ok(blob) => Some(blob),
         Err(_) => None,
