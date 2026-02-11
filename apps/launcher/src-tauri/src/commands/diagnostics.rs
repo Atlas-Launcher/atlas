@@ -25,31 +25,26 @@ async fn load_auth_session_fresh(
         guard.clone()
     };
     if let Some(session) = maybe_session {
-        match auth::ensure_fresh_session(session.clone()).await {
+        return match auth::ensure_fresh_session(session.clone()).await {
             Ok(fresh) => {
                 // Persist and update state (lock again after await)
                 let _ = auth::save_session(&fresh).map_err(|e| e.to_string())?;
-                let mut guard2 = state
-                    .auth
-                    .lock()
-                    .map_err(|_| "Auth state lock poisoned".to_string())?;
+                let mut guard2 = state.auth.lock().map_err(|_| AuthError::LockPoisoned)?;
                 *guard2 = Some(fresh.clone());
-                return Ok(Some(fresh));
+                Ok(Some(fresh))
             }
-            Err(err) => {
-                let msg = err.to_string();
-                if msg.to_lowercase().contains("entitlement") || msg.to_lowercase().contains("minecraft entitlement") {
-                    return Err("Microsoft account does not own Minecraft Java Edition.".to_string());
+            Err(err) => match err {
+                AuthError::MissingMinecraftEntitlement => {
+                    Err(AuthError::MissingMinecraftEntitlement)
                 }
-                let _ = auth::clear_session();
-                let mut guard2 = state
-                    .auth
-                    .lock()
-                    .map_err(|_| "Auth state lock poisoned".to_string())?;
-                *guard2 = None;
-                return Ok(None);
-            }
-        }
+                _ => {
+                    let _ = auth::clear_session();
+                    let mut guard2 = state.auth.lock().map_err(|_| AuthError::LockPoisoned)?;
+                    *guard2 = None;
+                    Ok(None)
+                }
+            },
+        };
     }
 
     // Fallback to loading from disk
@@ -57,21 +52,19 @@ async fn load_auth_session_fresh(
         Some(session) => match auth::ensure_fresh_session(session).await {
             Ok(fresh) => {
                 let _ = auth::save_session(&fresh).map_err(|e| e.to_string())?;
-                let mut guard = state
-                    .auth
-                    .lock()
-                    .map_err(|_| "Auth state lock poisoned".to_string())?;
+                let mut guard = state.auth.lock().map_err(|_| AuthError::LockPoisoned)?;
                 *guard = Some(fresh.clone());
                 Ok(Some(fresh))
             }
-            Err(err) => {
-                let msg = err.to_string();
-                if msg.to_lowercase().contains("entitlement") || msg.to_lowercase().contains("minecraft entitlement") {
-                    return Err("Microsoft account does not own Minecraft Java Edition.".to_string());
+            Err(err) => match err {
+                AuthError::MissingMinecraftEntitlement => {
+                    Err(AuthError::MissingMinecraftEntitlement)
                 }
-                let _ = auth::clear_session();
-                Ok(None)
-            }
+                _ => {
+                    let _ = auth::clear_session();
+                    Ok(None)
+                }
+            },
         },
         None => Ok(None),
     }
@@ -81,37 +74,37 @@ async fn load_auth_session_fresh(
 // returning it to readiness logic.
 async fn load_atlas_session_fresh(
     state: tauri::State<'_, AppState>,
-) -> Result<Option<AtlasSession>, String> {
+) -> Result<Option<AtlasSession>, AuthError> {
     // Try in-memory first: clone out the Option<AtlasSession> while holding the lock,
     // then drop the MutexGuard before performing any await so the future is Send.
     let maybe_atlas_session = {
         let guard = state
             .atlas_auth
             .lock()
-            .map_err(|_| "Atlas auth state lock poisoned".to_string())?;
+            .map_err(|_| AuthError::LockPoisoned)?;
         guard.clone()
     };
     if let Some(session) = maybe_atlas_session {
-        match auth::ensure_fresh_atlas_session(session.clone()).await {
+        return match auth::ensure_fresh_atlas_session(session.clone()).await {
             Ok(fresh) => {
                 let _ = auth::save_atlas_session(&fresh).map_err(|e| e.to_string())?;
                 let mut guard2 = state
                     .atlas_auth
                     .lock()
-                    .map_err(|_| "Atlas auth state lock poisoned".to_string())?;
+                    .map_err(|_| AuthError::LockPoisoned)?;
                 *guard2 = Some(fresh.clone());
-                return Ok(Some(fresh));
+                Ok(Some(fresh))
             }
             Err(_) => {
                 let _ = auth::clear_atlas_session();
                 let mut guard2 = state
                     .atlas_auth
                     .lock()
-                    .map_err(|_| "Atlas auth state lock poisoned".to_string())?;
+                    .map_err(|_| AuthError::LockPoisoned)?;
                 *guard2 = None;
-                return Ok(None);
+                Ok(None)
             }
-        }
+        };
     }
 
     match auth::load_atlas_session().map_err(|e| e.to_string())? {
@@ -121,7 +114,7 @@ async fn load_atlas_session_fresh(
                 let mut guard = state
                     .atlas_auth
                     .lock()
-                    .map_err(|_| "Atlas auth state lock poisoned".to_string())?;
+                    .map_err(|_| AuthError::LockPoisoned)?;
                 *guard = Some(fresh.clone());
                 Ok(Some(fresh))
             }
@@ -147,9 +140,13 @@ pub async fn get_launch_readiness(
     state: tauri::State<'_, AppState>,
     game_dir: Option<String>,
 ) -> Result<LaunchReadinessReport, String> {
-    let settings = load_settings(&state)?;
-    let atlas_session = load_atlas_session_fresh(state.clone()).await?;
-    let auth_session = load_auth_session_fresh(state.clone()).await?;
+    let settings = load_settings(&state).map_err(|e| e.to_string())?;
+    let atlas_session = load_atlas_session_fresh(state.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+    let auth_session = load_auth_session_fresh(state.clone())
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(diagnostics::build_launch_readiness(
         diagnostics::ReadinessContext {
             settings,
@@ -167,9 +164,13 @@ pub async fn run_troubleshooter(
     recent_status: Option<String>,
     recent_logs: Option<Vec<String>>,
 ) -> Result<TroubleshooterReport, String> {
-    let settings = load_settings(&state)?;
-    let atlas_session = load_atlas_session_fresh(state.clone()).await?;
-    let auth_session = load_auth_session_fresh(state.clone()).await?;
+    let settings = load_settings(&state).map_err(|e| e.to_string())?;
+    let atlas_session = load_atlas_session_fresh(state.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+    let auth_session = load_auth_session_fresh(state.clone())
+        .await
+        .map_err(|e| e.to_string())?;
     let readiness = diagnostics::build_launch_readiness(diagnostics::ReadinessContext {
         settings,
         atlas_session,
@@ -216,7 +217,9 @@ pub async fn apply_fix(
         });
     }
 
-    let atlas_session = load_atlas_session_fresh(state.clone()).await?;
+    let atlas_session = load_atlas_session_fresh(state.clone())
+        .await
+        .map_err(|e| e.to_string())?;
     let resolved_pack_id =
         pack_id.or_else(|| diagnostics::infer_pack_id_for_game_dir(&settings, game_dir.as_deref()));
 
@@ -244,7 +247,9 @@ pub async fn repair_installation(
     preserve_saves: Option<bool>,
 ) -> Result<RepairResult, String> {
     let settings = load_settings(&state)?;
-    let atlas_session = load_atlas_session_fresh(state.clone()).await?;
+    let atlas_session = load_atlas_session_fresh(state.clone())
+        .await
+        .map_err(|e| e.to_string())?;
     let resolved_pack_id =
         pack_id.or_else(|| diagnostics::infer_pack_id_for_game_dir(&settings, Some(&game_dir)));
 
@@ -270,8 +275,12 @@ pub async fn create_support_bundle(
     recent_logs: Option<Vec<String>>,
 ) -> Result<SupportBundleResult, String> {
     let settings = load_settings(&state)?;
-    let atlas_session = load_atlas_session_fresh(state.clone()).await?;
-    let auth_session = load_auth_session_fresh(state.clone()).await?;
+    let atlas_session = load_atlas_session_fresh(state.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+    let auth_session = load_auth_session_fresh(state.clone())
+        .await
+        .map_err(|e| e.to_string())?;
     let readiness = diagnostics::build_launch_readiness(diagnostics::ReadinessContext {
         settings,
         atlas_session,

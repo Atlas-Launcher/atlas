@@ -48,9 +48,7 @@ pub async fn verify_entitlements<H: HttpClient + ?Sized>(
         .await?;
 
     if entitlements.items.is_empty() {
-        return Err("Minecraft entitlement not found for this account."
-            .to_string()
-            .into());
+        return Err(AuthError::MissingMinecraftEntitlement);
     }
 
     Ok(())
