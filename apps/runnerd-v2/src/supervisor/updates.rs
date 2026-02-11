@@ -489,15 +489,22 @@ async fn apply_pack_update(
         guard.profile.clone().unwrap_or_else(|| "default".into())
     };
 
+    // Always attempt to backup the current server state before applying an update.
+    // This uses RCON save-off/save-on when available and archives world files.
+    match crate::backup::backup_before_update(&server_root, state.clone()).await {
+        Ok(path) => info!("pre-update backup created: {}", path.display()),
+        Err(err) => warn!("pre-update backup failed: {}", err),
+    }
+
     // If the build requests a force reinstall (or requires a full reinstall), archive
-    // the current directory via the backup ops. This ensures a clean install while
+    // the current directory via the higher-level backup API. This ensures a clean install while
     // preserving an archival copy.
     if build.force_reinstall || build.requires_full_reinstall {
         info!("build requests force reinstall; archiving existing server current before apply");
-        match crate::backup::ops::archive_current_for_force_reinstall(&server_root).await {
+        match crate::backup::move_current_to_backup(&server_root).await {
             Ok(path) => info!("archived current to {}", path.display()),
             Err(err) => {
-                warn!("archive_current_for_force_reinstall failed: {}", err);
+                warn!("move_current_to_backup failed: {}", err);
                 // Fall back: try to remove current to allow a clean install; if that fails, abort.
                 let current = server_root.join("current");
                 match tokio::fs::remove_dir_all(&current).await {

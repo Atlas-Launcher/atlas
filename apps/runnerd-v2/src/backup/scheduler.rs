@@ -7,6 +7,57 @@ use crate::supervisor::SharedState;
 use super::ops;
 use tokio::fs as async_fs;
 use std::path::PathBuf;
+use tokio::task;
+use std::fs as stdfs;
+use std::time::{SystemTime, Duration as StdDuration};
+
+/// Remove backups older than `keep_days` from server_root/.runner/backup using a blocking task.
+async fn prune_old_backups(server_root: &PathBuf, keep_days: u64) {
+    let backup_dir = server_root.join(".runner").join("backup");
+    let dir = backup_dir.clone();
+    let keep_secs = keep_days.saturating_mul(24 * 3600);
+    let result = task::spawn_blocking(move || -> Result<(), String> {
+        if !dir.exists() {
+            return Ok(());
+        }
+        let cutoff = SystemTime::now()
+            .checked_sub(StdDuration::from_secs(keep_secs))
+            .ok_or_else(|| "time error computing cutoff".to_string())?;
+
+        for entry in stdfs::read_dir(&dir).map_err(|e| format!("read_dir failed: {}", e))? {
+            let entry = entry.map_err(|e| format!("read_dir entry failed: {}", e))?;
+            let path = entry.path();
+            // Use metadata modified time to decide
+            match entry.metadata() {
+                Ok(meta) => {
+                    if let Ok(mtime) = meta.modified() {
+                        if mtime < cutoff {
+                            if meta.is_dir() {
+                                if let Err(e) = stdfs::remove_dir_all(&path) {
+                                    eprintln!("prune: failed to remove dir {}: {}", path.display(), e);
+                                }
+                            } else {
+                                if let Err(e) = stdfs::remove_file(&path) {
+                                    eprintln!("prune: failed to remove file {}: {}", path.display(), e);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("prune: metadata failed for {}: {}", path.display(), e);
+                }
+            }
+        }
+        Ok(())
+    }).await;
+
+    if let Err(join_err) = result {
+        warn!("prune operation join failed: {}", join_err);
+    } else if let Ok(Err(err)) = result {
+        warn!("prune operation failed: {}", err);
+    }
+}
 
 async fn read_last_backup_date(server_root: &PathBuf) -> Option<NaiveDate> {
     let path = server_root.join(".runner").join("backup").join("last_backup.txt");
@@ -48,6 +99,12 @@ async fn write_last_backup_date(server_root: &PathBuf, date: NaiveDate) {
 pub async fn run_daily_backup(server_root: std::path::PathBuf, state: SharedState) {
     let mut last_backup_date: Option<NaiveDate> = read_last_backup_date(&server_root).await;
 
+    // Kick off an initial prune in background (non-blocking). Use 14 days retention.
+    let root_for_prune = server_root.clone();
+    tokio::spawn(async move {
+        prune_old_backups(&root_for_prune, 14).await;
+    });
+
     loop {
         let now = Local::now();
         let today = now.date_naive();
@@ -65,6 +122,7 @@ pub async fn run_daily_backup(server_root: std::path::PathBuf, state: SharedStat
                     Ok(path) => {
                         info!("daily backup completed: {}", path.display());
                         write_last_backup_date(&root, today).await;
+                        prune_old_backups(&root, 14).await;
                     }
                     Err(err) => {
                         warn!("daily backup failed: {}", err);
