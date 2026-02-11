@@ -259,7 +259,14 @@ async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
       readinessWizardOpen.value = true;
     }
   } catch (err) {
-    pushLog(`Failed to load launch readiness: ${String(err)}`);
+    const msg = String(err);
+    pushLog(`Failed to load launch readiness: ${msg}`);
+    // Surface the diagnostic error to the user (e.g. missing Minecraft entitlement)
+    try {
+      setStatus(msg);
+    } catch {
+      // ignore if setStatus fails for any reason
+    }
   }
 }
 
@@ -837,21 +844,35 @@ async function completeReadinessWizard() {
 async function handleReadinessSignOut(scope: "microsoft" | "all") {
   await runTask("Signing out", async () => {
     if (scope === "all") {
-      if (profile.value) {
+      // Always attempt to clear both Microsoft and Atlas sessions on the backend
+      // regardless of local onboarding/profile state. Errors are tolerated so the
+      // launcher reset flow continues.
+      try {
         await signOut();
+      } catch (err) {
+        // signOut already sets status on failure; ignore to continue reset
       }
-      if (atlasProfile.value) {
+      try {
         await signOutAtlas();
+      } catch (err) {
+        // ignore to continue reset
       }
+
       await updateSettings(buildDefaultLauncherSettings());
       await refreshInstanceInstallStates();
       await loadInstalledVersions();
       await loadMods();
       setStatus("Signed out of Atlas and Microsoft. Launcher reset to defaults.");
     } else {
-      if (profile.value) {
+      // For microsoft-only sign out ensure we call the signOut command even if
+      // there is no local profile (onboarding state) so server-side MS session
+      // is cleared.
+      try {
         await signOut();
+      } catch (err) {
+        // ignore and proceed
       }
+
       await persistReadinessWizardState({
         dismissedAt: null,
         completedAt: null
