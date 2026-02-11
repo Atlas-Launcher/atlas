@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { onMounted, ref, computed } from "vue";
-import { X, Minus, Square, Copy } from "lucide-vue-next";
+import { onMounted, onUnmounted, ref, computed } from "vue";
+import { X, Minus, Square, Copy, Check } from "lucide-vue-next";
+import { CloudAlert } from "lucide-vue-next";
 import type { AtlasProfile, Profile } from "@/types/auth";
 
 const props = defineProps<{
   profile: Profile | null;
   atlasProfile: AtlasProfile | null;
   isSigningIn: boolean;
+  // New prop: when true, we can't connect out even though required vars exist
+  cannotConnect?: boolean;
+  // New prop: indicates the launch readiness wizard is currently open
+  readinessOpen?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -17,10 +22,24 @@ const emit = defineEmits<{
 const isMac = ref(false);
 const isMaximized = ref(false);
 
+// Track navigator online/offline state to show "No Internet" when the system loses network
+const isOnline = ref(typeof navigator !== "undefined" ? navigator.onLine : true);
+
 onMounted(async () => {
   isMac.value = navigator.userAgent.includes("Mac");
   const win = getCurrentWindow();
   isMaximized.value = await win.isMaximized();
+
+  const updateOnline = () => {
+    isOnline.value = navigator.onLine;
+  };
+  window.addEventListener("online", updateOnline);
+  window.addEventListener("offline", updateOnline);
+
+  onUnmounted(() => {
+    window.removeEventListener("online", updateOnline);
+    window.removeEventListener("offline", updateOnline);
+  });
 });
 
 async function minimize() {
@@ -68,15 +87,6 @@ const statusText = computed(() => {
   return "Ready";
 });
 
-const statusDotClass = computed(() => {
-  if (isLaunchReady.value) {
-    return "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
-  }
-  if (mojangSignedIn.value || atlasSignedIn.value) {
-    return "bg-yellow-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
-  }
-  return "bg-red-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]";
-});
 const needsLinking = computed(() => !!props.atlasProfile && !hasLinkedMojang.value);
 const needsLinkCompletion = computed(() => {
   if (!props.atlasProfile) {
@@ -94,6 +104,27 @@ const needsLinkCompletion = computed(() => {
   }
   return atlasUuid !== launcherUuid;
 });
+
+// Combined no-internet indicator: either backend-reported cannotConnect OR navigator offline
+const showNoInternet = computed(() => props.cannotConnect || !isOnline.value);
+
+const displayText = computed(() => {
+  if (showNoInternet.value) return "No Internet";
+  if (isLaunchReady.value) return statusText.value || "Ready";
+  return "Not Ready";
+});
+
+const iconVariant = computed(() => {
+  if (showNoInternet.value) return "cloud";
+  if (isLaunchReady.value) return "check";
+  return "x";
+});
+
+function handleReadinessClick() {
+  // When there's no internet, do nothing on click
+  if (showNoInternet.value) return;
+  emit("open-readiness-wizard");
+}
 </script>
 
 <template>
@@ -126,16 +157,30 @@ const needsLinkCompletion = computed(() => {
       <div class="flex items-center gap-2.5 h-full pr-0.5">
         <button
           class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300"
-          :class="{ 'bg-amber-500/10 border-amber-500/30': needsSetup }"
-          @click.stop="emit('open-readiness-wizard')"
+          :class="{ 'bg-amber-500/10 border-amber-500/30': needsSetup, 'opacity-80': props.readinessOpen && !showNoInternet, 'cursor-not-allowed opacity-70': showNoInternet }"
+          @click.stop="handleReadinessClick"
           data-tauri-no-drag
         >
+          <!-- Icon variants: cloud (no internet), check (ready), x (not ready) -->
+          <template v-if="iconVariant === 'cloud'">
+            <CloudAlert class="h-4 w-4 text-amber-500 mr-2.5" />
+          </template>
+          <template v-else-if="iconVariant === 'check'">
+            <Check class="h-4 w-4 text-emerald-500 mr-2.5" />
+          </template>
+          <template v-else>
+            <X class="h-4 w-4 text-red-500 mr-2.5" />
+          </template>
+
           <span
-            class="w-2 h-2 rounded-full mr-2.5 transition-all duration-300 group-hover:scale-110"
-            :class="needsSetup ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : statusDotClass"
-          ></span>
-          <span class="text-xs tracking-tight transition-colors duration-300" :class="{ 'text-amber-500 font-bold': needsSetup }">
-            {{ needsSetup ? "Get ready" : statusText }}
+            class="text-xs tracking-tight transition-colors duration-300"
+            :class="{
+              'text-emerald-500 font-bold': iconVariant === 'check',
+              'text-red-500 font-bold': iconVariant === 'x',
+              'text-amber-500 font-bold': iconVariant === 'cloud'
+            }"
+          >
+            {{ displayText }}
           </span>
         </button>
 

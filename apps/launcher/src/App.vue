@@ -127,6 +127,8 @@ const tasksPanelOpen = ref(false);
 const launchReadiness = ref<LaunchReadinessReport | null>(null);
 const readinessWizardOpen = ref(false);
 const troubleshooterOpen = ref(false);
+// New flag: when we detect a connectivity error but required vars exist
+const cannotConnect = ref(false);
 const troubleshooterTrigger = ref<"settings" | "help" | "failure">("settings");
 const dismissedFailureStatus = ref<string | null>(null);
 const failurePromptEligible = ref(false);
@@ -254,19 +256,40 @@ async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
     launchReadiness.value = await invoke<LaunchReadinessReport>("get_launch_readiness", {
       gameDir: activeInstanceGameDir()
     });
+    // Clear any previous connectivity error since we successfully fetched readiness
+    cannotConnect.value = false;
     const autoOpen = options?.autoOpen === true;
     if (autoOpen && launchReadiness.value && shouldAutoOpenReadinessWizard(launchReadiness.value)) {
+      readinessWizardOpen.value = true;
+    }
+    // If the report indicates we are not ready to launch (login/link blockers), ensure the wizard is open
+    if (launchReadiness.value && hasLoginReadinessBlockers(launchReadiness.value)) {
       readinessWizardOpen.value = true;
     }
   } catch (err) {
     const msg = String(err);
     pushLog(`Failed to load launch readiness: ${msg}`);
-    // Surface the diagnostic error to the user (e.g. missing Minecraft entitlement)
+    // Determine whether required vars are present (hub URL or MS client ID)
+    const hub = (settingsAtlasHubUrl.value ?? "").trim() || import.meta.env.VITE_ATLAS_HUB_URL || "";
+    const hasMsClient = !!(settingsClientId.value ?? "").trim();
+    const hasHub = !!hub.trim();
+
+    // If we have the necessary configuration but can't reach the service, show cloud-alert state.
+    if (hasMsClient || hasHub) {
+      cannotConnect.value = true;
+      // do not auto-open the readiness wizard in this case; the title bar will show the CloudAlert
+      return;
+    }
+
+    // Otherwise surface the diagnostic error to the user and open the readiness wizard so they can set up.
     try {
       setStatus(msg);
     } catch {
       // ignore if setStatus fails for any reason
     }
+    // Clear any connectivity flag and open the readiness wizard to allow configuring missing vars
+    cannotConnect.value = false;
+    readinessWizardOpen.value = true;
   }
 }
 
@@ -1099,6 +1122,8 @@ watch(
       :profile="profile"
       :atlas-profile="atlasProfile"
       :is-signing-in="isSigningIn"
+      :cannot-connect="cannotConnect"
+      :readiness-open="readinessWizardOpen"
       @open-readiness-wizard="openReadinessWizard"
     />
     
