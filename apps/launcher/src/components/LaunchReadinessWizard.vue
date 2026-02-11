@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted } from "vue";
+import { computed, ref, watch } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertCircle, CheckCircle2, Link2, LoaderCircle, ShieldCheck, Wrench, X } from "lucide-vue-next";
 import Button from "./ui/button/Button.vue";
@@ -49,55 +49,12 @@ const copyStatus = ref<string | null>(null);
 const autoCompleted = ref(false);
 const signedIn = computed(() => props.atlasSignedIn || props.microsoftSignedIn);
 
-// Control showing the link code: hide it for 15 seconds when a link session is created
+// Control showing the link code: revealed when the user clicks the manual button
 const showLinkCode = ref(false);
-const linkTimerId = ref<number | null>(null);
 
-function clearLinkTimer() {
-  if (linkTimerId.value != null) {
-    clearTimeout(linkTimerId.value);
-    linkTimerId.value = null;
-  }
+function revealLinkCode() {
+  showLinkCode.value = true;
 }
-
-// Start/clear timer when linkSession changes
-watch(
-  () => props.linkSession,
-  (ls) => {
-    clearLinkTimer();
-    if (ls && props.open && activeStep.value?.key === "accountLink") {
-      showLinkCode.value = false;
-      // show after 15 seconds
-      linkTimerId.value = window.setTimeout(() => {
-        showLinkCode.value = true;
-        linkTimerId.value = null;
-      }, 15000) as unknown as number;
-    } else {
-      showLinkCode.value = false;
-    }
-  },
-  { immediate: true }
-);
-
-// Also react when the active step or open state changes
-watch(
-  () => [props.open, activeStep.value?.key],
-  ([open, stepKey]) => {
-    clearLinkTimer();
-    if (open && stepKey === "accountLink" && props.linkSession) {
-      showLinkCode.value = false;
-      linkTimerId.value = window.setTimeout(() => {
-        showLinkCode.value = true;
-        linkTimerId.value = null;
-      }, 15000) as unknown as number;
-    } else {
-      showLinkCode.value = false;
-    }
-  },
-  { immediate: true }
-);
-
-onUnmounted(() => clearLinkTimer());
 
 const orderedChecklist = computed(() =>
   orderedKeys
@@ -185,6 +142,14 @@ watch(
     }
     autoCompleted.value = true;
     emit("complete");
+  }
+);
+
+// Reset visibility when session, open state, or active step changes so the button can be used again
+watch(
+  () => [props.linkSession, props.open, activeStep.value?.key],
+  () => {
+    showLinkCode.value = false;
   }
 );
 </script>
@@ -294,6 +259,21 @@ watch(
             >
               {{ accountLinkStatus.text }}
             </p>
+
+            <!-- Manual reveal button for the link code, shown only when the code is hidden -->
+            <div
+              v-if="item.key === 'accountLink' && !item.ready && item.key === activeStep?.key && props.linkSession && !showLinkCode"
+              class="mt-4"
+            >
+              <Button
+                variant="link"
+                size="sm"
+                class="p-0 text-xs text-muted-foreground underline-offset-4 hover:underline"
+                @click="revealLinkCode"
+              >
+                Browser didn't open? Click here to reveal the code.
+              </Button>
+            </div>
           </div>
         </CardContent>
         <div v-if="signedIn" class="border-t border-border/50 px-6 py-3">
