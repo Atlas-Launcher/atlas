@@ -25,26 +25,13 @@ pub struct AppSettings {
 
 impl Default for AppSettings {
     fn default() -> Self {
-        let game_dir = paths::default_game_dir().to_string_lossy().to_string();
-        let instance = InstanceConfig {
-            id: "default".to_string(),
-            name: "Default".to_string(),
-            game_dir,
-            version: None,
-            loader: ModLoaderConfig::default(),
-            java_path: String::new(),
-            memory_mb: None,
-            jvm_args: None,
-            source: InstanceSource::default(),
-            atlas_pack: None,
-        };
         Self {
             ms_client_id: None,
             atlas_hub_url: None,
             default_java_memory_mb: default_memory_mb(),
             default_jvm_args: None,
-            instances: vec![instance],
-            selected_instance_id: Some("default".to_string()),
+            instances: vec![],
+            selected_instance_id: None,
             theme_mode: Some("system".to_string()),
             launch_readiness_wizard: LaunchReadinessWizardState::default(),
         }
