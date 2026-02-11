@@ -25,8 +25,8 @@ impl RconClient {
         let command = command.to_string();
 
         spawn_blocking(move || {
-            let mut client = Client::new(address)
-                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+            let mut client =
+                Client::new(address).map_err(|err| anyhow::anyhow!(err.to_string()))?;
             client
                 .authenticate(password)
                 .map_err(|err| anyhow::anyhow!(err.to_string()))?;

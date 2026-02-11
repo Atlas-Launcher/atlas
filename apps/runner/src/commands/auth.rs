@@ -1,11 +1,11 @@
-use anyhow::{Result, bail, Context};
-use crate::hub::{HubClient, LauncherPack};
 use crate::hub::whitelist::InstanceConfig;
-use dialoguer::{theme::ColorfulTheme, FuzzySelect, Input};
+use crate::hub::{HubClient, LauncherPack};
+use crate::runner_config;
+use anyhow::{Context, Result, bail};
+use dialoguer::{FuzzySelect, Input, theme::ColorfulTheme};
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::time::Duration;
-use crate::runner_config;
 
 pub async fn exec(
     hub_url: &str,
@@ -131,10 +131,7 @@ fn prompt_pack_selection(packs: &[LauncherPack]) -> Result<String> {
 }
 
 fn format_pack_label(pack: &LauncherPack) -> String {
-    format!(
-        "{} ({}) [{}]",
-        pack.pack_name, pack.pack_slug, pack.pack_id
-    )
+    format!("{} ({}) [{}]", pack.pack_name, pack.pack_slug, pack.pack_id)
 }
 
 fn resolve_token_name(token_name: Option<String>) -> Result<String> {

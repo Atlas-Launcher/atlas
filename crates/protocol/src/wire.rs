@@ -209,7 +209,6 @@ fn decode_dependency_side(value: i32) -> Result<DependencySide, ProtocolError> {
     })
 }
 
-
 fn decode_platforms(field: &'static str, values: Vec<i32>) -> Result<Vec<Platform>, ProtocolError> {
     values
         .into_iter()
@@ -218,4 +217,3 @@ fn decode_platforms(field: &'static str, values: Vec<i32>) -> Result<Vec<Platfor
         })
         .collect()
 }
-

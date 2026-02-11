@@ -1,5 +1,5 @@
 use fs2::FileExt;
-use std::{fs::OpenOptions, path::Path, fs::File};
+use std::{fs::File, fs::OpenOptions, path::Path};
 
 pub struct LockGuard {
     _file: File,

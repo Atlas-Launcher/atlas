@@ -1,4 +1,4 @@
-use crate::launcher::download::download_raw;
+use crate::launcher::download::{download_raw_with_retry_events, DownloadRetryEvent};
 use crate::launcher::emit;
 use crate::launcher::error::LauncherError;
 use crate::launcher::manifest::VersionData;
@@ -195,7 +195,26 @@ async fn ensure_installer_jar(
             None,
             None,
         )?;
-        download_raw(&client, &installer_url, &installer_path, None, true).await?;
+        download_raw_with_retry_events(
+            &client,
+            &installer_url,
+            &installer_path,
+            None,
+            true,
+            |event: DownloadRetryEvent| {
+                let _ = emit(
+                    window,
+                    "loader",
+                    format!(
+                        "NeoForge installer download retry {}/{} in {} ms ({})",
+                        event.attempt, event.max_attempts, event.delay_ms, event.reason
+                    ),
+                    None,
+                    None,
+                );
+            },
+        )
+        .await?;
         emit(
             window,
             "loader",

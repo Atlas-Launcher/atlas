@@ -1,10 +1,9 @@
 use clap::{Parser, Subcommand};
-use std::io::Write;
+use runner_core_v2::proto::{LogLine, LogStream};
+use runner_v2_utils::runtime_paths_v2;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::time::{sleep, Duration};
-use runner_core_v2::proto::{LogLine, LogStream};
-use runner_v2_utils::runtime_paths_v2;
 
 mod client;
 
@@ -104,7 +103,14 @@ async fn main() -> anyhow::Result<()> {
         }
         Cmd::Down { force } => {
             let resp = client::stop(force).await?;
-            println!("stopped at {}", resp.stopped_at_ms);
+            if let Some(exit) = resp.exit {
+                println!(
+                    "stopped at {} (exit code: {:?})",
+                    resp.stopped_at_ms, exit.code
+                );
+            } else {
+                println!("stopped at {}", resp.stopped_at_ms);
+            }
         }
         Cmd::Up {
             profile,
@@ -116,15 +122,28 @@ async fn main() -> anyhow::Result<()> {
             if profile != "default" {
                 eprintln!("Ignoring --profile; runner uses a single profile: default");
             }
-            let resp = client::up("default".to_string(), pack_blob, server_root, max_ram, accept_eula).await?;
+            let resp = client::up(
+                "default".to_string(),
+                pack_blob,
+                server_root,
+                max_ram,
+                accept_eula,
+            )
+            .await?;
             println!("{resp}");
         }
-        Cmd::Exec { interactive, command } => {
+        Cmd::Exec {
+            interactive,
+            command,
+        } => {
             let framed = client::connect_or_start().await?;
             if interactive {
-                client::rcon_interactive(framed).await.map_err(|e| anyhow::anyhow!("interactive rcon failed: {e}"))?;
+                client::rcon_interactive(framed)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("interactive rcon failed: {e}"))?;
             } else {
-                let cmd = command.ok_or_else(|| anyhow::anyhow!("command required for non-interactive exec"))?;
+                let cmd = command
+                    .ok_or_else(|| anyhow::anyhow!("command required for non-interactive exec"))?;
                 client::rcon_exec(framed, cmd).await?;
             }
         }
@@ -143,6 +162,9 @@ async fn main() -> anyhow::Result<()> {
                 };
                 for line in resp.lines {
                     print_log_line(&line);
+                }
+                if resp.truncated {
+                    eprintln!("log output was truncated; use --lines or --follow for more output");
                 }
             }
         }
@@ -248,12 +270,8 @@ Environment=RUST_LOG=info\n\n\
 WantedBy=multi-user.target\n"
     );
 
-    std::fs::write(service_path, contents).map_err(|err| {
-        anyhow::anyhow!(
-            "Failed to write {}: {err}",
-            service_path.display()
-        )
-    })?;
+    std::fs::write(service_path, contents)
+        .map_err(|err| anyhow::anyhow!("Failed to write {}: {err}", service_path.display()))?;
 
     run_systemctl(["daemon-reload"])?;
     run_systemctl(["enable", "--now", "atlas-runnerd.service"])?;

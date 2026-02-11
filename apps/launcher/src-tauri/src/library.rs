@@ -6,9 +6,9 @@ use crate::models::{
     AtlasPackSyncResult, AtlasRemotePack, FabricLoaderVersion, ModEntry, VersionManifestSummary,
     VersionSummary,
 };
-use atlas_client::hub::HubClient;
 use crate::net::http::{fetch_json_shared, shared_client};
 use crate::paths;
+use atlas_client::hub::HubClient;
 use error::LibraryError;
 use std::fs;
 use std::path::Component;
@@ -48,8 +48,8 @@ pub async fn fetch_atlas_remote_packs(
     atlas_hub_url: &str,
     access_token: &str,
 ) -> Result<Vec<AtlasRemotePack>, LibraryError> {
-    let mut hub = HubClient::new(atlas_hub_url)
-        .map_err(|err| LibraryError::Message(err.to_string()))?;
+    let mut hub =
+        HubClient::new(atlas_hub_url).map_err(|err| LibraryError::Message(err.to_string()))?;
     hub.set_token(access_token.to_string());
     let packs = hub
         .list_launcher_packs()

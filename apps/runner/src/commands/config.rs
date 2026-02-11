@@ -1,11 +1,16 @@
-use anyhow::{Context, Result};
 use crate::hub::whitelist::InstanceConfig;
 use crate::runner_config;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 
-pub async fn exec(memory: Option<String>, port: Option<u16>, java_major: Option<u32>) -> Result<()> {
+pub async fn exec(
+    memory: Option<String>,
+    port: Option<u16>,
+    java_major: Option<u32>,
+) -> Result<()> {
     let instance_path = PathBuf::from("instance.toml");
-    let mut config = InstanceConfig::load(&instance_path).await
+    let mut config = InstanceConfig::load(&instance_path)
+        .await
         .context("No instance.toml found. Run `atlas-runner auth` first.")?;
 
     if let Some(value) = memory {

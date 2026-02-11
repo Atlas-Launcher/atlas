@@ -7,10 +7,14 @@ use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::download::{download_if_needed, DOWNLOAD_CONCURRENCY};
+use super::download::{
+    download_if_needed_with_retry_events, DownloadRetryEvent, DOWNLOAD_CONCURRENCY,
+};
 use super::emit;
 use super::libraries::current_arch;
 use super::manifest::VersionData;
@@ -74,7 +78,7 @@ pub async fn resolve_java_path(
         .map(|java| java.major_version);
 
     if !java_path_override.trim().is_empty() && java_path_override.trim() != "java" {
-        let override_path = java_path_override.trim().to_string();
+        let override_path = normalize_java_override_path(java_path_override)?;
         validate_java_override(&override_path, required_major)?;
         return Ok(override_path);
     }
@@ -212,8 +216,30 @@ async fn ensure_java_runtime(
     if total > 0 {
         let mut stream = stream::iter(downloads.into_iter().map(|(download, path, executable)| {
             let client = client.clone();
+            let relative = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("runtime file")
+                .to_string();
             async move {
-                download_if_needed(&client, &download, &path).await?;
+                download_if_needed_with_retry_events(
+                    &client,
+                    &download,
+                    &path,
+                    |event: DownloadRetryEvent| {
+                        let _ = emit(
+                            window,
+                            "java",
+                            format!(
+                                "Retrying Java runtime download ({relative}) {}/{} in {} ms ({})",
+                                event.attempt, event.max_attempts, event.delay_ms, event.reason
+                            ),
+                            None,
+                            None,
+                        );
+                    },
+                )
+                .await?;
                 if executable {
                     set_executable(&path)?;
                 }
@@ -271,6 +297,10 @@ fn validate_java_override(path: &str, required_major: Option<u32>) -> Result<(),
         }
     }
 
+    if required_major.is_none() {
+        return Ok(());
+    }
+
     let detected_major = detect_java_major_version(path)?;
     if let Some(required) = required_major {
         if detected_major < required {
@@ -281,6 +311,58 @@ fn validate_java_override(path: &str, required_major: Option<u32>) -> Result<(),
     }
 
     Ok(())
+}
+
+pub(crate) fn normalize_java_override_path(path: &str) -> Result<String, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Configured Java path is empty.".to_string());
+    }
+
+    let candidate = Path::new(trimmed);
+    let looks_like_path =
+        candidate.is_absolute() || trimmed.contains('/') || trimmed.contains('\\');
+    if !looks_like_path {
+        return Ok(trimmed.to_string());
+    }
+
+    if !candidate.exists() {
+        return Err(format!("Configured Java path does not exist: {trimmed}"));
+    }
+    if !candidate.is_file() {
+        return Err(format!("Configured Java path is not a file: {trimmed}"));
+    }
+    if !is_executable_binary(candidate) {
+        return Err(format!(
+            "Configured Java path is not executable: {}",
+            candidate.display()
+        ));
+    }
+
+    let canonical = fs::canonicalize(candidate)
+        .map_err(|err| format!("Failed to canonicalize Java path `{trimmed}`: {err}"))?;
+    Ok(canonical.to_string_lossy().to_string())
+}
+
+fn is_executable_binary(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        let Ok(metadata) = fs::metadata(path) else {
+            return false;
+        };
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
+            // Some Windows Java distributions or wrappers may be extensionless.
+            return true;
+        };
+        matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "exe" | "cmd" | "bat" | "com"
+        )
+    }
 }
 
 fn ensure_java_major_version(path: &Path, required_major: Option<u32>) -> Result<(), String> {
@@ -397,6 +479,30 @@ fn java_version_fallback_binary(java_binary: &str) -> Option<String> {
     None
 }
 
+pub(crate) fn is_java_ready_for_launch(game_dir: Option<&Path>, java_path_override: &str) -> bool {
+    let trimmed = java_path_override.trim();
+    if !trimmed.is_empty() {
+        if trimmed.eq_ignore_ascii_case("java") {
+            return java_on_path_exists();
+        }
+        if let Ok(normalized) = normalize_java_override_path(trimmed) {
+            return validate_java_override(&normalized, None).is_ok();
+        }
+        return false;
+    }
+
+    if java_on_path_exists() {
+        return true;
+    }
+
+    let Some(game_dir) = game_dir else {
+        return false;
+    };
+    find_runtime_java_binary(&resolve_runtimes_root(game_dir))
+        .map(|candidate| is_usable_java_binary(&candidate))
+        .unwrap_or(false)
+}
+
 fn resolve_runtimes_root(game_dir: &Path) -> PathBuf {
     if let Some(instances_dir) = game_dir
         .ancestors()
@@ -407,6 +513,74 @@ fn resolve_runtimes_root(game_dir: &Path) -> PathBuf {
         }
     }
     game_dir.join("runtimes")
+}
+
+fn java_on_path_exists() -> bool {
+    let path_value = std::env::var_os("PATH");
+    let Some(path_value) = path_value else {
+        return false;
+    };
+    #[cfg(target_os = "windows")]
+    let executable_names = ["java.exe", "javaw.exe", "java.cmd", "java.bat", "java"];
+    #[cfg(not(target_os = "windows"))]
+    let executable_names = ["java"];
+
+    std::env::split_paths(&path_value)
+        .flat_map(|dir| executable_names.iter().map(move |name| dir.join(name)))
+        .any(|candidate| is_usable_java_binary(&candidate))
+}
+
+fn find_runtime_java_binary(root: &Path) -> Option<PathBuf> {
+    let mut stack = vec![(root.to_path_buf(), 0usize)];
+    while let Some((dir, depth)) = stack.pop() {
+        if depth > 6 || !dir.exists() {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push((path, depth + 1));
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            let name = name.to_ascii_lowercase();
+            if name == "java" || name == "java.exe" || name == "javaw.exe" {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+fn is_usable_java_binary(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        if let Ok(metadata) = fs::metadata(path) {
+            return metadata.permissions().mode() & 0o111 != 0;
+        }
+        false
+    }
+
+    #[cfg(not(unix))]
+    {
+        let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
+            // Keep Windows readiness compatible with extensionless java wrappers.
+            return true;
+        };
+        matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "exe" | "cmd" | "bat" | "com"
+        )
+    }
 }
 
 fn runtime_is_latest(java_path: &Path, marker_path: &Path, manifest_url: &str) -> bool {

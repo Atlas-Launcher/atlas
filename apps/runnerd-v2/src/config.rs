@@ -28,8 +28,7 @@ pub fn save_deploy_key(config: &DeployKeyConfig) -> Result<(), String> {
 
     let payload = serde_json::to_string_pretty(config)
         .map_err(|err| format!("Failed to serialize deploy key config: {err}"))?;
-    fs::write(&path, payload)
-        .map_err(|err| format!("Failed to write deploy key config: {err}"))?;
+    fs::write(&path, payload).map_err(|err| format!("Failed to write deploy key config: {err}"))?;
 
     Ok(())
 }

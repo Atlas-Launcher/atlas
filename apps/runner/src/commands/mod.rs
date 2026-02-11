@@ -1,9 +1,9 @@
 pub mod auth;
-pub mod up;
-pub mod down;
 pub mod config;
-pub mod status;
-pub mod restart;
-pub mod logs;
+pub mod down;
 pub mod exec;
 pub mod install;
+pub mod logs;
+pub mod restart;
+pub mod status;
+pub mod up;

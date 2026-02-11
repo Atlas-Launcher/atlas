@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-use protocol::{PackBlob, Loader};
 use crate::errors::ProvisionError;
+use protocol::{Loader, PackBlob};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppliedMarker {
@@ -14,7 +14,10 @@ pub struct AppliedMarker {
 
 pub async fn is_pack_applied(server_root: &Path, pack: &PackBlob) -> Result<bool, ProvisionError> {
     let want = marker_from_pack(pack)?;
-    let path = server_root.join("current").join(".runner").join("applied.json");
+    let path = server_root
+        .join("current")
+        .join(".runner")
+        .join("applied.json");
 
     if !tokio::fs::try_exists(&path).await? {
         return Ok(false);
@@ -27,7 +30,10 @@ pub async fn is_pack_applied(server_root: &Path, pack: &PackBlob) -> Result<bool
         && have.loader == want.loader)
 }
 
-pub async fn write_applied_marker_to_dir(staging_current: &Path, pack: &PackBlob) -> Result<(), ProvisionError> {
+pub async fn write_applied_marker_to_dir(
+    staging_current: &Path,
+    pack: &PackBlob,
+) -> Result<(), ProvisionError> {
     let marker = marker_from_pack(pack)?;
     let dir = staging_current.join(".runner");
     tokio::fs::create_dir_all(&dir).await?;
@@ -45,14 +51,4 @@ fn marker_from_pack(pack: &PackBlob) -> Result<AppliedMarker, ProvisionError> {
         minecraft_version: meta.minecraft_version.clone(),
         loader: meta.loader.clone(),
     })
-}
-
-fn loader_to_string(l: i32) -> String {
-    // prost stores enum as i32, convert best-effort
-    match Loader::try_from(l).ok() {
-        Some(Loader::Fabric) => "fabric",
-        Some(Loader::Forge) => "forge",
-        Some(Loader::Neo) => "neo",
-        None => "unknown",
-    }.into()
 }

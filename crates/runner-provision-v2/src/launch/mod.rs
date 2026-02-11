@@ -1,7 +1,7 @@
-use std::fs;
-use std::path::Path;
 use crate::errors::ProvisionError;
 use protocol::PackBlob;
+use std::fs;
+use std::path::Path;
 
 mod plan;
 pub use plan::LaunchPlan;
@@ -51,8 +51,7 @@ pub fn derive_launch_plan(
     }
 
     Err(ProvisionError::Invalid(
-        "missing server launch files (run.sh, fabric-server-launch.jar, or server.jar)"
-            .to_string(),
+        "missing server launch files (run.sh, fabric-server-launch.jar, or server.jar)".to_string(),
     ))
 }
 
@@ -149,7 +148,10 @@ fn split_shell_words(input: &str) -> Vec<String> {
     out
 }
 
-pub async fn write_launch_plan_to_dir(staging_current: &Path, plan: &LaunchPlan) -> Result<(), ProvisionError> {
+pub async fn write_launch_plan_to_dir(
+    staging_current: &Path,
+    plan: &LaunchPlan,
+) -> Result<(), ProvisionError> {
     let dir = staging_current.join(".runner");
     tokio::fs::create_dir_all(&dir).await?;
     let path = dir.join("launch.json");
@@ -159,7 +161,10 @@ pub async fn write_launch_plan_to_dir(staging_current: &Path, plan: &LaunchPlan)
 }
 
 pub async fn read_launch_plan(server_root: &Path) -> Result<LaunchPlan, ProvisionError> {
-    let path = server_root.join("current").join(".runner").join("launch.json");
+    let path = server_root
+        .join("current")
+        .join(".runner")
+        .join("launch.json");
     let bytes = tokio::fs::read(path).await?;
     Ok(serde_json::from_slice(&bytes)?)
 }

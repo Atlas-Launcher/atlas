@@ -6,7 +6,9 @@ use crate::errors::ProvisionError;
 
 pub async fn ensure_whitelist_enforced(runtime_dir: &Path) -> Result<(), ProvisionError> {
     let server_props = runtime_dir.join("server.properties");
-    let mut current = tokio::fs::read_to_string(&server_props).await.unwrap_or_default();
+    let mut current = tokio::fs::read_to_string(&server_props)
+        .await
+        .unwrap_or_default();
     if current.trim().is_empty() {
         current = String::new();
     }
@@ -20,7 +22,9 @@ pub async fn ensure_whitelist_enforced(runtime_dir: &Path) -> Result<(), Provisi
 
 pub async fn ensure_rcon_configured(runtime_dir: &Path) -> Result<(), ProvisionError> {
     let server_props = runtime_dir.join("server.properties");
-    let mut current = tokio::fs::read_to_string(&server_props).await.unwrap_or_default();
+    let mut current = tokio::fs::read_to_string(&server_props)
+        .await
+        .unwrap_or_default();
     if current.trim().is_empty() {
         current = String::new();
     }

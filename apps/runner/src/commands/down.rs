@@ -1,16 +1,17 @@
-use anyhow::{Result, Context};
 use crate::hub::whitelist::InstanceConfig;
-use crate::rcon::{load_rcon_settings, RconClient};
+use crate::rcon::{RconClient, load_rcon_settings};
+use anyhow::{Context, Result};
 use std::path::PathBuf;
-use tokio::time::{sleep, Duration};
 use std::process::Command;
 use tokio::fs;
+use tokio::time::{Duration, sleep};
 
 pub async fn exec() -> Result<()> {
     let instance_path = PathBuf::from("instance.toml");
-    let _config = InstanceConfig::load(&instance_path).await
+    let _config = InstanceConfig::load(&instance_path)
+        .await
         .context("No instance.toml found in current directory")?;
-    
+
     let runner_pid_file = PathBuf::from("runtime/current/runner.pid");
     let mut stopped_any = false;
     if let Some(pid) = read_pid(&runner_pid_file).await {
@@ -52,7 +53,6 @@ pub async fn exec() -> Result<()> {
         if !waited_for_shutdown {
             println!("Waiting 30 seconds for graceful shutdown...");
             sleep(Duration::from_secs(30)).await;
-            waited_for_shutdown = true;
         }
         for pid in fallback_pids {
             println!("Stopping Minecraft server (pid {pid})...");

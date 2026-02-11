@@ -5,6 +5,8 @@ use crate::launcher::manifest::{
 };
 use std::collections::HashMap;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -232,4 +234,53 @@ fn parses_java_major_from_legacy_version_output() {
 fn parse_java_major_returns_none_for_unexpected_output() {
     let output = "this is not java -version output";
     assert_eq!(java::parse_java_major_version(output), None);
+}
+
+#[test]
+fn normalize_java_override_rejects_missing_path() {
+    let temp = unique_temp_dir("java-override-missing");
+    let missing = temp.join("missing-java");
+    let result = java::normalize_java_override_path(&missing.to_string_lossy());
+    assert!(result.is_err());
+}
+
+#[test]
+fn normalize_java_override_canonicalizes_existing_path() {
+    let temp = unique_temp_dir("java-override-canonical");
+    fs::create_dir_all(&temp).expect("create temp dir");
+    let java_path = temp.join("java-bin");
+    fs::write(&java_path, b"fake-java").expect("write java path");
+    #[cfg(unix)]
+    {
+        let mut perms = fs::metadata(&java_path)
+            .expect("read metadata")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&java_path, perms).expect("set executable bit");
+    }
+
+    let normalized = java::normalize_java_override_path(&java_path.to_string_lossy())
+        .expect("normalize override path");
+    let canonical = fs::canonicalize(&java_path).expect("canonical path");
+    assert_eq!(PathBuf::from(normalized), canonical);
+    let _ = fs::remove_dir_all(temp);
+}
+
+#[cfg(unix)]
+#[test]
+fn normalize_java_override_rejects_non_executable_file() {
+    let temp = unique_temp_dir("java-override-non-exec");
+    fs::create_dir_all(&temp).expect("create temp dir");
+    let java_path = temp.join("java-bin");
+    fs::write(&java_path, b"fake-java").expect("write java path");
+
+    let mut perms = fs::metadata(&java_path)
+        .expect("read metadata")
+        .permissions();
+    perms.set_mode(0o644);
+    fs::set_permissions(&java_path, perms).expect("set non-executable mode");
+
+    let result = java::normalize_java_override_path(&java_path.to_string_lossy());
+    assert!(result.is_err());
+    let _ = fs::remove_dir_all(temp);
 }
