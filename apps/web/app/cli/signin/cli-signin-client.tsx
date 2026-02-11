@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { authClient } from "@/lib/auth-client";
@@ -12,16 +12,13 @@ import { Badge } from "@/components/ui/badge";
 export default function CliSigninClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [userCode, setUserCode] = useState("");
+  const initialUserCode = useMemo(
+    () => searchParams.get("user_code")?.toUpperCase() ?? "",
+    [searchParams]
+  );
+  const [userCode, setUserCode] = useState(initialUserCode);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const code = searchParams.get("user_code");
-    if (code) {
-      setUserCode(code.toUpperCase());
-    }
-  }, [searchParams]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
