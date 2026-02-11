@@ -112,28 +112,23 @@ pub async fn run_daily_backup(server_root: std::path::PathBuf, state: SharedStat
         // If we haven't run a backup for today, run it now. This covers the case where
         // the process was sleeping across midnight and woke up after midnight.
         if last_backup_date.as_ref() != Some(&today) {
-            // Spawn the actual backup so IO doesn't block the scheduler loop
+            // Run the backup and wait for completion so we only persist last-run on success.
             let root = server_root.clone();
             let st = state.clone();
             info!("daily backup: starting backup for date {}", today);
-            // Spawn and persist the last-run date when the backup completes successfully.
-            tokio::spawn(async move {
-                match ops::backup_world(&root, st).await {
-                    Ok(path) => {
-                        info!("daily backup completed: {}", path.display());
-                        write_last_backup_date(&root, today).await;
-                        prune_old_backups(&root, 14).await;
-                    }
-                    Err(err) => {
-                        warn!("daily backup failed: {}", err);
-                    }
+            match ops::backup_world(&root, st).await {
+                Ok(path) => {
+                    info!("daily backup completed: {}", path.display());
+                    write_last_backup_date(&root, today).await;
+                    prune_old_backups(&root, 14).await;
+                    last_backup_date = Some(today);
                 }
-            });
-            // Wait a short while for the task to at least be scheduled and avoid immediate re-check.
-            // We don't .await the handle (so backup runs in background), but ensure last_backup_date
-            // updates to avoid re-triggering.
-            last_backup_date = Some(today);
-            // Small debounce to avoid tight loop
+                Err(err) => {
+                    warn!("daily backup failed: {}", err);
+                    // Do not mark last_backup_date so we'll retry later (or on next wake)
+                }
+            }
+            // Small debounce to avoid tight loop in failure cases
             sleep(Duration::from_secs(5)).await;
         }
 
