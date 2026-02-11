@@ -88,6 +88,7 @@ async function refreshTroubleshooter() {
       recentLogs: recentLogsForRun.value
     });
     report.value = next;
+    emit("log", `[TroubleshooterDialog] run_troubleshooter returned: ${JSON.stringify(next)}`);
   } catch (err) {
     const message = `Troubleshooter failed: ${String(err)}`;
     errorText.value = message;
@@ -137,6 +138,7 @@ watch(
     if (!value) {
       return;
     }
+    emit("log", "[TroubleshooterDialog] props.open changed -> true");
     report.value = null;
     fixHistory.value = [];
     await refreshTroubleshooter();
