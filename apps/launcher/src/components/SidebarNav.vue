@@ -19,6 +19,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "select", value: TabKey): void;
   (event: "toggle-tasks"): void;
+  (event: "open-help"): void;
 }>();
 
 function selectTab(tab: TabKey) {
@@ -27,6 +28,10 @@ function selectTab(tab: TabKey) {
 
 function toggleTasks() {
   emit("toggle-tasks");
+}
+
+function openHelp() {
+  emit("open-help");
 }
 
 const tasksBadge = computed(() => (props.tasksCount > 9 ? "9+" : String(props.tasksCount)));
@@ -122,9 +127,14 @@ const tasksBadge = computed(() => (props.tasksCount > 9 ? "9+" : String(props.ta
 
         <Tooltip>
           <TooltipTrigger as-child>
-            <div class="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 text-xs font-semibold text-muted-foreground">
+            <Button
+              class="flex h-12 w-12 items-center justify-center rounded-2xl border text-sm font-semibold transition"
+              variant="ghost"
+              :class="'border-border/60 text-muted-foreground hover:text-foreground'"
+              @click="openHelp"
+            >
               <CircleQuestionMark class="h-5 w-5" />
-            </div>
+            </Button>
           </TooltipTrigger>
           <TooltipContent side="right">Help</TooltipContent>
         </Tooltip>

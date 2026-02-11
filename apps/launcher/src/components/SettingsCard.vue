@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, withDefaults } from "vue";
-import { ShieldAlert } from "lucide-vue-next";
 import Button from "./ui/button/Button.vue";
 import Card from "./ui/card/Card.vue";
 import CardHeader from "./ui/card/CardHeader.vue";
@@ -38,7 +37,6 @@ const emit = defineEmits<{
   (event: "save-settings"): void;
   (event: "check-updates"): void;
   (event: "open-readiness-wizard"): void;
-  (event: "open-troubleshooter"): void;
 }>();
 
 const settingsTab = ref<"runtime" | "appearance" | "advanced">("runtime");
@@ -201,15 +199,7 @@ function updateThemeMode(value: string) {
     </CardContent>
     <CardFooter>
       <div class="flex w-full items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
-          <Button :disabled="props.working" variant="outline" @click="emit('open-readiness-wizard')">
-            <ShieldAlert class="mr-1 h-4 w-4" />
-            Get ready to play
-          </Button>
-          <Button :disabled="props.working" variant="outline" @click="emit('open-troubleshooter')">
-            Open troubleshooter
-          </Button>
-        </div>
+        <div />
         <Button :disabled="props.working" variant="secondary" @click="emit('save-settings')">Save settings</Button>
       </div>
     </CardFooter>

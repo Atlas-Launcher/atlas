@@ -230,6 +230,34 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
     }
 }
 
+pub fn collect_troubleshooter_logs(
+    game_dir: Option<&str>,
+    recent_logs: Option<Vec<String>>,
+) -> Vec<String> {
+    const MAX_LINES: usize = 160;
+    let mut merged = recent_logs.unwrap_or_default();
+
+    if let Some(dir) = game_dir {
+        let latest_launch_log = normalize_path(dir).join("latest_launch.log");
+        if let Some(text) = read_text_if_exists(&latest_launch_log) {
+            let mut tail = text
+                .lines()
+                .rev()
+                .take(MAX_LINES)
+                .map(|line| line.to_string())
+                .collect::<Vec<_>>();
+            tail.reverse();
+            merged.extend(tail);
+        }
+    }
+
+    if merged.len() > MAX_LINES {
+        merged = merged.split_off(merged.len() - MAX_LINES);
+    }
+
+    merged
+}
+
 pub async fn apply_fix(window: &tauri::Window, input: ApplyFixInput) -> Result<FixResult, String> {
     let action = input.action.clone();
     let output = match input.action {

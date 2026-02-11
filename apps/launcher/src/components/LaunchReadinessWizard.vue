@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { AlertCircle, CheckCircle2, Link2, LoaderCircle, ShieldCheck, Wrench } from "lucide-vue-next";
+import { AlertCircle, CheckCircle2, Link2, LoaderCircle, ShieldCheck, Wrench, X } from "lucide-vue-next";
 import Button from "./ui/button/Button.vue";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "./ui/dropdown-menu";
 import Card from "./ui/card/Card.vue";
 import CardContent from "./ui/card/CardContent.vue";
 import CardDescription from "./ui/card/CardDescription.vue";
-import CardFooter from "./ui/card/CardFooter.vue";
 import CardHeader from "./ui/card/CardHeader.vue";
 import CardTitle from "./ui/card/CardTitle.vue";
 import type { LaunchReadinessReport } from "@/types/diagnostics";
@@ -15,6 +21,8 @@ import type { LauncherLinkSession } from "@/types/auth";
 const props = defineProps<{
   open: boolean;
   readiness: LaunchReadinessReport | null;
+  atlasSignedIn: boolean;
+  microsoftSignedIn: boolean;
   isSigningIn: boolean;
   linkSession: LauncherLinkSession | null;
   hubUrl: string;
@@ -25,6 +33,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "close"): void;
   (event: "complete"): void;
+  (event: "sign-out", scope: "microsoft" | "all"): void;
   (event: "action", key: string): void;
 }>();
 
@@ -37,6 +46,8 @@ const allReady = computed(
 );
 const orderedKeys = ["atlasLogin", "microsoftLogin", "accountLink"] as const;
 const copyStatus = ref<string | null>(null);
+const autoCompleted = ref(false);
+const signedIn = computed(() => props.atlasSignedIn || props.microsoftSignedIn);
 
 const orderedChecklist = computed(() =>
   orderedKeys
@@ -45,6 +56,9 @@ const orderedChecklist = computed(() =>
 );
 
 const activeStep = computed(() => orderedChecklist.value.find((item) => !item.ready) ?? null);
+const accountLinkItem = computed(
+  () => orderedChecklist.value.find((item) => item.key === "accountLink") ?? null
+);
 
 const linkUrl = computed(() => {
   if (!props.linkSession) {
@@ -72,16 +86,77 @@ async function openLinkPage() {
   }
   await openUrl(linkUrl.value);
 }
+
+const accountLinkStatus = computed(() => {
+  const item = accountLinkItem.value;
+  if (!item) {
+    return null;
+  }
+
+  if (item.ready) {
+    return null;
+  }
+
+  if (props.isSigningIn) {
+    return {
+      tone: "muted",
+      text: "Waiting for browser sign-in to finish..."
+    } as const;
+  }
+
+  if (props.linkSession) {
+    return {
+      tone: "warning",
+      text: "Waiting for Atlas to confirm this link code."
+    } as const;
+  }
+
+  return {
+    tone: "muted",
+    text: "Start this step to generate a link code."
+  } as const;
+});
+
+watch(
+  () => props.open,
+  (open) => {
+    if (open) {
+      autoCompleted.value = false;
+    }
+  }
+);
+
+watch(
+  () => allReady.value,
+  (ready, wasReady) => {
+    if (!props.open || !ready || wasReady || autoCompleted.value) {
+      return;
+    }
+    autoCompleted.value = true;
+    emit("complete");
+  }
+);
 </script>
 
 <template>
-  <div v-if="props.open" class="fixed inset-0 z-[70] bg-black/45 backdrop-blur-[2px] p-4 md:p-6">
+  <div v-if="props.open" class="fixed inset-0 z-[70] bg-black/55 backdrop-blur-[6px] p-4 md:p-6">
     <div class="mx-auto flex h-full max-w-3xl items-center justify-center">
-      <Card class="glass w-full max-h-full overflow-hidden">
-        <CardHeader>
+      <Card class="glass w-full max-h-full overflow-hidden bg-background/95">
+        <CardHeader class="space-y-3">
+          <div v-if="allReady" class="flex items-center justify-end">
+            <button
+              class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 text-muted-foreground hover:bg-background/60 hover:text-foreground"
+              type="button"
+              :disabled="props.working"
+              aria-label="Close"
+              @click="emit('close')"
+            >
+              <X class="h-4 w-4" />
+            </button>
+          </div>
           <CardTitle>Get Ready to Play</CardTitle>
           <CardDescription>
-            Sign in and link your accounts in a few quick steps.
+            Sign in and connect your accounts.
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-4 overflow-y-auto">
@@ -92,10 +167,10 @@ async function openLinkPage() {
           <div v-if="allReady" class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4">
             <div class="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
               <ShieldCheck class="h-4 w-4" />
-              You are ready
+              Ready
             </div>
             <p class="mt-1 text-xs text-muted-foreground">
-              Sign-in and account linking are complete.
+              You can launch now.
             </p>
           </div>
 
@@ -156,19 +231,56 @@ async function openLinkPage() {
               </div>
               <p v-if="copyStatus" class="text-xs text-muted-foreground">{{ copyStatus }}</p>
             </div>
+
+            <p
+              v-if="item.key === 'accountLink' && accountLinkStatus"
+              class="mt-2 text-xs"
+              :class="accountLinkStatus.tone === 'success'
+                ? 'text-emerald-700 dark:text-emerald-300'
+                : accountLinkStatus.tone === 'warning'
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : 'text-muted-foreground'"
+            >
+              {{ accountLinkStatus.text }}
+            </p>
           </div>
         </CardContent>
-        <CardFooter class="flex items-center justify-between gap-3">
-          <Button variant="ghost" :disabled="props.working" @click="emit('close')">
-            Not now
-          </Button>
-          <Button
-            :disabled="props.working || !allReady"
-            @click="emit('complete')"
-          >
-            Continue
-          </Button>
-        </CardFooter>
+        <div v-if="signedIn" class="border-t border-border/50 px-6 py-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="props.working"
+                class="h-9 px-4 text-sm"
+              >
+                Sign out
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              side="top"
+              class="z-[120] w-72 rounded-xl border border-border/70 bg-background/75 p-1.5 shadow-2xl ring-1 ring-border/60 backdrop-blur-2xl backdrop-saturate-150"
+              style="backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%);"
+            >
+              <DropdownMenuItem
+                :disabled="props.working || !props.microsoftSignedIn"
+                class="h-9 rounded-lg px-3 text-sm"
+                @select="emit('sign-out', 'microsoft')"
+              >
+                Sign out of Microsoft
+              </DropdownMenuItem>
+              <DropdownMenuSeparator class="mx-0 my-1 bg-border/70" />
+              <DropdownMenuItem
+                :disabled="props.working"
+                class="h-9 rounded-lg px-3 text-sm text-destructive focus:text-destructive"
+                @select="emit('sign-out', 'all')"
+              >
+                Sign out of Atlas + Microsoft
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </Card>
     </div>
   </div>
