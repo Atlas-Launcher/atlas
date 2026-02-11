@@ -23,7 +23,7 @@ jobs:
           - platform: windows-latest
             tauri_args: --ci
           - platform: macos-latest
-            tauri_args: --ci
+            tauri_args: --ci --no-sign
 
     steps:
       - name: Checkout
