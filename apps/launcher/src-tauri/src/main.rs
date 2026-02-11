@@ -6,6 +6,7 @@
 mod auth;
 mod commands;
 mod config;
+mod diagnostics;
 mod launcher;
 mod library;
 mod models;
@@ -91,7 +92,12 @@ fn main() {
             commands::auth::create_launcher_link_session,
             commands::auth::complete_launcher_link_session,
             commands::settings::get_settings,
-            commands::settings::update_settings
+            commands::settings::update_settings,
+            commands::diagnostics::get_launch_readiness,
+            commands::diagnostics::run_troubleshooter,
+            commands::diagnostics::apply_fix,
+            commands::diagnostics::repair_installation,
+            commands::diagnostics::create_support_bundle
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
