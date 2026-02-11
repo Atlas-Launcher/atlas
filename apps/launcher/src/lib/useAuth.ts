@@ -217,6 +217,22 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
       deviceCode.value = null;
       authInFlight.value = false;
       setStatus(`Signed in as ${result.name}.`);
+      // Auto-attempt to complete a stored launcher link session (if present)
+      if (launcherLinkSession.value) {
+        // fire-and-forget; completeLauncherLink internally handles retries/polling
+        void run(async () => {
+          try {
+            setStatus("Completing launcher link...");
+            const ok = await completeLauncherLink();
+            if (ok) {
+              pushLog("Launcher link auto-completed after Microsoft sign-in.");
+            }
+          } finally {
+            // restore signed-in status message
+            setStatus(`Signed in as ${result.name}.`);
+          }
+        });
+      }
     } catch (err) {
       if (attempt !== deviceLoginAttempt) {
         return;
@@ -373,6 +389,20 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
         setStatus(`Signed in as ${result.name}.`);
         pendingDeeplink.value = null;
         authInFlight.value = false;
+        // Auto-attempt launcher link completion if we have a stored session
+        if (launcherLinkSession.value) {
+          void run(async () => {
+            try {
+              setStatus("Completing launcher link...");
+              const ok = await completeLauncherLink();
+              if (ok) {
+                pushLog("Launcher link auto-completed after Microsoft sign-in.");
+              }
+            } finally {
+              setStatus(`Signed in as ${result.name}.`);
+            }
+          });
+        }
       } catch (err) {
         setStatus(`Login failed: ${String(err)}`);
         authInFlight.value = false;
