@@ -413,6 +413,36 @@ async fn handle_conn(
                 }
             }
 
+            Request::Backup {} => {
+                let tx = resp_tx.clone();
+                let state = state.clone();
+                tokio::spawn(async move {
+                    // Determine server root from state
+                    let server_root = match crate::supervisor::current_server_root(&state).await {
+                        Some(r) => r,
+                        None => {
+                            let err = Response::Error(RpcError { code: ErrorCode::BadRequest, message: "server root not configured".into(), details: Default::default() });
+                            let out = Outbound::Response(Envelope { id: req_id, payload: err });
+                            let _ = tx.send(PendingOutbound::Send(out)).await;
+                            return;
+                        }
+                    };
+
+                    match crate::backup::backup_before_update(&server_root, state.clone()).await {
+                        Ok(path) => {
+                            let resp = Response::BackupCreated { path: path.display().to_string() };
+                            let out = Outbound::Response(Envelope { id: req_id, payload: resp });
+                            let _ = tx.send(PendingOutbound::Send(out)).await;
+                        }
+                        Err(err) => {
+                            let resp = Response::Error(RpcError { code: ErrorCode::Internal, message: err, details: Default::default() });
+                            let out = Outbound::Response(Envelope { id: req_id, payload: resp });
+                            let _ = tx.send(PendingOutbound::Send(out)).await;
+                        }
+                    }
+                });
+            }
+
             _ => {
                 let out = Outbound::Response(Envelope {
                     id: req_id,
