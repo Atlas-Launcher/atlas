@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Button from "./ui/button/Button.vue";
 import Card from "./ui/card/Card.vue";
 import CardHeader from "./ui/card/CardHeader.vue";
 import CardTitle from "./ui/card/CardTitle.vue";
@@ -9,14 +10,26 @@ const props = defineProps<{
   title: string;
   description: string;
   logs: string[];
+  actionLabel?: string;
+}>();
+
+const emit = defineEmits<{
+  (event: "action"): void;
 }>();
 </script>
 
 <template>
   <Card class="glass">
-    <CardHeader>
-      <CardTitle>{{ props.title }}</CardTitle>
-      <CardDescription>{{ props.description }}</CardDescription>
+    <CardHeader class="space-y-3">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <CardTitle>{{ props.title }}</CardTitle>
+          <CardDescription>{{ props.description }}</CardDescription>
+        </div>
+        <Button v-if="props.actionLabel" size="sm" variant="outline" @click="emit('action')">
+          {{ props.actionLabel }}
+        </Button>
+      </div>
     </CardHeader>
     <CardContent>
       <!-- min-w-0 allows this flex child to shrink instead of forcing parent width -->

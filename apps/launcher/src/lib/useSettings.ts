@@ -1,6 +1,12 @@
 import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings, AtlasPackChannel, InstanceConfig, ModLoaderConfig } from "@/types/settings";
+import type {
+  AppSettings,
+  AtlasPackChannel,
+  InstanceConfig,
+  LaunchReadinessWizardState,
+  ModLoaderConfig
+} from "@/types/settings";
 import type { AtlasRemotePack } from "@/types/library";
 
 interface SettingsDeps {
@@ -18,7 +24,11 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     defaultJvmArgs: null,
     instances: [],
     selectedInstanceId: null,
-    themeMode: "system"
+    themeMode: "system",
+    launchReadinessWizard: {
+      dismissedAt: null,
+      completedAt: null
+    }
   });
   const defaultGameDir = ref("");
 
@@ -113,6 +123,15 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     return "vanilla";
   }
 
+  function normalizeLaunchReadinessWizard(
+    value: LaunchReadinessWizardState | null | undefined
+  ): LaunchReadinessWizardState {
+    return {
+      dismissedAt: value?.dismissedAt ?? null,
+      completedAt: value?.completedAt ?? null
+    };
+  }
+
   function createInstanceConfig(id: string, name: string, baseDir: string): InstanceConfig {
     return {
       id,
@@ -173,7 +192,8 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
           normalizeInstance(instance, index)
         ),
         selectedInstanceId: loaded.selectedInstanceId ?? null,
-        themeMode: (loaded.themeMode as "light" | "dark" | "system") ?? null
+        themeMode: (loaded.themeMode as "light" | "dark" | "system") ?? null,
+        launchReadinessWizard: normalizeLaunchReadinessWizard(loaded.launchReadinessWizard)
       };
       if (ensureDefaults()) {
         await saveSettings(true);
@@ -206,6 +226,11 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
       settings.value.instances = [instance];
       settings.value.selectedInstanceId = instance.id;
       return true;
+    }
+
+    if (!settings.value.launchReadinessWizard) {
+      settings.value.launchReadinessWizard = normalizeLaunchReadinessWizard(null);
+      changed = true;
     }
 
     const selected = settings.value.selectedInstanceId;

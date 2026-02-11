@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, withDefaults } from "vue";
 import Button from "./ui/button/Button.vue";
 import Card from "./ui/card/Card.vue";
 import CardHeader from "./ui/card/CardHeader.vue";
@@ -10,14 +10,23 @@ import CardFooter from "./ui/card/CardFooter.vue";
 import Input from "./ui/input/Input.vue";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   settingsClientId: string;
   settingsAtlasHubUrl: string;
   settingsDefaultMemoryMb: number;
   settingsDefaultJvmArgs: string;
   settingsThemeMode: "light" | "dark" | "system";
   working: boolean;
-}>();
+  updaterBusy?: boolean;
+  updaterStatusText?: string;
+  updaterUpdateVersion?: string | null;
+  updaterInstallComplete?: boolean;
+}>(), {
+  updaterBusy: false,
+  updaterStatusText: "",
+  updaterUpdateVersion: null,
+  updaterInstallComplete: false
+});
 
 const emit = defineEmits<{
   (event: "update:settingsClientId", value: string): void;
@@ -26,6 +35,8 @@ const emit = defineEmits<{
   (event: "update:settingsDefaultJvmArgs", value: string): void;
   (event: "update:settingsThemeMode", value: "light" | "dark" | "system"): void;
   (event: "save-settings"): void;
+  (event: "check-updates"): void;
+  (event: "open-readiness-wizard"): void;
 }>();
 
 const settingsTab = ref<"runtime" | "appearance" | "advanced">("runtime");
@@ -131,6 +142,35 @@ function updateThemeMode(value: string) {
         </TabsContent>
 
         <TabsContent value="advanced" class="space-y-4">
+          <div class="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+            <div class="flex items-center justify-between gap-3">
+              <div class="space-y-1">
+                <p class="text-xs uppercase tracking-widest text-muted-foreground">App updates</p>
+                <p class="text-sm">
+                  <template v-if="props.updaterInstallComplete">
+                    Update installed.
+                    <span class="text-primary font-medium">Restart is required.</span>
+                  </template>
+                  <template v-else-if="props.updaterUpdateVersion">
+                    Update {{ props.updaterUpdateVersion }} is available.
+                  </template>
+                  <template v-else>
+                    Check for launcher updates manually.
+                  </template>
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="props.updaterBusy"
+                @click="emit('check-updates')"
+              >
+                {{ props.updaterBusy ? "Checking..." : "Check for updates" }}
+              </Button>
+            </div>
+            <p class="text-xs text-muted-foreground">{{ props.updaterStatusText }}</p>
+          </div>
+
           <div class="space-y-2">
             <label class="text-xs uppercase tracking-widest text-muted-foreground">
               Microsoft Client ID
@@ -158,9 +198,10 @@ function updateThemeMode(value: string) {
       </Tabs>
     </CardContent>
     <CardFooter>
-      <Button :disabled="props.working" variant="secondary" @click="emit('save-settings')">
-        Save settings
-      </Button>
+      <div class="flex w-full items-center justify-between gap-3">
+        <div />
+        <Button :disabled="props.working" variant="secondary" @click="emit('save-settings')">Save settings</Button>
+      </div>
     </CardFooter>
   </Card>
 </template>
