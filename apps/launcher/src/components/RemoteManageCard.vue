@@ -35,7 +35,7 @@ const runtimeLabel = computed(() => {
   return `${formatLoaderKind(props.instance.loader?.kind)} ${version}`;
 });
 
-function updateChannel(value: string) {
+function updateChannel(value: any) {
   if (value === "dev" || value === "beta" || value === "production") {
     emit("update-channel", value);
   }
