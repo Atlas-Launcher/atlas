@@ -1,0 +1,56 @@
+name: Atlas Release Publish
+description: Upload immutable artifacts to Atlas storage and publish release metadata.
+inputs:
+  atlas_base_url:
+    description: Atlas Hub base URL (e.g. https://hub.atlas.dev)
+    required: true
+  atlas_token:
+    description: Bearer token with publish permissions
+    required: true
+  product:
+    description: Distribution product (launcher|cli|runner|runnerd)
+    required: true
+  version:
+    description: Semver version (without product prefix)
+    required: true
+  channel:
+    description: Release channel
+    required: false
+    default: stable
+  files:
+    description: Multiline manifest entries path|os|arch|kind|filename(optional)
+    required: false
+  files_manifest:
+    description: Path to a file containing manifest entries path|os|arch|kind|filename(optional)
+    required: false
+  artifact_prefix:
+    description: Storage key prefix
+    required: false
+    default: artifacts
+  notes:
+    description: Optional release notes
+    required: false
+    default: ""
+  published_at:
+    description: Optional RFC3339 publish timestamp
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Publish artifacts to Atlas
+      shell: bash
+      env:
+        ATLAS_BASE_URL: ${{ inputs.atlas_base_url }}
+        ATLAS_TOKEN: ${{ inputs.atlas_token }}
+        PRODUCT: ${{ inputs.product }}
+        VERSION: ${{ inputs.version }}
+        CHANNEL: ${{ inputs.channel }}
+        FILES_INPUT: ${{ inputs.files }}
+        FILES_MANIFEST: ${{ inputs.files_manifest }}
+        ARTIFACT_PREFIX: ${{ inputs.artifact_prefix }}
+        NOTES: ${{ inputs.notes }}
+        PUBLISHED_AT: ${{ inputs.published_at }}
+      run: |
+        set -euo pipefail
+        "${{ github.action_path }}/publish.sh"
