@@ -156,7 +156,7 @@ function onQuickAction(instance: InstanceConfig) {
         >
           Refresh Packs
         </Button>
-        <Button
+        <!-- <Button
           class="ml-auto"
           :disabled="props.working"
           size="sm"
@@ -164,7 +164,7 @@ function onQuickAction(instance: InstanceConfig) {
           @click="emit('create')"
         >
           New Local Profile
-        </Button>
+        </Button> -->
       </div>
 
       <div class="grid gap-3 md:grid-cols-[1.3fr_0.6fr_0.6fr]">
