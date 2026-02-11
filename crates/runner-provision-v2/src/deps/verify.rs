@@ -1,8 +1,8 @@
-use protocol::{Dependency, HashAlgorithm};
 use crate::errors::ProvisionError;
+use protocol::{Dependency, HashAlgorithm};
 
 pub fn verify_dependency_bytes(dep: &Dependency, bytes: &[u8]) -> Result<(), ProvisionError> {
-    let h = dep.hash.decode_hex_bytes().or_else(|_| {
+    dep.hash.decode_hex_bytes().or_else(|_| {
         Err(ProvisionError::Invalid(format!(
             "missing hash for dependency at URL {}",
             dep.url
@@ -10,7 +10,8 @@ pub fn verify_dependency_bytes(dep: &Dependency, bytes: &[u8]) -> Result<(), Pro
     })?;
     let expected = dep.hash.hex.clone();
 
-    let actual = match HashAlgorithm::try_from(dep.hash.algorithm).unwrap_or(HashAlgorithm::Sha256) {
+    let actual = match HashAlgorithm::try_from(dep.hash.algorithm).unwrap_or(HashAlgorithm::Sha256)
+    {
         HashAlgorithm::Sha1 => {
             use sha1::Digest;
             let mut hasher = sha1::Sha1::new();

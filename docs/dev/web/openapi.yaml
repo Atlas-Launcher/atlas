@@ -1,0 +1,715 @@
+openapi: 3.1.0
+info:
+  title: Atlas Web API
+  version: 0.2.0
+  description: |
+    Current Atlas Hub API surface from route handlers in apps/web/app/api and apps/web/app/download.
+servers:
+  - url: https://atlas.example.com
+    description: Replace with your Atlas Hub deployment URL
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    OidcHeader:
+      type: apiKey
+      in: header
+      name: x-atlas-oidc-token
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+paths:
+  /api/auth/.well-known/openid-configuration:
+    get:
+      summary: OIDC discovery metadata
+      responses:
+        '200':
+          description: Discovery document
+
+  /api/auth/[...all]:
+    get:
+      summary: Better-auth catch-all handler
+      responses:
+        '200':
+          description: Auth provider response
+    post:
+      summary: Better-auth catch-all handler
+      responses:
+        '200':
+          description: Auth provider response
+
+  /api/v1/user/mojang:
+    post:
+      summary: Link or update Mojang account state
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Mojang link state updated
+        '401':
+          description: Unauthorized
+
+  /api/v1/user/mojang/info:
+    get:
+      summary: Get Mojang account link info
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Mojang link status
+        '401':
+          description: Unauthorized
+
+  /api/v1/packs:
+    get:
+      summary: List packs visible to current user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Pack list
+    post:
+      summary: Create pack
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Pack created
+
+  /api/v1/packs/{packId}:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get pack metadata
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Pack metadata
+
+  /api/v1/packs/{packId}/access:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get effective access for current user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Access result
+
+  /api/v1/packs/{packId}/members:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: List pack members
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Member list
+
+  /api/v1/packs/{packId}/members/{userId}:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      summary: Update member role/access
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Member updated
+    delete:
+      summary: Remove member
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Member removed
+
+  /api/v1/packs/{packId}/invites:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: List invites
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Invite list
+    post:
+      summary: Create invite
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Invite created
+    delete:
+      summary: Revoke invite
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Invite revoked
+
+  /api/v1/invites/preview:
+    get:
+      summary: Preview invite
+      responses:
+        '200':
+          description: Invite preview
+
+  /api/v1/invites/accept:
+    post:
+      summary: Accept invite
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Invite accepted
+
+  /api/v1/packs/{packId}/builds:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: List builds
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Build list
+    patch:
+      summary: Update build metadata/state
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Build updated
+
+  /api/v1/packs/{packId}/channels:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: List channel pointers
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Channel list
+    post:
+      summary: Move/update channel pointer
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Channel updated
+
+  /api/v1/packs/{packId}/stream:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Stream pack events
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Event stream
+
+  /api/v1/packs/{packId}/whitelist:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get pack whitelist data
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Whitelist payload
+
+  /api/v1/launcher:
+    get:
+      summary: Launcher bootstrap endpoint
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Launcher bootstrap payload
+
+  /api/v1/launcher/packs:
+    get:
+      summary: List packs for launcher context
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Launcher pack list
+
+  /api/v1/launcher/packs/{packId}/artifact:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Resolve launcher artifact metadata
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Artifact metadata
+        '404':
+          description: Build or artifact not available
+
+  /api/v1/launcher/link-sessions:
+    post:
+      summary: Create launcher account-link session
+      responses:
+        '200':
+          description: Link session created
+
+  /api/v1/launcher/link-sessions/claim:
+    post:
+      summary: Claim launcher account-link session
+      responses:
+        '200':
+          description: Link session claimed
+
+  /api/v1/launcher/link-sessions/complete:
+    post:
+      summary: Complete launcher account-link session
+      responses:
+        '200':
+          description: Link session completed
+
+  /api/v1/launcher/github/token:
+    get:
+      summary: Get linked GitHub token context for launcher
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token context payload
+
+  /api/v1/runner/exchange:
+    post:
+      summary: Exchange runner service token for runner bearer token
+      responses:
+        '200':
+          description: Runner access token
+        '401':
+          description: Invalid token
+
+  /api/v1/runner/tokens:
+    get:
+      summary: List runner service tokens
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token list
+    post:
+      summary: Create runner service token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token created
+    delete:
+      summary: Revoke runner service token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Token revoked
+
+  /api/v1/runner/packs/{packId}/metadata:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get runner metadata payload
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Runner metadata
+
+  /api/v1/runner/packs/{packId}/whitelist:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get runner whitelist payload
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Runner whitelist
+
+  /api/v1/ci/presign:
+    post:
+      summary: Generate CI upload target and build context
+      security:
+        - OidcHeader: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Presign payload
+
+  /api/v1/ci/complete:
+    post:
+      summary: Complete CI build publish
+      security:
+        - OidcHeader: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Build marked complete
+
+  /api/v1/storage/presign:
+    post:
+      summary: Presign storage operation
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Presign response
+
+  /api/v1/storage/upload:
+    put:
+      summary: Upload using storage token route
+      responses:
+        '200':
+          description: Upload success
+
+  /api/v1/storage/download:
+    get:
+      summary: Download using storage token route
+      responses:
+        '200':
+          description: Download response
+
+  /api/v1/github/owners:
+    get:
+      summary: List linked GitHub owners/orgs
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Owner list
+
+  /api/v1/github/repos:
+    get:
+      summary: List linked GitHub repositories
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Repository list
+    post:
+      summary: Configure/import repository
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Repository configured
+
+  /api/v1/curseforge/mods:
+    get:
+      summary: Search CurseForge mods
+      responses:
+        '200':
+          description: Search results
+
+  /api/v1/curseforge/mods/{modId}/files:
+    parameters:
+      - name: modId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: List files for a CurseForge mod
+      responses:
+        '200':
+          description: File list
+
+  /api/v1/curseforge/mods/{modId}/files/{fileId}/download-url:
+    parameters:
+      - name: modId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Resolve download URL for a CurseForge file
+      responses:
+        '200':
+          description: URL payload
+
+  /api/admin/users:
+    get:
+      summary: Admin list users
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User list
+
+  /api/admin/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Admin read user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User payload
+    patch:
+      summary: Admin update user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User updated
+
+  /download/app/latest:
+    get:
+      summary: Resolve latest launcher artifact
+      responses:
+        '200':
+          description: Release payload/redirect
+
+  /download/app/file/{tag}/{asset}:
+    parameters:
+      - name: tag
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: asset
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Download launcher asset by tag and asset name
+      responses:
+        '200':
+          description: File stream/redirect
+
+  /download/app/installer/latest:
+    get:
+      summary: Resolve latest launcher installer
+      responses:
+        '200':
+          description: Installer payload/redirect
+
+  /download/app/installer/latest/{os}/{arch}:
+    parameters:
+      - name: os
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Resolve latest launcher installer by platform
+      responses:
+        '200':
+          description: Installer payload/redirect
+
+  /download/app/installer/file/{tag}/{asset}:
+    parameters:
+      - name: tag
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: asset
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Download launcher installer asset by tag and asset name
+      responses:
+        '200':
+          description: File stream/redirect
+
+  /download/app/update/{target}/{arch}/{version}:
+    parameters:
+      - name: target
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Tauri updater release JSON
+      responses:
+        '200':
+          description: Release metadata JSON
+
+  /download/cli/installer/latest:
+    get:
+      summary: Resolve latest CLI installer
+      responses:
+        '200':
+          description: Installer payload/redirect
+
+  /download/cli/installer/latest/{os}/{arch}:
+    parameters:
+      - name: os
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Resolve latest CLI installer by platform
+      responses:
+        '200':
+          description: Installer payload/redirect
+
+  /download/cli/installer/file/{tag}/{asset}:
+    parameters:
+      - name: tag
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: asset
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Download CLI installer asset by tag and asset name
+      responses:
+        '200':
+          description: File stream/redirect
+
+  /download/cli/latest/{os}/{arch}:
+    parameters:
+      - name: os
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Resolve latest CLI binary by platform
+      responses:
+        '200':
+          description: Binary payload/redirect
+
+  /download/cli/file/{tag}/{asset}:
+    parameters:
+      - name: tag
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: asset
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Download CLI asset by tag and asset name
+      responses:
+        '200':
+          description: File stream/redirect
+
+  /download/ci/workflow:
+    get:
+      summary: Download generated CI workflow template
+      responses:
+        '200':
+          description: Workflow file contents

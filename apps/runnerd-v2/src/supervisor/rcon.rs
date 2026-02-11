@@ -1,4 +1,4 @@
-use runner_v2_rcon::{load_rcon_settings, RconClient};
+use runner_v2_rcon::{RconClient, load_rcon_settings};
 
 use super::state::SharedState;
 use super::util::current_server_root;

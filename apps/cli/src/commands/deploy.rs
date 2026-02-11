@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result};
-use atlas_client::hub::{HubClient, CiCompleteRequest};
+use atlas_client::hub::{CiCompleteRequest, HubClient};
 use clap::Args;
 use reqwest::blocking::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};

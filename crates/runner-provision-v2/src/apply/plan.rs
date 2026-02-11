@@ -7,18 +7,12 @@ use protocol::{Dependency, DependencyKind, DependencySide, PackBlob};
 
 use super::pointers::{destination_relative_path, is_pointer_path};
 
-pub struct InlineFileOp {
-    pub rel_path: PathBuf,
-    pub bytes: Vec<u8>,
-}
-
 pub struct DepOp {
     pub dep: Dependency,
     pub dest_rel_path: PathBuf,
 }
 
 pub struct ApplyPlan {
-    pub inline_files: Vec<InlineFileOp>,
     pub deps: Vec<DepOp>,
 }
 
@@ -43,21 +37,7 @@ pub fn build_apply_plan(pack: &PackBlob) -> Result<ApplyPlan, ProvisionError> {
         });
     }
 
-    let mut inline_files = Vec::new();
-    for (rel_path_str, bytes) in &pack.files {
-        let rel_path = sanitize_rel_path(rel_path_str)?;
-
-        if is_pointer_path(&rel_path).is_some() {
-            continue;
-        }
-
-        inline_files.push(InlineFileOp {
-            rel_path,
-            bytes: bytes.clone(),
-        });
-    }
-
-    Ok(ApplyPlan { inline_files, deps })
+    Ok(ApplyPlan { deps })
 }
 
 fn sanitize_rel_path(rel: &str) -> Result<PathBuf, ProvisionError> {
@@ -79,7 +59,11 @@ fn sanitize_rel_path(rel: &str) -> Result<PathBuf, ProvisionError> {
     Ok(p.to_path_buf())
 }
 
-pub(crate) async fn write_dependency_bytes(op: &DepOp, bytes: &[u8], staging_current: &PathBuf) -> Result<(), ProvisionError> {
+pub(crate) async fn write_dependency_bytes(
+    op: &DepOp,
+    bytes: &[u8],
+    staging_current: &PathBuf,
+) -> Result<(), ProvisionError> {
     // Destination path inside the staging current dir
     let dest = staging_current.join(&op.dest_rel_path);
 
@@ -92,7 +76,10 @@ pub(crate) async fn write_dependency_bytes(op: &DepOp, bytes: &[u8], staging_cur
     Ok(())
 }
 
-pub(crate) async fn write_inline_files(pack: &PackBlob, staging_current: &Path) -> Result<(), ProvisionError> {
+pub(crate) async fn write_inline_files(
+    pack: &PackBlob,
+    staging_current: &Path,
+) -> Result<(), ProvisionError> {
     for (rel_path_str, bytes) in &pack.files {
         let rel_path = sanitize_rel_path(&*rel_path_str)?;
 

@@ -1,15 +1,15 @@
-use chrono::{Local, NaiveDate, Duration as ChronoDuration};
-use tokio::time::{sleep, Duration};
-use tracing::{info, debug, warn};
+use chrono::{Duration as ChronoDuration, Local, NaiveDate};
+use tokio::time::{Duration, sleep};
+use tracing::{debug, info, warn};
 
 use crate::supervisor::SharedState;
 
 use super::ops;
-use tokio::fs as async_fs;
-use std::path::PathBuf;
-use tokio::task;
 use std::fs as stdfs;
-use std::time::{SystemTime, Duration as StdDuration};
+use std::path::PathBuf;
+use std::time::{Duration as StdDuration, SystemTime};
+use tokio::fs as async_fs;
+use tokio::task;
 
 /// Remove backups older than `keep_days` from server_root/.runner/backup using a blocking task.
 async fn prune_old_backups(server_root: &PathBuf, keep_days: u64) {
@@ -34,11 +34,19 @@ async fn prune_old_backups(server_root: &PathBuf, keep_days: u64) {
                         if mtime < cutoff {
                             if meta.is_dir() {
                                 if let Err(e) = stdfs::remove_dir_all(&path) {
-                                    eprintln!("prune: failed to remove dir {}: {}", path.display(), e);
+                                    eprintln!(
+                                        "prune: failed to remove dir {}: {}",
+                                        path.display(),
+                                        e
+                                    );
                                 }
                             } else {
                                 if let Err(e) = stdfs::remove_file(&path) {
-                                    eprintln!("prune: failed to remove file {}: {}", path.display(), e);
+                                    eprintln!(
+                                        "prune: failed to remove file {}: {}",
+                                        path.display(),
+                                        e
+                                    );
                                 }
                             }
                         }
@@ -50,7 +58,8 @@ async fn prune_old_backups(server_root: &PathBuf, keep_days: u64) {
             }
         }
         Ok(())
-    }).await;
+    })
+    .await;
 
     if let Err(join_err) = result {
         warn!("prune operation join failed: {}", join_err);
@@ -60,7 +69,10 @@ async fn prune_old_backups(server_root: &PathBuf, keep_days: u64) {
 }
 
 async fn read_last_backup_date(server_root: &PathBuf) -> Option<NaiveDate> {
-    let path = server_root.join(".runner").join("backup").join("last_backup.txt");
+    let path = server_root
+        .join(".runner")
+        .join("backup")
+        .join("last_backup.txt");
     match async_fs::read_to_string(&path).await {
         Ok(s) => {
             let s = s.trim();
@@ -133,10 +145,15 @@ pub async fn run_daily_backup(server_root: std::path::PathBuf, state: SharedStat
         }
 
         // Compute how long until next midnight and sleep. Use debug-level logging to avoid clutter.
-        let next_midnight = (today + ChronoDuration::days(1)).and_hms_opt(0, 0, 0).unwrap();
+        let next_midnight = (today + ChronoDuration::days(1))
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
         let dur = next_midnight - now.naive_local();
         let seconds = dur.num_seconds().max(60) as u64;
-        debug!("daily backup scheduler sleeping for {}s until next midnight", seconds);
+        debug!(
+            "daily backup scheduler sleeping for {}s until next midnight",
+            seconds
+        );
         sleep(Duration::from_secs(seconds)).await;
     }
 }

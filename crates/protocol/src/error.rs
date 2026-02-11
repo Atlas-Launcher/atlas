@@ -13,5 +13,5 @@ pub enum ProtocolError {
     #[error("invalid enum value for {field}: {value}")]
     InvalidEnum { field: &'static str, value: i32 },
     #[error("hex decode error: {err}")]
-    HexDecode{ err: &'static str },
+    HexDecode { err: &'static str },
 }

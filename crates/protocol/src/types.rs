@@ -93,7 +93,6 @@ pub enum DependencySide {
     Server = 2,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ::prost::Enumeration)]
 #[repr(i32)]
 #[serde(rename_all = "snake_case")]

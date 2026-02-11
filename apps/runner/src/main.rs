@@ -2,17 +2,17 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod commands;
-mod hub;
-mod fetch;
-mod cache;
 mod assemble;
-mod reconcile;
-mod supervisor;
-mod rcon;
-mod java;
 mod backup;
+mod cache;
+mod commands;
+mod fetch;
+mod hub;
+mod java;
+mod rcon;
+mod reconcile;
 mod runner_config;
+mod supervisor;
 
 const DEFAULT_HUB_URL: &str = "https://atlas.nathanm.org";
 pub const RUNNER_BASE_DIR: &str = "/var/lib/atlas-runner";
@@ -125,13 +125,21 @@ async fn main() -> anyhow::Result<()> {
         } => {
             commands::auth::exec(&hub_url, pack_id, channel, token, name, memory, port).await?;
         }
-        Commands::Up { force_config, attach, skip_setup } => {
+        Commands::Up {
+            force_config,
+            attach,
+            skip_setup,
+        } => {
             commands::up::exec(force_config, attach, skip_setup).await?;
         }
         Commands::Down => {
             commands::down::exec().await?;
         }
-        Commands::Config { memory, port, java_major } => {
+        Commands::Config {
+            memory,
+            port,
+            java_major,
+        } => {
             commands::config::exec(memory, port, java_major).await?;
         }
         Commands::Restart => {

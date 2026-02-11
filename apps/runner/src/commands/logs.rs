@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 const LOG_PATH: &str = "runtime/current/runner.log";
 const ERR_PATH: &str = "runtime/current/runner.err.log";

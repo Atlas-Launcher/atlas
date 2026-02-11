@@ -1,10 +1,10 @@
 pub mod errors;
 
-pub mod deps;
 pub mod apply;
-pub mod launch;
-pub mod java;
+pub mod deps;
 mod hashing;
+pub mod java;
+pub mod launch;
 
 pub use deps::provider::DependencyProvider;
 

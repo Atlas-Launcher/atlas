@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use crate::errors::ProvisionError;
+use std::path::{Path, PathBuf};
 
 pub async fn create_staging_dir(server_root: &Path) -> Result<PathBuf, ProvisionError> {
     let base = server_root.join(".runner").join("staging");
@@ -12,13 +12,6 @@ pub async fn create_staging_dir(server_root: &Path) -> Result<PathBuf, Provision
 
 pub async fn ensure_dir(p: &Path) -> Result<(), ProvisionError> {
     tokio::fs::create_dir_all(p).await?;
-    Ok(())
-}
-
-pub async fn ensure_parent_dir(p: &Path) -> Result<(), ProvisionError> {
-    if let Some(parent) = p.parent() {
-        ensure_dir(parent).await?;
-    }
     Ok(())
 }
 

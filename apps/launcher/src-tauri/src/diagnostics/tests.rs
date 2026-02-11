@@ -203,9 +203,7 @@ fn repair_plan_prefers_local_strategy_for_local_instance_even_with_pack_id() {
 
     let plan = resolve_repair_plan(&RepairInput {
         settings,
-        atlas_session: Some(atlas_session_with_uuid(
-            "00112233445566778899aabbccddeeff",
-        )),
+        atlas_session: Some(atlas_session_with_uuid("00112233445566778899aabbccddeeff")),
         game_dir: "/tmp/game/instances/local-1".to_string(),
         pack_id: Some("pack-explicit".to_string()),
         channel: Some("staging".to_string()),
@@ -243,31 +241,28 @@ fn repair_plan_uses_atlas_strategy_for_atlas_instance() {
 
     let plan = resolve_repair_plan(&RepairInput {
         settings,
-        atlas_session: Some(atlas_session_with_uuid(
-            "00112233445566778899aabbccddeeff",
-        )),
+        atlas_session: Some(atlas_session_with_uuid("00112233445566778899aabbccddeeff")),
         game_dir: "/tmp/game/instances/atlas-1".to_string(),
         pack_id: None,
         channel: None,
         preserve_saves: true,
     });
 
-    assert!(matches!(
-        plan.strategy,
-        RepairStrategy::AtlasSync { .. }
-    ));
+    assert!(matches!(plan.strategy, RepairStrategy::AtlasSync { .. }));
 }
 
 #[test]
 fn redaction_masks_token_values_in_line_or_json_forms() {
-    let log_text = "Authorization: Bearer abc.def.ghi access_token=secret-123 refresh_token: refresh-456";
+    let log_text =
+        "Authorization: Bearer abc.def.ghi access_token=secret-123 refresh_token: refresh-456";
     let redacted = redact_sensitive(log_text);
     assert!(!redacted.contains("abc.def.ghi"));
     assert!(!redacted.contains("secret-123"));
     assert!(!redacted.contains("refresh-456"));
     assert!(redacted.contains("[REDACTED]"));
 
-    let json_text = r#"{"access_token":"abc","nested":{"authorization":"Bearer xyz","proof":"p123"}}"#;
+    let json_text =
+        r#"{"access_token":"abc","nested":{"authorization":"Bearer xyz","proof":"p123"}}"#;
     let redacted_json = redact_sensitive(json_text);
     assert!(!redacted_json.contains("\"abc\""));
     assert!(!redacted_json.contains("xyz"));
@@ -276,22 +271,46 @@ fn redaction_masks_token_values_in_line_or_json_forms() {
 }
 
 #[test]
-fn java_binary_check_rejects_directory_path() {
+fn readiness_java_check_rejects_directory_override() {
     let dir = unique_temp_path("java-dir");
     fs::create_dir_all(&dir).expect("create temp dir");
-    assert!(!is_usable_java_binary(&dir));
+
+    let mut settings = sample_settings();
+    settings.instances = vec![InstanceConfig {
+        id: "local-1".to_string(),
+        name: "Local".to_string(),
+        game_dir: dir.to_string_lossy().to_string(),
+        version: None,
+        loader: ModLoaderConfig {
+            kind: ModLoaderKind::Vanilla,
+            loader_version: None,
+        },
+        java_path: dir.to_string_lossy().to_string(),
+        memory_mb: None,
+        jvm_args: None,
+        source: InstanceSource::Local,
+        atlas_pack: None,
+    }];
+
+    assert!(!resolve_java_ready(&settings, Some(&dir.to_string_lossy())));
     let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]
-fn java_binary_check_accepts_executable_file() {
-    let dir = unique_temp_path("java-bin");
-    fs::create_dir_all(&dir).expect("create temp dir");
-    let bin = dir.join(java_file_name());
+fn readiness_java_check_accepts_runtime_binary_layout() {
+    let game_dir = unique_temp_path("java-runtime");
+    let runtime_bin = game_dir.join("runtimes").join("custom").join("bin");
+    fs::create_dir_all(&runtime_bin).expect("create runtime bin");
+    let bin = runtime_bin.join(java_file_name());
     fs::write(&bin, b"#!/bin/sh\nexit 0\n").expect("write temp java binary");
     make_executable(&bin);
-    assert!(is_usable_java_binary(&bin));
-    let _ = fs::remove_dir_all(&dir);
+
+    let settings = sample_settings();
+    assert!(resolve_java_ready(
+        &settings,
+        Some(&game_dir.to_string_lossy())
+    ));
+    let _ = fs::remove_dir_all(&game_dir);
 }
 
 fn unique_temp_path(prefix: &str) -> PathBuf {
@@ -315,7 +334,9 @@ fn java_file_name() -> &'static str {
 #[cfg(unix)]
 fn make_executable(path: &std::path::Path) {
     use std::os::unix::fs::PermissionsExt;
-    let mut perms = fs::metadata(path).expect("stat temp java binary").permissions();
+    let mut perms = fs::metadata(path)
+        .expect("stat temp java binary")
+        .permissions();
     perms.set_mode(0o755);
     fs::set_permissions(path, perms).expect("chmod temp java binary");
 }

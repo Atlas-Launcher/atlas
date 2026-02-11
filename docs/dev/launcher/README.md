@@ -1,0 +1,47 @@
+# Launcher Developer Guide
+
+Project: `apps/launcher` (+ `apps/launcher/src-tauri`)
+
+## Responsibilities
+
+- User auth UX and account-linking orchestration.
+- Launch readiness evaluation.
+- Troubleshooter UI and fix command integration.
+- Minecraft runtime hydration and launch process management.
+- Launcher self-update UX (Tauri updater plugin).
+
+## Architecture (Current)
+
+- Frontend: Vue app (`src/`) with component-driven flows.
+- Backend: Tauri commands (`src-tauri/src/commands/*`) invoking launcher/diagnostics/library modules.
+
+Key backend modules:
+- `launcher/*`: version resolution, downloads, Java runtime handling, loader install paths.
+- `diagnostics/*`: readiness/troubleshooter/fix/reporting logic.
+- `library/*`: local instance metadata and sync operations.
+
+## Notable Current Behaviors
+
+- Readiness and launch Java checks use shared logic to reduce drift.
+- Java override validation rejects invalid paths early and enforces compatibility checks.
+- Download paths use retry/backoff with retry signal plumbing for user-visible progress.
+- Troubleshooter focuses on post-install/launch issues; readiness gates launch blockers.
+
+## Command Surface (Tauri)
+
+Main invoke handlers are registered in:
+- `apps/launcher/src-tauri/src/main.rs`
+
+Representative command groups:
+- Settings: get/update default dirs/settings.
+- Auth: sign-in, restore session, sign-out, launcher link session.
+- Launch: `launch_minecraft`, `download_minecraft_files`.
+- Diagnostics: readiness, troubleshooter, apply fix, repair, support bundle.
+- Library: versions/mods/pack sync and related actions.
+
+## Platform Notes
+
+Supported:
+- Windows, macOS, Linux (Linux best effort)
+
+If a platform is not explicitly listed, it is unsupported.

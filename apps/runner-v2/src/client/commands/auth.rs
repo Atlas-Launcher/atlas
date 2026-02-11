@@ -1,5 +1,5 @@
-use anyhow::{Context, Result, bail};
-use atlas_client::device_code::{DEFAULT_ATLAS_HUB_URL, normalize_hub_url};
+use anyhow::{bail, Context, Result};
+use atlas_client::device_code::{normalize_hub_url, DEFAULT_ATLAS_HUB_URL};
 use atlas_client::hub::{HubClient, LauncherPack};
 use dialoguer::{theme::ColorfulTheme, FuzzySelect, Input};
 use std::io::{self, IsTerminal};
@@ -11,11 +11,7 @@ pub async fn exec(
     token_name: Option<String>,
     channel: Option<String>,
 ) -> Result<String> {
-    let hub_url = normalize_hub_url(
-        hub_url
-            .as_deref()
-            .unwrap_or(DEFAULT_ATLAS_HUB_URL),
-    );
+    let hub_url = normalize_hub_url(hub_url.as_deref().unwrap_or(DEFAULT_ATLAS_HUB_URL));
 
     let mut hub = HubClient::new(&hub_url)?;
     let device_code = hub.login().await?;
@@ -148,10 +144,7 @@ fn prompt_pack_selection(packs: &[LauncherPack]) -> Result<String> {
 }
 
 fn format_pack_label(pack: &LauncherPack) -> String {
-    format!(
-        "{} ({}) [{}]",
-        pack.pack_name, pack.pack_slug, pack.pack_id
-    )
+    format!("{} ({}) [{}]", pack.pack_name, pack.pack_slug, pack.pack_id)
 }
 
 fn resolve_token_name(token_name: Option<String>) -> Result<String> {

@@ -100,7 +100,10 @@ fn url_filename_stem(url: &str) -> Option<String> {
         return None;
     }
 
-    let stem = std::path::Path::new(last).file_stem()?.to_str()?.to_string();
+    let stem = std::path::Path::new(last)
+        .file_stem()?
+        .to_str()?
+        .to_string();
     if stem.trim().is_empty() {
         None
     } else {

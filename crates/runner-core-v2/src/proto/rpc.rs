@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use super::{LogLine, ProfileId, RequestId, RpcError, UnixMillis, SessionId};
+use super::{LogLine, ProfileId, RequestId, RpcError, SessionId, UnixMillis};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
@@ -29,7 +29,10 @@ pub struct Envelope<T> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Request {
-    Ping { client_version: String, protocol_version: u32 },
+    Ping {
+        client_version: String,
+        protocol_version: u32,
+    },
 
     Status {},
 
@@ -46,9 +49,13 @@ pub enum Request {
 
     Shutdown {},
 
-    LogsTail { lines: usize },
+    LogsTail {
+        lines: usize,
+    },
 
-    DaemonLogsTail { lines: usize },
+    DaemonLogsTail {
+        lines: usize,
+    },
 
     /// Request the daemon to create a manual backup of the current server (if configured).
     Backup {},
@@ -60,10 +67,17 @@ pub enum Request {
 
     Unsubscribe {},
 
-    RconExec { command: String },
+    RconExec {
+        command: String,
+    },
     RconOpen {},
-    RconSend { session: SessionId, command: String },
-    RconClose { session: SessionId },
+    RconSend {
+        session: SessionId,
+        command: String,
+    },
+    RconClose {
+        session: SessionId,
+    },
 
     SaveDeployKey {
         hub_url: String,
@@ -85,28 +99,55 @@ pub enum Topic {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Response {
-    Pong { daemon_version: String, protocol_version: u32 },
+    Pong {
+        daemon_version: String,
+        protocol_version: u32,
+    },
 
-    Status { daemon: DaemonStatus, server: ServerStatus },
+    Status {
+        daemon: DaemonStatus,
+        server: ServerStatus,
+    },
 
-    Started { profile: ProfileId, pid: i32, started_at_ms: UnixMillis },
-    Stopped { exit: Option<ExitInfo>, stopped_at_ms: UnixMillis },
+    Started {
+        profile: ProfileId,
+        pid: i32,
+        started_at_ms: UnixMillis,
+    },
+    Stopped {
+        exit: Option<ExitInfo>,
+        stopped_at_ms: UnixMillis,
+    },
 
-    LogsTail { lines: Vec<LogLine>, truncated: bool },
+    LogsTail {
+        lines: Vec<LogLine>,
+        truncated: bool,
+    },
 
-    Subscribed { topics: Vec<Topic> },
+    Subscribed {
+        topics: Vec<Topic>,
+    },
     Unsubscribed {},
 
     ShutdownAck {},
 
-    RconResult { text: String },
-    RconOpened { session: SessionId, prompt: String },
-    RconClosed { session: SessionId },
+    RconResult {
+        text: String,
+    },
+    RconOpened {
+        session: SessionId,
+        prompt: String,
+    },
+    RconClosed {
+        session: SessionId,
+    },
 
     DeployKeySaved {},
 
     /// Response for a manual backup request containing the created backup path.
-    BackupCreated { path: String },
+    BackupCreated {
+        path: String,
+    },
 
     Error(RpcError),
 }
@@ -124,7 +165,10 @@ pub struct DaemonStatus {
 pub enum ServerStatus {
     Idle {},
 
-    Starting { profile: ProfileId, since_ms: UnixMillis },
+    Starting {
+        profile: ProfileId,
+        since_ms: UnixMillis,
+    },
 
     Running {
         profile: ProfileId,
@@ -134,10 +178,23 @@ pub enum ServerStatus {
         meta: BTreeMap<String, String>,
     },
 
-    Stopping { profile: ProfileId, pid: i32, since_ms: UnixMillis },
+    Stopping {
+        profile: ProfileId,
+        pid: i32,
+        since_ms: UnixMillis,
+    },
 
-    Exited { profile: ProfileId, exit: ExitInfo, at_ms: UnixMillis },
-    Crashed { profile: ProfileId, exit: ExitInfo, at_ms: UnixMillis, last_logs: Vec<LogLine> },
+    Exited {
+        profile: ProfileId,
+        exit: ExitInfo,
+        at_ms: UnixMillis,
+    },
+    Crashed {
+        profile: ProfileId,
+        exit: ExitInfo,
+        at_ms: UnixMillis,
+        last_logs: Vec<LogLine>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2,11 +2,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use atlas_client::hub::HubClient;
-use serde::Deserialize;
-use tokio::time::{sleep, Duration};
-use tracing::{info, warn, debug, error};
+use tokio::time::{Duration, sleep};
+use tracing::{debug, info, warn};
 
-use runner_v2_rcon::{load_rcon_settings, RconClient};
+use runner_v2_rcon::{RconClient, load_rcon_settings};
 
 use crate::config::DeployKeyConfig;
 
@@ -88,7 +87,7 @@ pub async fn ensure_watchers(state: SharedState) {
 
             let worker_stop = watcher_stop_flag.clone();
             let worker_done = watcher_done_flag.clone();
-            let whub = hub_url.clone();
+            let whub = hub_url;
             let wdeploy = hub_deploy_key.clone();
             let w_whitelist_cfg = config.clone();
             let w_update_cfg = config.clone();
@@ -112,12 +111,17 @@ pub async fn ensure_watchers(state: SharedState) {
                             Ok(mut h) => {
                                 h.set_service_token(wdeploy.clone());
                                 let h = Arc::new(h);
-                                if let Err(err) = poll_whitelist(h, &w_whitelist_cfg, w_state_whitelist.clone()).await {
+                                if let Err(err) =
+                                    poll_whitelist(h, &w_whitelist_cfg, w_state_whitelist.clone())
+                                        .await
+                                {
                                     warn!("whitelist poll error: {err}");
                                 }
                             }
                             Err(err) => {
-                                warn!("watcher worker: failed to create hub client for whitelist: {err}");
+                                warn!(
+                                    "watcher worker: failed to create hub client for whitelist: {err}"
+                                );
                                 sleep(Duration::from_secs(5)).await;
                                 continue;
                             }
@@ -140,12 +144,16 @@ pub async fn ensure_watchers(state: SharedState) {
                             Ok(mut h) => {
                                 h.set_service_token(wdeploy.clone());
                                 let h = Arc::new(h);
-                                if let Err(err) = poll_pack_update(h, &w_update_cfg, w_state_update.clone()).await {
+                                if let Err(err) =
+                                    poll_pack_update(h, &w_update_cfg, w_state_update.clone()).await
+                                {
                                     warn!("pack update poll error: {err}");
                                 }
                             }
                             Err(err) => {
-                                warn!("watcher worker: failed to create hub client for updates: {err}");
+                                warn!(
+                                    "watcher worker: failed to create hub client for updates: {err}"
+                                );
                                 sleep(Duration::from_secs(5)).await;
                                 continue;
                             }
@@ -177,11 +185,20 @@ pub async fn ensure_watchers(state: SharedState) {
                 break;
             }
 
-            let backoff_ms = std::cmp::min(30_000, 1_000u64.saturating_mul(2u64.saturating_pow(std::cmp::min(failures, 10) as u32)));
+            let backoff_ms = std::cmp::min(
+                30_000,
+                1_000u64.saturating_mul(2u64.saturating_pow(std::cmp::min(failures, 10) as u32)),
+            );
             if failures > 5 {
-                warn!("watcher supervisor: worker exited unexpectedly {} times; backing off for {}ms", failures, backoff_ms);
+                warn!(
+                    "watcher supervisor: worker exited unexpectedly {} times; backing off for {}ms",
+                    failures, backoff_ms
+                );
             } else {
-                warn!("watcher supervisor: worker exited unexpectedly, restarting in {}ms", backoff_ms);
+                warn!(
+                    "watcher supervisor: worker exited unexpectedly, restarting in {}ms",
+                    backoff_ms
+                );
             }
 
             tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
@@ -189,15 +206,6 @@ pub async fn ensure_watchers(state: SharedState) {
     });
 
     info!("started watcher supervisor task");
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PackUpdateEvent {
-    pack_id: String,
-    #[serde(rename = "type")]
-    event_type: Option<String>,
-    channel: Option<String>,
 }
 
 async fn poll_whitelist(
@@ -222,10 +230,17 @@ async fn poll_pack_update(
 
     // Send the stored ETag as a quoted If-None-Match header (server expects quoted values).
     let current_etag_header = current_etag.as_ref().map(|tok| format!("\"{}\"", tok));
-    debug!("poll_pack_update: sending If-None-Match={:?}", current_etag_header);
+    debug!(
+        "poll_pack_update: sending If-None-Match={:?}",
+        current_etag_header
+    );
 
     match hub
-        .get_pack_metadata_with_etag(&config.pack_id, &config.channel, current_etag_header.as_deref())
+        .get_pack_metadata_with_etag(
+            &config.pack_id,
+            &config.channel,
+            current_etag_header.as_deref(),
+        )
         .await
     {
         Ok((None, returned_etag)) => {
@@ -273,16 +288,16 @@ async fn poll_pack_update(
             if current_build_id.as_deref() == Some(metadata.build_id.as_str()) {
                 // metadata changed / revalidated, but build didn't
                 debug!(
-                "pack metadata refreshed; build unchanged (build: {})",
-                metadata.build_id
-            );
+                    "pack metadata refreshed; build unchanged (build: {})",
+                    metadata.build_id
+                );
                 return Ok(());
             }
 
             info!(
-            "pack update detected; applying update (build: {})",
-            metadata.build_id
-        );
+                "pack update detected; applying update (build: {})",
+                metadata.build_id
+            );
 
             // proceed with update: capture the build id so we can update shared state on success
             let target_build_id = metadata.build_id.clone();
@@ -303,28 +318,8 @@ async fn poll_pack_update(
         }
     }
 
-
     // Apply the pack update
     apply_pack_update(hub, config, state).await
-}
-
-fn should_trigger_pack_update(payload: &str, pack_id: &str, channel: &str) -> bool {
-    if payload.is_empty() {
-        return false;
-    }
-
-    if let Ok(event) = serde_json::from_str::<PackUpdateEvent>(payload) {
-        let channel_matches = event
-            .channel
-            .as_deref()
-            .map(|value| value.eq_ignore_ascii_case(channel))
-            .unwrap_or(true);
-        return event.pack_id == pack_id
-            && channel_matches
-            && event.event_type.as_deref() != Some("ready");
-    }
-
-    false
 }
 
 async fn sync_whitelist(
@@ -509,15 +504,25 @@ async fn apply_pack_update(
                 let current = server_root.join("current");
                 match tokio::fs::remove_dir_all(&current).await {
                     Ok(_) => info!("removed existing current directory as fallback"),
-                    Err(err2) => return Err(format!("failed to clear existing server directory: {}", err2)),
+                    Err(err2) => {
+                        return Err(format!(
+                            "failed to clear existing server directory: {}",
+                            err2
+                        ));
+                    }
                 }
             }
         }
     }
 
-    start_server(profile.clone(), &build.bytes, server_root.clone(), state.clone())
-        .await
-        .map_err(|err| format!("failed to start server: {}", err.message))?;
+    start_server(
+        profile.clone(),
+        &build.bytes,
+        server_root.clone(),
+        state.clone(),
+    )
+    .await
+    .map_err(|err| format!("failed to start server: {}", err.message))?;
 
     // start_server sets child/launch_plan/status; poll_pack_update will persist the
     // applied build id into state after successful apply. We avoid resetting
@@ -541,7 +546,7 @@ fn normalize_etag_value(s: &str) -> String {
     };
     // Remove surrounding double quotes if present
     if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
-        s[1..s.len()-1].to_string()
+        s[1..s.len() - 1].to_string()
     } else {
         s.to_string()
     }

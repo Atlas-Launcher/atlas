@@ -5,7 +5,9 @@ pub struct SseParser {
 
 impl SseParser {
     pub fn new() -> Self {
-        Self { buffer: String::new() }
+        Self {
+            buffer: String::new(),
+        }
     }
 
     pub fn push_chunk(&mut self, chunk: &[u8]) -> Vec<String> {
