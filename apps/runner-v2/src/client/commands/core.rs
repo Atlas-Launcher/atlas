@@ -1,12 +1,11 @@
-use futures_util::StreamExt;
-use runner_core_v2::proto::{Envelope, Outbound, Request, Response};
-use runner_core_v2::PROTOCOL_VERSION;
-use std::collections::BTreeMap;
-use std::path::PathBuf;
 use crate::client::connect_or_start;
 use atlas_client::hub::HubClient;
+use runner_core_v2::proto::{Envelope, Outbound, Request, Response};
+use runner_core_v2::PROTOCOL_VERSION;
 use runner_v2_utils::{ensure_dir, runtime_paths_v2};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 use sysinfo::System;
 
 pub async fn ping() -> anyhow::Result<String> {
@@ -24,9 +23,12 @@ pub async fn ping() -> anyhow::Result<String> {
     let resp = read_response_payload(&mut framed).await?;
 
     match resp {
-        Response::Pong { daemon_version, protocol_version } => {
-            Ok(format!("pong: daemon={daemon_version} protocol={protocol_version}"))
-        }
+        Response::Pong {
+            daemon_version,
+            protocol_version,
+        } => Ok(format!(
+            "pong: daemon={daemon_version} protocol={protocol_version}"
+        )),
         other => Ok(format!("unexpected: {other:?}")),
     }
 }
@@ -43,9 +45,7 @@ pub async fn shutdown() -> anyhow::Result<String> {
     let resp = read_response_payload(&mut framed).await?;
 
     match resp {
-        Response::ShutdownAck {} => {
-            Ok(format!("Daemon acknowledged shutdown request."))
-        }
+        Response::ShutdownAck {} => Ok(format!("Daemon acknowledged shutdown request.")),
         other => Ok(format!("unexpected: {other:?}")),
     }
 }
@@ -71,7 +71,9 @@ pub async fn up(
         let build = hub.get_build_blob(&config.pack_id, &config.channel).await?;
         let paths = runtime_paths_v2();
         ensure_dir(&paths.runtime_dir)?;
-        let blob_path = paths.runtime_dir.join(format!("pack-{}-{}.bin", config.pack_id, config.channel));
+        let blob_path = paths
+            .runtime_dir
+            .join(format!("pack-{}-{}.bin", config.pack_id, config.channel));
         tokio::fs::write(&blob_path, build.bytes).await?;
         blob_path
     };
@@ -101,7 +103,9 @@ pub async fn up(
                     std::io::stdin().read_line(&mut input).unwrap();
                     let answer = input.trim().to_ascii_lowercase();
                     answer == "y" || answer == "yes"
-                }).await.unwrap();
+                })
+                .await
+                .unwrap();
                 if !accepted {
                     anyhow::bail!("EULA not accepted. Re-run with --accept-eula to proceed.");
                 }
@@ -126,39 +130,49 @@ pub async fn up(
                     3 => "dev".to_string(),
                     _ => "production".to_string(),
                 }
-            }).await.unwrap();
+            })
+            .await
+            .unwrap();
             config.channel = channel;
         }
-        let max_ram_val = if let Some(arg_val) = max_ram {
-            arg_val
+        let max_ram_val_mb = if let Some(arg_val_mb) = max_ram {
+            arg_val_mb.max(512)
         } else if let Some(existing) = config.max_ram {
-            existing
+            normalize_max_ram_mb(existing)
         } else {
             // prompt
-            let default = get_default_max_ram();
-            println!("Default RAM limit is {} GB. Override? (y/n)", default);
+            let default_mb = get_default_max_ram_mb();
+            let default_gb = default_mb.div_ceil(1024);
+            println!(
+                "Default RAM limit is {} GB ({} MB). Override? (y/n)",
+                default_gb, default_mb
+            );
             let do_override = tokio::task::spawn_blocking(|| {
-                use std::io::{self, BufRead};
+                use std::io::{self};
                 let stdin = io::stdin();
                 let mut input = String::new();
                 stdin.read_line(&mut input).unwrap();
                 input.trim().to_lowercase() == "y"
-            }).await.unwrap();
+            })
+            .await
+            .unwrap();
             if do_override {
                 println!("Enter RAM limit in GB:");
-                let ram = tokio::task::spawn_blocking(move || {
-                    use std::io::{self, BufRead};
+                let ram_gb = tokio::task::spawn_blocking(move || {
+                    use std::io::{self};
                     let stdin = io::stdin();
                     let mut input = String::new();
                     stdin.read_line(&mut input).unwrap();
-                    input.trim().parse::<u32>().unwrap_or(default)
-                }).await.unwrap();
-                ram
+                    input.trim().parse::<u32>().unwrap_or(default_gb)
+                })
+                .await
+                .unwrap();
+                (ram_gb.max(1)) * 1024
             } else {
-                default
+                default_mb
             }
         };
-        config.max_ram = Some(max_ram_val);
+        config.max_ram = Some(max_ram_val_mb);
         config.should_autostart = Some(true);
         let _ = save_deploy_key(&config);
     }
@@ -232,14 +246,16 @@ fn config_dir() -> anyhow::Result<PathBuf> {
     if let Some(home) = dirs::home_dir() {
         return Ok(home.join(".atlas").join("runnerd"));
     }
-    Err(anyhow::anyhow!("Unable to resolve a writable data directory"))
+    Err(anyhow::anyhow!(
+        "Unable to resolve a writable data directory"
+    ))
 }
 
-fn get_default_max_ram() -> u32 {
+fn get_default_max_ram_mb() -> u32 {
     let mut system = System::new();
     system.refresh_memory();
     let total_gb = (system.total_memory() / 1024 / 1024 / 1024) as u32;
-    if total_gb <= 8 {
+    let target_gb = if total_gb <= 8 {
         (total_gb.saturating_sub(2)).max(1)
     } else {
         #[cfg(target_os = "macos")]
@@ -260,6 +276,34 @@ fn get_default_max_ram() -> u32 {
         {
             8
         }
+    };
+    target_gb * 1024
+}
+
+fn normalize_max_ram_mb(value: u32) -> u32 {
+    if value == 0 {
+        return get_default_max_ram_mb();
+    }
+    // Backward compatibility: previous clients stored GB-like values.
+    if value <= 64 {
+        return value * 1024;
+    }
+    value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_max_ram_mb;
+
+    #[test]
+    fn normalizes_legacy_gb_values_to_mb() {
+        assert_eq!(normalize_max_ram_mb(8), 8192);
+        assert_eq!(normalize_max_ram_mb(16), 16384);
+    }
+
+    #[test]
+    fn preserves_mb_values() {
+        assert_eq!(normalize_max_ram_mb(4096), 4096);
     }
 }
 
