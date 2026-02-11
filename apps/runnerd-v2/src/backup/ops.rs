@@ -1,15 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tokio::fs;
+use std::fs as stdfs;
 use tokio::task;
 use tracing::{info, warn};
-use std::fs as stdfs;
 
-use runner_v2_rcon::{load_rcon_settings, RconClient};
-
-use crate::supervisor::{now_millis, SharedState};
 use crate::backup::rcon::{rcon_save_off, rcon_save_on};
+use crate::supervisor::{SharedState, now_millis};
 
 /// Perform a world backup while the server is running if possible.
 /// Uses RCON save-off/save-on if available, and does the heavy I/O on a blocking thread.
@@ -27,8 +24,14 @@ pub async fn backup_world(server_root: &Path, _state: SharedState) -> Result<Pat
         Err(e) => warn!("rcon save-off failed: {}", e),
     }
 
-    let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| format!("time error: {}", e))?.as_millis();
-    let backup = server_root.join(".runner").join("backup").join(format!("backup-{}", ts));
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("time error: {}", e))?
+        .as_millis();
+    let backup = server_root
+        .join(".runner")
+        .join("backup")
+        .join(format!("backup-{}", ts));
 
     // Perform blocking copy on threadpool
     let cur = current.clone();
@@ -38,7 +41,8 @@ pub async fn backup_world(server_root: &Path, _state: SharedState) -> Result<Pat
     let copy_res: Result<(), String> = task::spawn_blocking(move || -> Result<(), String> {
         // Ensure parent exists
         if let Some(parent) = tmp.parent() {
-            stdfs::create_dir_all(parent).map_err(|e| format!("create backup parent dir failed: {}", e))?;
+            stdfs::create_dir_all(parent)
+                .map_err(|e| format!("create backup parent dir failed: {}", e))?;
         }
         // Remove any stale tmp dir
         let _ = stdfs::remove_dir_all(&tmp);
@@ -57,7 +61,13 @@ pub async fn backup_world(server_root: &Path, _state: SharedState) -> Result<Pat
         }
 
         // copy identity files
-        for name in &["whitelist.json", "ops.json", "banned-ips.json", "banned-players.json", "usercache.json"] {
+        for name in &[
+            "whitelist.json",
+            "ops.json",
+            "banned-ips.json",
+            "banned-players.json",
+            "usercache.json",
+        ] {
             let s = cur.join(name);
             if s.exists() {
                 let d = tmp.join(name);
@@ -74,17 +84,26 @@ pub async fn backup_world(server_root: &Path, _state: SharedState) -> Result<Pat
 
         // Write a small manifest so users can inspect backup contents easily
         let manifest_path = tmp.join("backup_manifest.txt");
-        let mut manifest_content = format!("backup_time_ms={}\n", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
+        let mut manifest_content = format!(
+            "backup_time_ms={}\n",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        );
         for e in &copied_entries {
             manifest_content.push_str(&format!("{}\n", e));
         }
-        stdfs::write(&manifest_path, manifest_content).map_err(|e| format!("write manifest failed: {}", e))?;
+        stdfs::write(&manifest_path, manifest_content)
+            .map_err(|e| format!("write manifest failed: {}", e))?;
 
         // Atomically rename tmp -> final dst
         stdfs::rename(&tmp, &dst).map_err(|e| format!("rename tmp to dst failed: {}", e))?;
 
         Ok(())
-    }).await.map_err(|e| format!("join error: {}", e))?;
+    })
+    .await
+    .map_err(|e| format!("join error: {}", e))?;
 
     // Regardless of copy result, attempt to re-enable saves if we disabled them.
     if used_rcon {
@@ -133,7 +152,9 @@ pub async fn archive_current_for_force_reinstall(server_root: &Path) -> Result<P
         stdfs::create_dir_all(&backup_dir).map_err(|e| format!("create backup dir: {}", e))?;
         stdfs::rename(&cur, &back).map_err(|e| format!("rename failed: {}", e))?;
         Ok(())
-    }).await.map_err(|e| format!("join error: {}", e))??;
+    })
+    .await
+    .map_err(|e| format!("join error: {}", e))??;
 
     Ok(backup)
 }

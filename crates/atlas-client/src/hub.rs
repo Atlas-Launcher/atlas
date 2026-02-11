@@ -6,9 +6,9 @@ use std::time::{Duration, Instant};
 use url::Url;
 
 use crate::device_code::{
+    hub_device_code_endpoint, hub_device_token_endpoint, parse_device_token_poll_body,
     DeviceCodeRequest, DeviceCodeResponse, DeviceTokenPollStatus, DeviceTokenRequest,
-    StandardDeviceTokenResponse, hub_device_code_endpoint, hub_device_token_endpoint,
-    parse_device_token_poll_body, DEFAULT_ATLAS_DEVICE_CLIENT_ID, DEFAULT_ATLAS_DEVICE_SCOPE,
+    StandardDeviceTokenResponse, DEFAULT_ATLAS_DEVICE_CLIENT_ID, DEFAULT_ATLAS_DEVICE_SCOPE,
 };
 
 pub struct HubClient {
@@ -163,9 +163,7 @@ impl HubClient {
     pub fn new(base_url: &str) -> Result<Self> {
         let base_url = Url::parse(base_url)?;
         Ok(Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()?,
+            client: Client::builder().timeout(Duration::from_secs(30)).build()?,
             base_url,
             auth: Mutex::new(AuthState::None),
         })
@@ -245,7 +243,9 @@ impl HubClient {
     pub async fn validate_service_token(&self) -> Result<RunnerTokenExchange> {
         let auth = { self.auth.lock().expect("auth lock poisoned").clone() };
         match auth {
-            AuthState::ServiceToken(state) => self.exchange_service_token(&state.service_token).await,
+            AuthState::ServiceToken(state) => {
+                self.exchange_service_token(&state.service_token).await
+            }
             _ => anyhow::bail!("No service token configured"),
         }
     }
@@ -478,7 +478,9 @@ impl HubClient {
 
             let effective = returned
                 .or_else(|| etag.map(|s| s.to_string()))
-                .ok_or_else(|| anyhow::anyhow!("server returned 304 but no etag was provided or returned"))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("server returned 304 but no etag was provided or returned")
+                })?;
 
             return Ok((None, effective));
         }
@@ -486,7 +488,11 @@ impl HubClient {
         let status = response.status();
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
-            anyhow::bail!("Pack metadata request failed (HTTP {}): {}", status.as_u16(), body);
+            anyhow::bail!(
+                "Pack metadata request failed (HTTP {}): {}",
+                status.as_u16(),
+                body
+            );
         }
 
         let etag = response
@@ -500,14 +506,15 @@ impl HubClient {
         Ok((Some(metadata), etag))
     }
 
-    pub async fn get_whitelist_with_version(&self, pack_id: &str, etag: Option<&str>) -> Result<(Vec<WhitelistEntry>, String)> {
+    pub async fn get_whitelist_with_version(
+        &self,
+        pack_id: &str,
+        etag: Option<&str>,
+    ) -> Result<(Vec<WhitelistEntry>, String)> {
         let url = self
             .base_url
             .join(&format!("/api/v1/runner/packs/{pack_id}/whitelist"))?;
-        let mut request = self
-            .client
-            .get(url)
-            .headers(self.get_auth_headers().await?);
+        let mut request = self.client.get(url).headers(self.get_auth_headers().await?);
 
         if let Some(etag) = etag {
             request = request.header("if-none-match", etag);
@@ -517,7 +524,8 @@ impl HubClient {
 
         if response.status() == 304 {
             // Not modified, return empty vec with the same etag
-            let etag = response.headers()
+            let etag = response
+                .headers()
                 .get("etag")
                 .and_then(|h| h.to_str().ok())
                 .unwrap_or(etag.unwrap_or(""));
@@ -534,7 +542,8 @@ impl HubClient {
             );
         }
 
-        let etag = response.headers()
+        let etag = response
+            .headers()
             .get("etag")
             .and_then(|h| h.to_str().ok())
             .unwrap_or("")
@@ -593,7 +602,9 @@ impl HubClient {
                 self.set_token(token.access_token.clone());
                 Ok(Some(token.access_token))
             }
-            DeviceTokenPollStatus::AuthorizationPending | DeviceTokenPollStatus::SlowDown => Ok(None),
+            DeviceTokenPollStatus::AuthorizationPending | DeviceTokenPollStatus::SlowDown => {
+                Ok(None)
+            }
             DeviceTokenPollStatus::ExpiredToken => anyhow::bail!("Device code expired"),
             DeviceTokenPollStatus::AccessDenied => anyhow::bail!("Access denied"),
             DeviceTokenPollStatus::Fatal(err) => anyhow::bail!("Authentication failed: {}", err),
@@ -619,7 +630,9 @@ impl HubClient {
         &self,
         payload: &LauncherLinkCompleteRequest,
     ) -> Result<LauncherLinkComplete> {
-        let url = self.base_url.join("/api/v1/launcher/link-sessions/complete")?;
+        let url = self
+            .base_url
+            .join("/api/v1/launcher/link-sessions/complete")?;
         let response = self
             .client
             .post(url)

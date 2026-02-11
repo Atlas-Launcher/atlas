@@ -10,8 +10,8 @@ pub fn default_memory() -> Result<String> {
 }
 
 fn read_mem_total_kb() -> Result<u64> {
-    let content = std::fs::read_to_string("/proc/meminfo")
-        .context("Failed to read /proc/meminfo")?;
+    let content =
+        std::fs::read_to_string("/proc/meminfo").context("Failed to read /proc/meminfo")?;
     for line in content.lines() {
         if let Some(rest) = line.strip_prefix("MemTotal:") {
             let value = rest.trim().split_whitespace().next().unwrap_or("0");

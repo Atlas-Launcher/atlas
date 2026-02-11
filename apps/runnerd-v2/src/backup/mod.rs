@@ -2,14 +2,17 @@ pub mod ops;
 pub mod rcon;
 pub mod scheduler;
 
-use std::path::PathBuf;
 use crate::supervisor::SharedState;
+use std::path::PathBuf;
 
 /// Perform a backup before an update. This will use RCON save-off/save-all when available
 /// to ensure a consistent copy of world directories. The function returns the created backup
 /// directory path on success.
 #[allow(dead_code)]
-pub async fn backup_before_update(server_root: &PathBuf, state: SharedState) -> Result<PathBuf, String> {
+pub async fn backup_before_update(
+    server_root: &PathBuf,
+    state: SharedState,
+) -> Result<PathBuf, String> {
     // Delegate to ops which will use rcon helper if possible
     ops::backup_world(server_root, state).await
 }

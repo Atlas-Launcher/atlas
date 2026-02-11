@@ -1,7 +1,7 @@
 mod args;
 pub(crate) mod download;
 mod error;
-mod java;
+pub(crate) mod java;
 mod libraries;
 pub(crate) mod loaders;
 pub(crate) mod manifest;

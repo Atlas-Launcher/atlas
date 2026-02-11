@@ -1,8 +1,11 @@
+use crate::errors::ProvisionError;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
-use crate::errors::ProvisionError;
 
-pub(crate) fn sha256_extracted_tree(root: &Path, exclude: &[PathBuf]) -> Result<String, ProvisionError> {
+pub(crate) fn sha256_extracted_tree(
+    root: &Path,
+    exclude: &[PathBuf],
+) -> Result<String, ProvisionError> {
     // Collect all regular files, sorted by relative path.
     let mut files = Vec::<PathBuf>::new();
 
@@ -63,8 +66,8 @@ pub async fn verify_extracted_jdk_hash(
     let actual = tokio::task::spawn_blocking(move || {
         sha256_extracted_tree(&install_dir_clone, &[checksum_path_clone])
     })
-        .await
-        .map_err(|e| ProvisionError::Invalid(format!("java hash task failed: {e}")))??;
+    .await
+    .map_err(|e| ProvisionError::Invalid(format!("java hash task failed: {e}")))??;
 
     if actual != expected {
         return Err(ProvisionError::Invalid(format!(
@@ -75,3 +78,61 @@ pub async fn verify_extracted_jdk_hash(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{sha256_extracted_tree, verify_extracted_jdk_hash};
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!("atlas-runner-provision-{prefix}-{nanos}"))
+    }
+
+    #[test]
+    fn tree_hash_changes_when_runtime_contents_change() {
+        let dir = unique_temp_dir("tree-hash");
+        std::fs::create_dir_all(dir.join("bin")).expect("create bin dir");
+        std::fs::write(dir.join("bin").join("java"), b"java-a").expect("write java file");
+
+        let first = sha256_extracted_tree(&dir, &[]).expect("hash first tree");
+        std::fs::write(dir.join("bin").join("java"), b"java-b").expect("rewrite java file");
+        let second = sha256_extracted_tree(&dir, &[]).expect("hash second tree");
+
+        assert_ne!(first, second);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn verify_extracted_jdk_hash_succeeds_then_detects_tampering() {
+        let dir = unique_temp_dir("verify-hash");
+        std::fs::create_dir_all(dir.join("bin")).expect("create bin dir");
+        std::fs::create_dir_all(dir.join("lib")).expect("create lib dir");
+
+        let java_bin = dir.join("bin").join("java");
+        let checksum_path = dir.join("java.hash");
+        std::fs::write(&java_bin, b"java-binary").expect("write java binary");
+        std::fs::write(dir.join("lib").join("rt.jar"), b"runtime-bytes").expect("write runtime");
+
+        let expected = sha256_extracted_tree(&dir, std::slice::from_ref(&checksum_path))
+            .expect("hash extracted tree");
+        tokio::fs::write(&checksum_path, format!("{expected}\n"))
+            .await
+            .expect("write checksum");
+
+        verify_extracted_jdk_hash(&dir, &java_bin)
+            .await
+            .expect("checksum should match");
+
+        std::fs::write(&java_bin, b"tampered-java-binary").expect("tamper java binary");
+        let err = verify_extracted_jdk_hash(&dir, &java_bin)
+            .await
+            .expect_err("checksum mismatch expected");
+        assert!(err.to_string().contains("checksum mismatch"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}

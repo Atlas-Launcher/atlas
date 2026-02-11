@@ -72,14 +72,9 @@ async fn refresh_atlas_session(session: &AtlasSession) -> Result<AtlasSession, A
         .clone()
         .ok_or_else(|| "Missing Atlas refresh token; please sign in again.".to_string())?;
 
-    let refreshed = atlas::refresh_token(
-        &session.auth_base_url,
-        &session.client_id,
-        &refresh_token,
-    )
-    .await?;
-    let user_info =
-        atlas::fetch_user_info(&session.auth_base_url, &refreshed.access_token).await?;
+    let refreshed =
+        atlas::refresh_token(&session.auth_base_url, &session.client_id, &refresh_token).await?;
+    let user_info = atlas::fetch_user_info(&session.auth_base_url, &refreshed.access_token).await?;
 
     Ok(AtlasSession {
         access_token: refreshed.access_token,

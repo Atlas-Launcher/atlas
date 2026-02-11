@@ -19,8 +19,10 @@ pub fn now_millis() -> u64 {
 
 pub async fn current_server_root(state: &SharedState) -> Option<PathBuf> {
     let guard = state.lock().await;
-    guard
-        .server_root
-        .clone()
-        .or_else(|| guard.profile.as_ref().map(|profile| default_server_root(profile)))
+    guard.server_root.clone().or_else(|| {
+        guard
+            .profile
+            .as_ref()
+            .map(|profile| default_server_root(profile))
+    })
 }

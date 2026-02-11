@@ -1,6 +1,7 @@
 pub mod client;
 pub mod errors;
 pub mod json;
+pub mod retry;
 pub mod text;
 
 pub use client::{shared_client, HttpClient, ReqwestHttpClient};

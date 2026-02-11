@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use protocol::{decode_blob, PackBlob};
+use protocol::{PackBlob, decode_blob};
 
 use crate::{
     deps::{provider::DependencyProvider, verify},
@@ -9,14 +9,14 @@ use crate::{
     launch::{self, LaunchPlan},
 };
 
-mod plan;
-mod staging;
-mod preserve;
-mod marker;
-mod pointers;
-mod loader;
 mod eula;
+mod loader;
+mod marker;
+mod plan;
+mod pointers;
+mod preserve;
 mod server_properties;
+mod staging;
 
 pub async fn ensure_applied_from_packblob_bytes(
     server_root: &Path,
@@ -27,12 +27,9 @@ pub async fn ensure_applied_from_packblob_bytes(
     let pack = decode_packblob(pack_blob_bytes)?;
 
     // 2) Ensure java runtime is available
-    let java_bin = java::ensure_java_for_minecraft(
-        server_root,
-        &pack.metadata.minecraft_version,
-        None,
-    )
-    .await?;
+    let java_bin =
+        java::ensure_java_for_minecraft(server_root, &pack.metadata.minecraft_version, None)
+            .await?;
 
     // 3) Short-circuit if already applied
     if marker::is_pack_applied(server_root, &pack).await? {
@@ -66,13 +63,8 @@ pub async fn ensure_applied_from_packblob_bytes(
     }
 
     // 5c) Ensure server loader is installed
-    loader::ensure_loader_installed(
-        server_root,
-        &staging_current,
-        &pack.metadata,
-        &java_bin,
-    )
-    .await?;
+    loader::ensure_loader_installed(server_root, &staging_current, &pack.metadata, &java_bin)
+        .await?;
 
     // 6) Preserve selected files from existing current -> staging/current
     preserve::preserve_from_existing(server_root, &staging_current).await?;
@@ -94,6 +86,6 @@ pub async fn ensure_applied_from_packblob_bytes(
 }
 
 fn decode_packblob(bytes: &[u8]) -> Result<PackBlob, ProvisionError> {
-    use prost::Message;
-    decode_blob(bytes).map_err(|e| ProvisionError::Invalid(format!("Failed to decode PackBlob: {e}")))
+    decode_blob(bytes)
+        .map_err(|e| ProvisionError::Invalid(format!("Failed to decode PackBlob: {e}")))
 }

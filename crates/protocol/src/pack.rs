@@ -1,4 +1,8 @@
-use crate::{Dependency, DependencyKind, DependencySide, Hash, HashAlgorithm, Manifest, PackBlob, PackMetadata, Platform, PlatformFilter, ProtocolError, config::atlas, config::mods, encode_blob};
+use crate::{
+    Dependency, DependencyKind, DependencySide, Hash, HashAlgorithm, Manifest, PackBlob,
+    PackMetadata, Platform, PlatformFilter, ProtocolError, config::atlas, config::mods,
+    encode_blob,
+};
 use std::collections::BTreeMap;
 
 pub struct BuildInput {
@@ -54,8 +58,8 @@ fn build_manifest(files: &BTreeMap<String, Vec<u8>>) -> Result<Manifest, Protoco
             continue;
         };
 
-        let contents = std::str::from_utf8(bytes)
-            .map_err(|_| ProtocolError::MissingField("pointer.toml"))?;
+        let contents =
+            std::str::from_utf8(bytes).map_err(|_| ProtocolError::MissingField("pointer.toml"))?;
         let entry = mods::parse_mod_toml(contents)
             .map_err(|_| ProtocolError::MissingField("pointer.toml"))?;
 
@@ -93,7 +97,6 @@ fn dependency_kind_from_path(path: &str) -> Option<DependencyKind> {
         None
     }
 }
-
 
 fn select_hash(hashes: Option<&mods::ModHashes>) -> Option<Hash> {
     let hashes = hashes?;

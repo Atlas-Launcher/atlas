@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tokio::process::Child;
 use tokio::sync::Mutex;
-use std::sync::atomic::AtomicBool;
 
 use runner_core_v2::proto::{ProfileId, ServerStatus};
 use runner_provision_v2::LaunchPlan;
@@ -57,6 +57,9 @@ impl ServerState {
     }
 
     pub fn is_running(&self) -> bool {
-        matches!(self.status, ServerStatus::Running { .. } | ServerStatus::Starting { .. })
+        matches!(
+            self.status,
+            ServerStatus::Running { .. } | ServerStatus::Starting { .. }
+        )
     }
 }

@@ -1,8 +1,8 @@
-use anyhow::{Result, Context};
-use std::process::Stdio;
-use tokio::process::{Command, Child};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use anyhow::{Context, Result};
 use std::path::PathBuf;
+use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, Command};
 // PackBlob removed
 use tokio::fs;
 
@@ -35,7 +35,7 @@ impl Supervisor {
         if !self.pid_file.exists() {
             return false;
         }
-        
+
         if let Ok(pid_str) = fs::read_to_string(&self.pid_file).await {
             let pid_str: String = pid_str;
             if let Ok(pid) = pid_str.trim().parse::<u32>() {
@@ -48,7 +48,7 @@ impl Supervisor {
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .status();
-                
+
                 return status.map(|s| s.success()).unwrap_or(false);
             }
         }
@@ -57,7 +57,7 @@ impl Supervisor {
 
     pub async fn spawn(&self) -> Result<Child> {
         let mut cmd = Command::new(&self.command);
-        
+
         cmd.current_dir(&self.runtime_dir)
             .args(&self.args)
             .stdout(Stdio::piped())
@@ -69,9 +69,9 @@ impl Supervisor {
 
         let child = cmd.spawn().context("Failed to spawn Java process")?;
         let pid = child.id().context("Failed to get process ID")?;
-        
+
         let _: () = fs::write(&self.pid_file, pid.to_string()).await?;
-        
+
         let mut child = child;
 
         let stdout = child.stdout.take().unwrap();
@@ -93,12 +93,5 @@ impl Supervisor {
         });
 
         Ok(child)
-    }
-
-    pub async fn stop(&self, child: &mut Child) -> Result<()> {
-        // Ideally we send "stop" via RCON first
-        // If that fails or timeout, we kill the process
-        child.kill().await.context("Failed to kill process")?;
-        Ok(())
     }
 }

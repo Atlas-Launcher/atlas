@@ -305,6 +305,11 @@ mod tests {
     fn preserves_mb_values() {
         assert_eq!(normalize_max_ram_mb(4096), 4096);
     }
+
+    #[test]
+    fn treats_zero_as_default_fallback_mb() {
+        assert!(normalize_max_ram_mb(0) > 0);
+    }
 }
 
 fn default_channel() -> String {

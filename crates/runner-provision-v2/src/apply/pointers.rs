@@ -5,12 +5,10 @@ use mod_resolver::pointer as resolver_pointer;
 
 pub use resolver_pointer::PointerKind;
 
-
 pub fn is_pointer_path(rel_path: &Path) -> Option<PointerKind> {
     let s = rel_path.to_string_lossy();
     resolver_pointer::is_pointer_path(&s)
 }
-
 
 /// Convert pointer_path + kind + url into the actual destination relative path.
 ///
@@ -35,4 +33,3 @@ pub fn destination_relative_path(
         s, kind, url,
     )))
 }
-

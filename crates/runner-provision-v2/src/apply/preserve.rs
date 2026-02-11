@@ -1,8 +1,11 @@
-use std::path::{Path, PathBuf};
 use crate::errors::ProvisionError;
 use futures_util::future::BoxFuture;
+use std::path::{Path, PathBuf};
 
-pub async fn preserve_from_existing(server_root: &Path, staging_current: &Path) -> Result<(), ProvisionError> {
+pub async fn preserve_from_existing(
+    server_root: &Path,
+    staging_current: &Path,
+) -> Result<(), ProvisionError> {
     let current = server_root.join("current");
     if !tokio::fs::try_exists(&current).await? {
         return Ok(());
@@ -14,7 +17,13 @@ pub async fn preserve_from_existing(server_root: &Path, staging_current: &Path) 
     }
 
     // Preserve identity files
-    for name in ["whitelist.json", "ops.json", "banned-ips.json", "banned-players.json", "usercache.json"] {
+    for name in [
+        "whitelist.json",
+        "ops.json",
+        "banned-ips.json",
+        "banned-players.json",
+        "usercache.json",
+    ] {
         copy_file_if_exists(current.join(name), staging_current.join(name)).await?;
     }
 
@@ -31,7 +40,10 @@ async fn copy_file_if_exists(src: PathBuf, dst: PathBuf) -> Result<(), Provision
     Ok(())
 }
 
-fn copy_dir_if_exists(src: PathBuf, dst: PathBuf) -> BoxFuture<'static, Result<(), ProvisionError>> {
+fn copy_dir_if_exists(
+    src: PathBuf,
+    dst: PathBuf,
+) -> BoxFuture<'static, Result<(), ProvisionError>> {
     Box::pin(async move {
         if !tokio::fs::try_exists(&src).await? {
             return Ok(());
