@@ -141,19 +141,18 @@ watch(
 <template>
   <div v-if="props.open" class="fixed inset-0 z-[70] bg-black/55 backdrop-blur-[6px] p-4 md:p-6">
     <div class="mx-auto flex h-full max-w-3xl items-center justify-center">
-      <Card class="glass w-full max-h-full overflow-hidden bg-background/95">
-        <CardHeader class="space-y-3">
-          <div v-if="allReady" class="flex items-center justify-end">
-            <button
-              class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 text-muted-foreground hover:bg-background/60 hover:text-foreground"
-              type="button"
-              :disabled="props.working"
-              aria-label="Close"
-              @click="emit('close')"
-            >
-              <X class="h-4 w-4" />
-            </button>
-          </div>
+      <Card class="glass relative w-full max-h-full overflow-hidden bg-background/95">
+        <button
+          v-if="allReady"
+          class="absolute right-6 top-5 inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 text-muted-foreground hover:bg-background/60 hover:text-foreground"
+          type="button"
+          :disabled="props.working"
+          aria-label="Close"
+          @click="emit('close')"
+        >
+          <X class="h-4 w-4" />
+        </button>
+        <CardHeader class="space-y-3 pr-14">
           <CardTitle>Get Ready to Play</CardTitle>
           <CardDescription>
             Sign in and connect your accounts.
