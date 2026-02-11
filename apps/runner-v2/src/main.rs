@@ -78,6 +78,7 @@ enum Cmd {
         #[arg(long, value_name = "RUNNERD_PATH")]
         runnerd_path: Option<PathBuf>,
     },
+    Backup,
 }
 
 #[tokio::main]
@@ -152,6 +153,10 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Install { user, runnerd_path } => {
             install_systemd(user, runnerd_path)?;
             println!("atlas-runnerd systemd service enabled and started.");
+        }
+        Cmd::Backup => {
+            let path = client::backup::backup_now().await?;
+            println!("backup created: {}", path);
         }
     }
     Ok(())

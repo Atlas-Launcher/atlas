@@ -1,4 +1,5 @@
 mod commands;
+pub mod backup;
 
 use std::time::Duration;
 use tokio::process::Command;
@@ -87,4 +88,3 @@ async fn start_daemon_detached() -> anyhow::Result<()> {
 
     Ok(())
 }
-
