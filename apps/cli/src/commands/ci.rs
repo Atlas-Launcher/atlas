@@ -106,12 +106,6 @@ fn sanitize_relative_path(value: &str) -> Result<std::path::PathBuf> {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GithubTokenResponse {
-    access_token: String,
-}
-
-#[derive(Deserialize)]
 struct GithubWorkflowListResponse {
     workflows: Vec<GithubWorkflow>,
 }
@@ -131,7 +125,7 @@ fn enable_github_workflows_if_needed(client: &HubClient, root: &Path, hub_url: &
         )
     })?;
 
-    let hub_token = auth_store::require_access_token_for_hub(hub_url).with_context(
+    let _hub_token = auth_store::require_access_token_for_hub(hub_url).with_context(
         || "Atlas auth is required to enable workflows. Run `atlas auth signin` and retry.",
     )?;
     let github_token = request_linked_github_access_token(client)?.context(

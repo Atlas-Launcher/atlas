@@ -30,18 +30,6 @@ struct RemotePack {
     pack_name: String,
     pack_slug: String,
     repo_url: Option<String>,
-    channel: String,
-}
-
-#[derive(Deserialize)]
-struct LauncherPacksResponse {
-    packs: Vec<RemotePack>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GithubTokenResponse {
-    access_token: String,
 }
 
 pub fn run(args: PullArgs) -> Result<()> {
@@ -100,7 +88,6 @@ fn fetch_remote_packs(client: &HubClient) -> Result<Vec<RemotePack>> {
             pack_name: pack.pack_name,
             pack_slug: pack.pack_slug,
             repo_url: pack.repo_url,
-            channel: pack.channel,
         })
         .collect())
 }
