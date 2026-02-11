@@ -6,10 +6,12 @@ use sha1::{Digest, Sha1};
 use std::path::Path;
 use tokio::fs as async_fs;
 use tokio::io::AsyncWriteExt;
+use tokio::time::{sleep, Duration};
 
 use super::manifest::Download;
 
 pub const DOWNLOAD_CONCURRENCY: usize = 12;
+const DOWNLOAD_MAX_RETRIES: usize = 3;
 
 pub async fn download_if_needed(
     client: &Client,
@@ -82,15 +84,16 @@ pub async fn download_raw(
         ensure_dir(parent)?;
     }
 
-    let mut request = client.get(url);
-    if allow_resume && existing > 0 {
-        request = request.header(RANGE, format!("bytes={}-", existing));
-    }
-
-    let mut response = request
-        .send()
-        .await
-        .map_err(|err| format!("Download failed: {err}"))?;
+    let mut response = send_with_retries(
+        client,
+        url,
+        if allow_resume && existing > 0 {
+            Some(format!("bytes={}-", existing))
+        } else {
+            None
+        },
+    )
+    .await?;
 
     if allow_resume && existing > 0 {
         match response.status() {
@@ -102,11 +105,7 @@ pub async fn download_raw(
                     }
                 }
                 existing = 0;
-                response = client
-                    .get(url)
-                    .send()
-                    .await
-                    .map_err(|err| format!("Download failed: {err}"))?;
+                response = send_with_retries(client, url, None).await?;
             }
             status if status.is_success() => {
                 existing = 0;
@@ -160,6 +159,55 @@ pub async fn download_raw(
     }
 
     Ok(())
+}
+
+fn retryable_status(status: StatusCode) -> bool {
+    status == StatusCode::REQUEST_TIMEOUT
+        || status == StatusCode::TOO_MANY_REQUESTS
+        || status.is_server_error()
+}
+
+async fn send_with_retries(
+    client: &Client,
+    url: &str,
+    range_header: Option<String>,
+) -> Result<reqwest::Response, String> {
+    let mut backoff = Duration::from_millis(250);
+    for attempt in 0..=DOWNLOAD_MAX_RETRIES {
+        let mut request = client.get(url);
+        if let Some(range) = range_header.as_ref() {
+            request = request.header(RANGE, range.clone());
+        }
+
+        match request.send().await {
+            Ok(response) => {
+                let status = response.status();
+                if status.is_success()
+                    || status == StatusCode::PARTIAL_CONTENT
+                    || status == StatusCode::RANGE_NOT_SATISFIABLE
+                {
+                    return Ok(response);
+                }
+                if retryable_status(status) && attempt < DOWNLOAD_MAX_RETRIES {
+                    sleep(backoff).await;
+                    backoff = (backoff * 2).min(Duration::from_secs(2));
+                    continue;
+                }
+                let text = response.text().await.unwrap_or_default();
+                return Err(format!("Download failed ({status}): {text}"));
+            }
+            Err(err) => {
+                if attempt < DOWNLOAD_MAX_RETRIES {
+                    sleep(backoff).await;
+                    backoff = (backoff * 2).min(Duration::from_secs(2));
+                    continue;
+                }
+                return Err(format!("Download failed: {err}"));
+            }
+        }
+    }
+
+    Err("Download failed after retries.".to_string())
 }
 
 fn sha1_file(path: &Path) -> Result<String, String> {
