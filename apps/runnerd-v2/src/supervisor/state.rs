@@ -52,7 +52,7 @@ impl ServerState {
             current_pack_build_id: None,
             watcher_stop: None,
             watcher_done: None,
-            lifecycle_lock: Arc::new(tokio::sync::Mutex::new(())),
+            lifecycle_lock: Arc::new(Mutex::new(())),
         }
     }
 
