@@ -42,3 +42,11 @@ Data is backed by `distribution_releases`, `distribution_release_platforms`, and
 - Vercel
 
 If a target is not listed, it is unsupported.
+
+## Lint Guardrails
+
+- Prefer `unknown` + narrowing over `any` in route handlers.
+- In React components, avoid synchronous `setState` calls inside `useEffect` when the value can be derived during render/init.
+- Define callback functions before effects that reference them, and use `useCallback` when dependency tracking is required.
+- Use escaped apostrophes in JSX text where required by lint rules.
+- Use `next/link` for internal navigation paths instead of raw `<a href>` tags.
