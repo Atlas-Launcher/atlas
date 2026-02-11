@@ -12,7 +12,9 @@ import LauncherLinkCard from "./components/LauncherLinkCard.vue";
 import SettingsCard from "./components/SettingsCard.vue";
 import SidebarNav from "./components/SidebarNav.vue";
 import TitleBar from "./components/TitleBar.vue";
+import TroubleshooterDialog from "./components/TroubleshooterDialog.vue";
 import UpdaterBanner from "./components/UpdaterBanner.vue";
+import Button from "./components/ui/button/Button.vue";
 import { initLaunchEvents } from "./lib/useLaunchEvents";
 import { useAuth } from "./lib/useAuth";
 import { useLibrary } from "./lib/useLibrary";
@@ -125,6 +127,9 @@ const instanceInstallStateById = ref<Record<string, boolean>>({});
 const tasksPanelOpen = ref(false);
 const launchReadiness = ref<LaunchReadinessReport | null>(null);
 const readinessWizardOpen = ref(false);
+const troubleshooterOpen = ref(false);
+const troubleshooterTrigger = ref<"settings" | "help" | "failure">("settings");
+const dismissedFailureStatus = ref<string | null>(null);
 const appBootstrapped = ref(false);
 const hubUrl = computed(() => (settingsAtlasHubUrl.value ?? "").trim() || import.meta.env.VITE_ATLAS_HUB_URL || "https://atlas.nathanm.org");
 const readinessNextActionLabels: Partial<Record<string, string>> = {
@@ -171,6 +176,33 @@ const modsDir = computed(() => {
   }
   return `${base.replace(/[\\/]+$/, "")}/.minecraft/mods`;
 });
+
+const troubleshooterGameDir = computed(() => activeInstanceGameDir() ?? defaultGameDir.value ?? null);
+const troubleshooterPackId = computed(() =>
+  activeInstance.value?.source === "atlas" ? activeInstance.value.atlasPack?.packId ?? null : null
+);
+const troubleshooterChannel = computed(() =>
+  activeInstance.value?.source === "atlas"
+    ? resolveAtlasChannel(activeInstance.value.atlasPack?.channel)
+    : null
+);
+const statusSuggestsFailure = computed(() => {
+  const value = (status.value ?? "").toLowerCase();
+  if (!value.trim()) {
+    return false;
+  }
+  return (
+    value.includes("failed") ||
+    value.includes("error") ||
+    value.includes("corrupt") ||
+    value.includes("out of memory") ||
+    value.includes("java heap space") ||
+    value.includes("missing")
+  );
+});
+const showTroubleshooterFailurePrompt = computed(
+  () => statusSuggestsFailure.value && dismissedFailureStatus.value !== status.value
+);
 
 function openInstance(id: string) {
   selectInstance(id);
@@ -238,6 +270,30 @@ async function startUnifiedAuthFlow() {
 async function openReadinessWizard() {
   await refreshLaunchReadiness();
   readinessWizardOpen.value = true;
+}
+
+function dismissTroubleshooterFailurePrompt() {
+  dismissedFailureStatus.value = status.value;
+}
+
+function openTroubleshooter(trigger: "settings" | "help" | "failure") {
+  troubleshooterTrigger.value = trigger;
+  troubleshooterOpen.value = true;
+  if (trigger === "failure") {
+    dismissTroubleshooterFailurePrompt();
+  }
+}
+
+function handleTroubleshooterStatus(message: string) {
+  setStatus(message);
+}
+
+function handleTroubleshooterLog(message: string) {
+  pushLog(`[Troubleshooter:${troubleshooterTrigger.value}] ${message}`);
+}
+
+async function handleTroubleshooterRelinkRequested() {
+  await startUnifiedAuthFlow();
 }
 
 async function signOutMicrosoft() {
@@ -766,6 +822,15 @@ onMounted(async () => {
 });
 
 watch(
+  () => status.value,
+  (value) => {
+    if (!value || !statusSuggestsFailure.value) {
+      dismissedFailureStatus.value = null;
+    }
+  }
+);
+
+watch(
   () => [profile.value?.id ?? null, launcherLinkSession.value?.linkSessionId ?? null],
   async ([profileId, linkSessionId]) => {
     if (!profileId || !linkSessionId || !launcherLinkSession.value) {
@@ -913,6 +978,23 @@ watch(
           class="flex-1 min-h-0 flex flex-col gap-6 overflow-visible"
         >
           <div
+            v-if="showTroubleshooterFailurePrompt"
+            class="mx-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p class="font-medium text-amber-700 dark:text-amber-300">Issue detected</p>
+                <p class="text-xs text-muted-foreground">
+                  Recent status suggests a launch/setup failure. Open Troubleshooter for guided fixes.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <Button size="sm" @click="openTroubleshooter('failure')">Open troubleshooter</Button>
+                <Button size="sm" variant="outline" @click="dismissTroubleshooterFailurePrompt">Dismiss</Button>
+              </div>
+            </div>
+          </div>
+          <div
             v-if="libraryView === 'grid'"
             class="flex-1 min-h-0 overflow-y-auto px-4 pr-1"
           >
@@ -985,11 +1067,14 @@ watch(
             @save-settings="saveSettings"
             @check-updates="checkForUpdatesFromSettings"
             @open-readiness-wizard="openReadinessWizard"
+            @open-troubleshooter="openTroubleshooter('settings')"
           />
           <ActivityCard
             title="Recent activity"
             description="Helpful signals while tuning Atlas."
             :logs="logs"
+            action-label="Troubleshooter"
+            @action="openTroubleshooter('help')"
           />
         </section>
       </main>
@@ -1007,6 +1092,18 @@ watch(
       @action="handleReadinessAction"
       @close="dismissReadinessWizard"
       @complete="completeReadinessWizard"
+    />
+    <TroubleshooterDialog
+      :open="troubleshooterOpen"
+      :game-dir="troubleshooterGameDir"
+      :pack-id="troubleshooterPackId"
+      :channel="troubleshooterChannel"
+      :recent-status="status"
+      :recent-logs="logs"
+      @update:open="troubleshooterOpen = $event"
+      @status="handleTroubleshooterStatus"
+      @log="handleTroubleshooterLog"
+      @relink-requested="handleTroubleshooterRelinkRequested"
     />
   </div>
 </template>
