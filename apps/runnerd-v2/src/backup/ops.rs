@@ -33,15 +33,26 @@ pub async fn backup_world(server_root: &Path, _state: SharedState) -> Result<Pat
     // Perform blocking copy on threadpool
     let cur = current.clone();
     let dst = backup.clone();
-    let copy_res = task::spawn_blocking(move || -> Result<(), String> {
-        stdfs::create_dir_all(&dst).map_err(|e| format!("create backup dir failed: {}", e))?;
+    // Use a temp directory while copying, then atomically rename into place.
+    let tmp = dst.with_extension("tmp").clone();
+    let copy_res: Result<(), String> = task::spawn_blocking(move || -> Result<(), String> {
+        // Ensure parent exists
+        if let Some(parent) = tmp.parent() {
+            stdfs::create_dir_all(parent).map_err(|e| format!("create backup parent dir failed: {}", e))?;
+        }
+        // Remove any stale tmp dir
+        let _ = stdfs::remove_dir_all(&tmp);
+        stdfs::create_dir_all(&tmp).map_err(|e| format!("create tmp backup dir failed: {}", e))?;
+
+        let mut copied_entries: Vec<String> = Vec::new();
 
         // copy worlds
         for name in &["world", "world_nether", "world_the_end"] {
             let s = cur.join(name);
             if s.exists() {
-                let d = dst.join(name);
+                let d = tmp.join(name);
                 copy_dir_recursive_blocking(&s, &d)?;
+                copied_entries.push(name.to_string());
             }
         }
 
@@ -49,21 +60,43 @@ pub async fn backup_world(server_root: &Path, _state: SharedState) -> Result<Pat
         for name in &["whitelist.json", "ops.json", "banned-ips.json", "banned-players.json", "usercache.json"] {
             let s = cur.join(name);
             if s.exists() {
-                let d = dst.join(name);
+                let d = tmp.join(name);
                 stdfs::copy(&s, &d).map_err(|e| format!("copy file failed: {}", e))?;
+                copied_entries.push(name.to_string());
             }
         }
+
+        // If nothing was copied, remove the tmp dir and return error
+        if copied_entries.is_empty() {
+            let _ = stdfs::remove_dir_all(&tmp);
+            return Err("no files copied during backup".to_string());
+        }
+
+        // Write a small manifest so users can inspect backup contents easily
+        let manifest_path = tmp.join("backup_manifest.txt");
+        let mut manifest_content = format!("backup_time_ms={}\n", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
+        for e in &copied_entries {
+            manifest_content.push_str(&format!("{}\n", e));
+        }
+        stdfs::write(&manifest_path, manifest_content).map_err(|e| format!("write manifest failed: {}", e))?;
+
+        // Atomically rename tmp -> final dst
+        stdfs::rename(&tmp, &dst).map_err(|e| format!("rename tmp to dst failed: {}", e))?;
 
         Ok(())
     }).await.map_err(|e| format!("join error: {}", e))?;
 
-    if let Err(e) = copy_res { warn!("backup copy failed: {}", e); }
-
-    // Re-enable saves if we turned them off
+    // Regardless of copy result, attempt to re-enable saves if we disabled them.
     if used_rcon {
         if let Err(e) = rcon_save_on(server_root).await {
             warn!("rcon save-on failed: {}", e);
         }
+    }
+
+    // If the copy failed, return an error so callers don't assume success.
+    if let Err(e) = copy_res {
+        warn!("backup copy failed: {}", e);
+        return Err(e);
     }
 
     info!("backup created: {}", backup.display());
