@@ -6,6 +6,7 @@ use crate::models::{
 use crate::paths::{auth_store_dir, normalize_path};
 use crate::{launcher, library};
 use serde_json::{json, Value};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -515,18 +516,24 @@ fn resolve_java_ready(settings: &AppSettings, game_dir: Option<&str>) -> bool {
         let trimmed = configured.trim();
         if !trimmed.is_empty() {
             if trimmed.eq_ignore_ascii_case("java") {
-                return true;
+                return find_java_on_path().is_some();
             }
-            if Path::new(trimmed).exists() {
+            if is_usable_java_binary(Path::new(trimmed)) {
                 return true;
             }
         }
     }
 
+    if find_java_on_path().is_some() {
+        return true;
+    }
+
     let Some(game_dir) = game_dir else {
         return false;
     };
-    find_runtime_java_binary(&normalize_path(game_dir)).is_some()
+    find_runtime_java_binary(&normalize_path(game_dir))
+        .map(|candidate| is_usable_java_binary(&candidate))
+        .unwrap_or(false)
 }
 
 fn find_instance_java_path(settings: &AppSettings, game_dir: Option<&str>) -> Option<String> {
@@ -594,6 +601,38 @@ fn find_runtime_java_binary(game_dir: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+fn find_java_on_path() -> Option<PathBuf> {
+    let path_value = env::var_os("PATH")?;
+    #[cfg(target_os = "windows")]
+    let executable_names = ["java.exe", "javaw.exe", "java.cmd", "java.bat", "java"];
+    #[cfg(not(target_os = "windows"))]
+    let executable_names = ["java"];
+
+    env::split_paths(&path_value)
+        .flat_map(|dir| executable_names.iter().map(move |name| dir.join(name)))
+        .find(|candidate| is_usable_java_binary(candidate))
+}
+
+fn is_usable_java_binary(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = fs::metadata(path) {
+            return metadata.permissions().mode() & 0o111 != 0;
+        }
+        false
+    }
+
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 fn resolve_runtime_root(game_dir: &Path) -> PathBuf {

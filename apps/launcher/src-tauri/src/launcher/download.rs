@@ -41,7 +41,22 @@ pub async fn download_if_needed(
         }
     }
 
-    download_raw(client, &download.url, path, download.size, allow_resume).await
+    download_raw(client, &download.url, path, download.size, allow_resume).await?;
+
+    if let Some(expected) = &download.sha1 {
+        let actual = sha1_file(path)?;
+        if !actual.eq_ignore_ascii_case(expected) {
+            let _ = std::fs::remove_file(path);
+            return Err(format!(
+                "Downloaded file hash mismatch for {}: expected {}, got {}",
+                path.display(),
+                expected,
+                actual
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn download_raw(

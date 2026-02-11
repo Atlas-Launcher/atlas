@@ -138,6 +138,15 @@ async fn ensure_java_runtime(
 
     let java_path = locate_java_binary(&runtime_home, &runtime_manifest);
     if runtime_is_latest(&java_path, &marker_path, manifest_url) {
+        if let Err(err) = validate_runtime_install(&runtime_home, &runtime_manifest) {
+            emit(
+                window,
+                "java",
+                format!("Installed Java runtime failed validation; reinstalling ({err})"),
+                None,
+                None,
+            )?;
+        } else {
         emit(
             window,
             "java",
@@ -146,6 +155,7 @@ async fn ensure_java_runtime(
             None,
         )?;
         return Ok(java_path.to_string_lossy().to_string());
+        }
     }
 
     emit(
@@ -229,6 +239,8 @@ async fn ensure_java_runtime(
                 .into(),
         );
     }
+    validate_runtime_install(&runtime_home, &runtime_manifest)
+        .map_err(|err| format!("Java runtime validation failed after install: {err}"))?;
     fs::write(&marker_path, manifest_url)
         .map_err(|err| format!("Failed to write runtime marker: {err}"))?;
 
@@ -256,6 +268,62 @@ fn runtime_is_latest(java_path: &Path, marker_path: &Path, manifest_url: &str) -
         Err(_) => return false,
     };
     marker.trim() == manifest_url.trim()
+}
+
+pub(crate) fn validate_runtime_install(
+    runtime_home: &Path,
+    manifest: &JavaRuntimeFiles,
+) -> Result<(), String> {
+    for (relative_path, entry) in manifest.files.iter() {
+        let path = runtime_home.join(relative_path);
+        match entry.kind.as_str() {
+            "directory" => {
+                if !path.is_dir() {
+                    return Err(format!("Missing runtime directory: {}", path.display()));
+                }
+            }
+            "file" => {
+                if !path.is_file() {
+                    return Err(format!("Missing runtime file: {}", path.display()));
+                }
+
+                if let Some(download) = entry.downloads.as_ref().and_then(|d| d.raw.as_ref()) {
+                    if let Some(expected_size) = download.size {
+                        let actual_size = fs::metadata(&path)
+                            .map_err(|err| format!("Failed to stat {}: {err}", path.display()))?
+                            .len();
+                        if actual_size != expected_size {
+                            return Err(format!(
+                                "Size mismatch for {}: expected {}, got {}",
+                                path.display(),
+                                expected_size,
+                                actual_size
+                            ));
+                        }
+                    }
+
+                    if let Some(expected_sha1) = download.sha1.as_deref() {
+                        let actual_sha1 = sha1_file(&path)?;
+                        if !actual_sha1.eq_ignore_ascii_case(expected_sha1) {
+                            return Err(format!(
+                                "SHA-1 mismatch for {}: expected {}, got {}",
+                                path.display(),
+                                expected_sha1,
+                                actual_sha1
+                            ));
+                        }
+                    }
+                }
+            }
+            "link" => {
+                if !path.exists() {
+                    return Err(format!("Missing runtime link: {}", path.display()));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn runtime_os_key() -> Result<&'static str, String> {
@@ -433,6 +501,22 @@ fn set_executable(path: &Path) -> Result<(), String> {
             .map_err(|err| format!("Failed to set executable permission: {err}"))?;
     }
     Ok(())
+}
+
+fn sha1_file(path: &Path) -> Result<String, String> {
+    let mut file = std::fs::File::open(path)
+        .map_err(|err| format!("Failed to open {}: {err}", path.display()))?;
+    let mut hasher = Sha1::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let read = std::io::Read::read(&mut file, &mut buffer)
+            .map_err(|err| format!("Failed to read {}: {err}", path.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hex::encode(hasher.finalize()))
 }
 
 fn create_runtime_link(target: &Path, link: &Path) -> Result<(), String> {

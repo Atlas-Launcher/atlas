@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { onMounted, ref, computed } from "vue";
-import { X, Minus, Check, Square, Copy, ChevronDown, LogIn, LogOut, ShieldAlert } from "lucide-vue-next";
+import { X, Minus, Check, Square, Copy, ChevronDown, LogOut, ShieldAlert } from "lucide-vue-next";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,8 +21,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "sign-out-microsoft"): void;
   (event: "sign-out-atlas"): void;
-  (event: "start-auth-flow"): void;
-  (event: "complete-link"): void;
   (event: "open-readiness-wizard"): void;
 }>();
 
@@ -79,8 +77,8 @@ const statusText = computed(() => {
   if (props.isSigningIn) return "Signing in";
   if (!atlasSignedIn.value) return "Sign in to Atlas";
   if (!mojangSignedIn.value) return "Sign in with Microsoft";
-  if (needsSetup.value) return "Finish setup";
-  if (!isLaunchReady.value) return "Finish setup";
+  if (needsSetup.value) return "Get ready";
+  if (!isLaunchReady.value) return "Get ready";
   return "Ready";
 });
 
@@ -146,7 +144,7 @@ const needsLinkCompletion = computed(() => {
             :class="needsSetup ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : statusDotClass"
           ></span>
           <div class="text-xs tracking-tight transition-colors duration-300" :class="{ 'text-amber-500 font-bold': needsSetup }">
-            {{ needsSetup ? "Finish setup" : statusText }}
+            {{ needsSetup ? "Get ready" : statusText }}
           </div>
           <ChevronDown class="ml-2 h-3 w-3 opacity-20 group-hover:opacity-60 transition-all duration-300" />
         </DropdownMenuTrigger>
@@ -194,20 +192,6 @@ const needsLinkCompletion = computed(() => {
             Signing in... complete the browser flow to continue.
           </div>
           <DropdownMenuItem
-              v-if="!atlasSignedIn || !profile"
-              class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-foreground/[0.08] hover:bg-foreground/[0.12] transition-colors"
-              @select="emit('start-auth-flow')"
-          >
-            <LogIn class="h-3.5 w-3.5 opacity-80" /> Start sign-in
-          </DropdownMenuItem>
-          <DropdownMenuItem
-              v-if="needsLinkCompletion && !props.isSigningIn"
-              class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
-              @select="emit('complete-link')"
-          >
-            <LogIn class="h-3.5 w-3.5" /> Complete link
-          </DropdownMenuItem>
-          <DropdownMenuItem
               v-if="props.profile"
               class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold text-destructive hover:bg-destructive/10"
               @select="emit('sign-out-microsoft')"
@@ -219,7 +203,7 @@ const needsLinkCompletion = computed(() => {
               class="ml-2 gap-2 py-2 rounded-xl text-[11px] font-bold bg-foreground/[0.08] hover:bg-foreground/[0.12] transition-colors"
               @select="emit('open-readiness-wizard')"
           >
-            <ShieldAlert class="h-3.5 w-3.5 opacity-80" /> Launch readiness
+            <ShieldAlert class="h-3.5 w-3.5 opacity-80" /> Get ready to play
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

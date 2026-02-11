@@ -4,6 +4,9 @@ use crate::models::{
     AppSettings, AtlasProfile, AtlasSession, AuthSession, InstanceSource, ModLoaderConfig,
     ModLoaderKind, Profile, TroubleshooterFinding,
 };
+use std::fs;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn sample_settings() -> AppSettings {
     AppSettings {
@@ -67,8 +70,13 @@ fn readiness_marks_missing_auth_and_files() {
     assert!(!report.microsoft_logged_in);
     assert!(!report.accounts_linked);
     assert!(!report.files_installed);
-    assert!(!report.java_ready);
     assert_eq!(report.checklist.len(), 5);
+    let java_item = report
+        .checklist
+        .iter()
+        .find(|item| item.key == "javaReady")
+        .expect("java readiness checklist entry");
+    assert_eq!(java_item.ready, report.java_ready);
 }
 
 #[test]
@@ -266,3 +274,51 @@ fn redaction_masks_token_values_in_line_or_json_forms() {
     assert!(!redacted_json.contains("p123"));
     assert!(redacted_json.contains("[REDACTED]"));
 }
+
+#[test]
+fn java_binary_check_rejects_directory_path() {
+    let dir = unique_temp_path("java-dir");
+    fs::create_dir_all(&dir).expect("create temp dir");
+    assert!(!is_usable_java_binary(&dir));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn java_binary_check_accepts_executable_file() {
+    let dir = unique_temp_path("java-bin");
+    fs::create_dir_all(&dir).expect("create temp dir");
+    let bin = dir.join(java_file_name());
+    fs::write(&bin, b"#!/bin/sh\nexit 0\n").expect("write temp java binary");
+    make_executable(&bin);
+    assert!(is_usable_java_binary(&bin));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+fn unique_temp_path(prefix: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    std::env::temp_dir().join(format!("atlas-diagnostics-{prefix}-{nanos}"))
+}
+
+#[cfg(target_os = "windows")]
+fn java_file_name() -> &'static str {
+    "java.exe"
+}
+
+#[cfg(not(target_os = "windows"))]
+fn java_file_name() -> &'static str {
+    "java"
+}
+
+#[cfg(unix)]
+fn make_executable(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = fs::metadata(path).expect("stat temp java binary").permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(path, perms).expect("chmod temp java binary");
+}
+
+#[cfg(not(unix))]
+fn make_executable(_: &std::path::Path) {}
