@@ -14,6 +14,10 @@ pub enum AuthError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Url(#[from] url::ParseError),
+    #[error("Microsoft account does not own Minecraft Java Edition.")]
+    MissingMinecraftEntitlement,
+    #[error("Auth state lock poisoned.")]
+    LockPoisoned,
 }
 
 impl From<String> for AuthError {
