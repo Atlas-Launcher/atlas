@@ -1,25 +1,17 @@
 use std::process;
 use std::sync::Arc;
 use tokio::net::UnixListener;
-use tokio::sync::Mutex;
-use tracing::{warn, info};
 use tokio::signal;
+use tokio::sync::Mutex;
+use tracing::{info, warn};
 
 use runner_core_v2::proto::*;
 use runner_ipc_v2::framing;
 
-use crate::config::{save_deploy_key, DeployKeyConfig};
+use crate::config::{DeployKeyConfig, save_deploy_key};
 use crate::supervisor::{
-    build_status,
-    ensure_rcon_available,
-    ensure_watchers,
-    execute_rcon_command,
-    start_server_from_deploy,
-    stop_server,
-    LogStore,
-    ServerState,
-    SharedState,
-    default_server_root,
+    LogStore, ServerState, SharedState, build_status, default_server_root, ensure_rcon_available,
+    ensure_watchers, execute_rcon_command, start_server_from_deploy, stop_server,
 };
 
 pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()> {
@@ -36,7 +28,10 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
     let state_for_signal = state.clone();
     tokio::spawn(async move {
         // Wait for SIGTERM
-        signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap().recv().await;
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .unwrap()
+            .recv()
+            .await;
         info!("Received SIGTERM, stopping Minecraft server gracefully...");
         if let Err(err) = crate::supervisor::stop_server(false, state_for_signal.clone()).await {
             warn!("SIGTERM graceful shutdown failed: {}", err.message);
@@ -50,7 +45,7 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
     let state_for_sigint = state.clone();
     tokio::spawn(async move {
         let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap();
-        use std::time::{Instant, Duration as StdDuration};
+        use std::time::{Duration as StdDuration, Instant};
         let mut last = None::<Instant>;
         let mut count = 0usize;
         // define a window in which successive Ctrl-C presses count towards escalation
@@ -69,10 +64,14 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
             count = count.saturating_add(1);
 
             if count == 1 {
-                info!("Received SIGINT (Ctrl-C): attempting graceful shutdown. Press Ctrl-C two more times within 10s to force kill.");
+                info!(
+                    "Received SIGINT (Ctrl-C): attempting graceful shutdown. Press Ctrl-C two more times within 10s to force kill."
+                );
                 let state_clone = state_for_sigint.clone();
                 tokio::spawn(async move {
-                    if let Err(err) = crate::supervisor::stop_server(false, state_clone.clone()).await {
+                    if let Err(err) =
+                        crate::supervisor::stop_server(false, state_clone.clone()).await
+                    {
                         warn!("SIGINT graceful shutdown failed: {}", err.message);
                         let _ = crate::supervisor::stop_server(true, state_clone).await;
                     }
@@ -83,7 +82,10 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
                 warn!("Received second Ctrl-C: press once more to force immediate kill.");
             } else {
                 // third (or more) Ctrl-C within window -> force kill immediately
-                warn!("Received Ctrl-C {} times: force killing Minecraft server...", count);
+                warn!(
+                    "Received Ctrl-C {} times: force killing Minecraft server...",
+                    count
+                );
                 let mut guard = state_for_sigint.lock().await;
                 if let Some(child) = guard.child.as_mut() {
                     let _ = child.kill().await;

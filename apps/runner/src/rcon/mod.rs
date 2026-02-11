@@ -1,8 +1,8 @@
-use anyhow::{Result, Context};
-use tokio::task::spawn_blocking;
-use tokio::fs;
-use std::path::Path;
+use anyhow::{Context, Result};
 use minecraft_client_rs::Client;
+use std::path::Path;
+use tokio::fs;
+use tokio::task::spawn_blocking;
 
 pub struct RconSettings {
     pub address: String,
@@ -25,8 +25,8 @@ impl RconClient {
         let command = command.to_string();
 
         spawn_blocking(move || {
-            let mut client = Client::new(address)
-                .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+            let mut client =
+                Client::new(address).map_err(|err| anyhow::anyhow!(err.to_string()))?;
             client
                 .authenticate(password)
                 .map_err(|err| anyhow::anyhow!(err.to_string()))?;
@@ -60,7 +60,9 @@ pub async fn load_rcon_settings(runtime_dir: &Path) -> Result<Option<RconSetting
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        let Some((key, value)) = trimmed.split_once('=') else { continue };
+        let Some((key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
         match key.trim() {
             "enable-rcon" => enabled = value.trim().eq_ignore_ascii_case("true"),
             "rcon.port" => port = value.trim().parse::<u16>().ok(),

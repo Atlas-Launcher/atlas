@@ -1,7 +1,7 @@
-use anyhow::{Result, Context};
-use std::path::{PathBuf};
+use anyhow::{Context, Result};
+use sha2::{Digest, Sha256};
+use std::path::PathBuf;
 use tokio::fs;
-use sha2::{Sha256, Digest};
 
 pub struct Cache {
     root: PathBuf,
@@ -23,11 +23,11 @@ impl Cache {
     pub async fn store(&self, data: &[u8]) -> Result<String> {
         let hash = self.compute_hash(data);
         let path = self.get_path(&hash);
-        
+
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await?;
         }
-        
+
         fs::write(path, data).await?;
         Ok(hash)
     }
@@ -39,6 +39,8 @@ impl Cache {
     }
 
     pub async fn init(&self) -> Result<()> {
-        fs::create_dir_all(&self.root).await.context("Failed to create cache directory")
+        fs::create_dir_all(&self.root)
+            .await
+            .context("Failed to create cache directory")
     }
 }

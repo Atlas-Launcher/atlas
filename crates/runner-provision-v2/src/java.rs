@@ -1,18 +1,27 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::errors::ProvisionError;
+use crate::hashing::{sha256_extracted_tree, verify_extracted_jdk_hash};
 use flate2::read::GzDecoder;
+use log::info;
 use reqwest::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
-use log::info;
-use crate::errors::ProvisionError;
-use crate::hashing::{sha256_extracted_tree, verify_extracted_jdk_hash};
 const JAVA_DIR_NAME: &str = "java";
 
 pub async fn ensure_java_for_minecraft(
     server_root: &Path,
+    mc_version: &str,
+    override_major: Option<u32>,
+) -> Result<PathBuf, ProvisionError> {
+    let install_root = server_root.join(".runner").join(JAVA_DIR_NAME);
+    ensure_java_for_minecraft_with_root(&install_root, mc_version, override_major).await
+}
+
+pub async fn ensure_java_for_minecraft_with_root(
+    install_root: &Path,
     mc_version: &str,
     override_major: Option<u32>,
 ) -> Result<PathBuf, ProvisionError> {
@@ -30,14 +39,16 @@ pub async fn ensure_java_for_minecraft(
         ));
     }
 
-    let install_root = server_root.join(".runner").join(JAVA_DIR_NAME);
     let install_dir = install_root.join(format!("jdk-{major}"));
     let java_bin = java_bin_path(&install_dir);
 
     if java_bin.exists() {
         if let Err(e) = verify_extracted_jdk_hash(&install_dir, &java_bin).await {
             // corrupted/modified install: remove and reinstall
-            info!("java runtime at {} failed verification: {e}, reinstalling", install_dir.display());
+            info!(
+                "java runtime at {} failed verification: {e}, reinstalling",
+                install_dir.display()
+            );
             let _ = tokio::fs::remove_dir_all(&install_dir).await;
             // fall through to reinstall
         } else {
@@ -54,9 +65,7 @@ pub async fn ensure_java_for_minecraft(
     let archive_clone = archive_path.clone();
     tokio::task::spawn_blocking(move || extract_jdk_tar(&archive_clone, &install_dir_clone))
         .await
-        .map_err(|err| {
-            ProvisionError::Invalid(format!("java install task failed: {err}"))
-        })??;
+        .map_err(|err| ProvisionError::Invalid(format!("java install task failed: {err}")))??;
 
     let _ = tokio::fs::remove_file(&archive_path).await;
 
@@ -77,8 +86,8 @@ pub async fn ensure_java_for_minecraft(
     let tree_hash = tokio::task::spawn_blocking(move || {
         sha256_extracted_tree(&install_dir_clone, &[checksum_path_clone])
     })
-        .await
-        .map_err(|e| ProvisionError::Invalid(format!("java hash task failed: {e}")))??;
+    .await
+    .map_err(|e| ProvisionError::Invalid(format!("java hash task failed: {e}")))??;
 
     // Atomic write
     let tmp_hash = install_dir.join("java.hash.tmp");
@@ -140,17 +149,13 @@ struct Binary {
 struct Package {
     link: String,
     checksum: String, // sha256 hex
-    // checksum_link: Option<String>,
+                      // checksum_link: Option<String>,
 }
 pub async fn download_jdk_archive(major: u32, dest: &Path) -> Result<(), ProvisionError> {
     let os = match std::env::consts::OS {
         "linux" => "linux",
         "macos" => "mac",
-        other => {
-            return Err(ProvisionError::Invalid(format!(
-                "unsupported os: {other}"
-            )))
-        }
+        other => return Err(ProvisionError::Invalid(format!("unsupported os: {other}"))),
     };
 
     let arch = match std::env::consts::ARCH {
@@ -159,7 +164,7 @@ pub async fn download_jdk_archive(major: u32, dest: &Path) -> Result<(), Provisi
         other => {
             return Err(ProvisionError::Invalid(format!(
                 "unsupported architecture: {other}"
-            )))
+            )));
         }
     };
 
@@ -194,10 +199,7 @@ pub async fn download_jdk_archive(major: u32, dest: &Path) -> Result<(), Provisi
         .binaries
         .iter()
         .find(|b| {
-            b.architecture == arch
-                && b.os == os
-                && b.image_type == "jdk"
-                && b.jvm_impl == "hotspot"
+            b.architecture == arch && b.os == os && b.image_type == "jdk" && b.jvm_impl == "hotspot"
         })
         .ok_or_else(|| {
             ProvisionError::Invalid(format!(
@@ -231,7 +233,8 @@ pub async fn download_jdk_archive(major: u32, dest: &Path) -> Result<(), Provisi
     while let Some(chunk) = resp
         .chunk()
         .await
-        .map_err(|e| ProvisionError::Invalid(format!("java download failed: {e}")))? {
+        .map_err(|e| ProvisionError::Invalid(format!("java download failed: {e}")))?
+    {
         hasher.update(&chunk);
         file.write_all(&chunk).await?;
     }
@@ -310,4 +313,28 @@ fn java_bin_path(install_dir: &Path) -> PathBuf {
             .join("java");
     }
     install_dir.join("bin").join("java")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{java_version_for_minecraft, normalize_hex};
+
+    #[test]
+    fn java_version_mapping_boundaries_are_stable() {
+        assert_eq!(java_version_for_minecraft("1.17.1"), 8);
+        assert_eq!(java_version_for_minecraft("1.18"), 17);
+        assert_eq!(java_version_for_minecraft("1.20.4"), 17);
+        assert_eq!(java_version_for_minecraft("1.20.5"), 21);
+        assert_eq!(java_version_for_minecraft("1.21.1"), 21);
+    }
+
+    #[test]
+    fn normalize_hex_accepts_valid_sha256_and_rejects_invalid() {
+        let valid_upper = "A".repeat(64);
+        let normalized = normalize_hex(&valid_upper).expect("valid checksum");
+        assert_eq!(normalized, "a".repeat(64));
+
+        assert!(normalize_hex("abc123").is_none());
+        assert!(normalize_hex(&"z".repeat(64)).is_none());
+    }
 }

@@ -4,18 +4,18 @@ use std::sync::Arc;
 
 use atlas_client::hub::HubClient;
 use runner_core_v2::proto::*;
-use runner_provision_v2::{ensure_applied_from_packblob_bytes, DependencyProvider, LaunchPlan};
-use runner_v2_rcon::{load_rcon_settings, RconClient};
+use runner_provision_v2::{DependencyProvider, LaunchPlan, ensure_applied_from_packblob_bytes};
+use runner_v2_rcon::{RconClient, load_rcon_settings};
 use sysinfo::System;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use tracing::{debug, info, warn};
 
 use super::logs::LogStore;
 use super::monitor::ensure_monitor;
 use super::state::{ServerState, SharedState};
-use super::updates::{ensure_watchers, sync_whitelist_to_root};
+use super::updates::sync_whitelist_to_root;
 use super::util::{default_server_root, now_millis};
 use crate::config;
 
@@ -126,6 +126,41 @@ mod tests {
         let changed = ensure_memory_flags(&mut argv, 4096);
         assert!(!changed);
         assert_eq!(argv, vec!["python".to_string(), "server.py".to_string()]);
+    }
+
+    #[test]
+    fn memory_flags_are_idempotent_on_repeated_application() {
+        let mut argv = vec![
+            "/opt/jdk/bin/java".to_string(),
+            "-jar".to_string(),
+            "server.jar".to_string(),
+        ];
+
+        let first_changed = ensure_memory_flags(&mut argv, 4096);
+        assert!(first_changed);
+        assert_eq!(
+            argv,
+            vec![
+                "/opt/jdk/bin/java".to_string(),
+                "-Xms4096m".to_string(),
+                "-Xmx4096m".to_string(),
+                "-jar".to_string(),
+                "server.jar".to_string(),
+            ]
+        );
+
+        let second_changed = ensure_memory_flags(&mut argv, 4096);
+        assert!(second_changed);
+        assert_eq!(
+            argv,
+            vec![
+                "/opt/jdk/bin/java".to_string(),
+                "-Xms4096m".to_string(),
+                "-Xmx4096m".to_string(),
+                "-jar".to_string(),
+                "server.jar".to_string(),
+            ]
+        );
     }
 }
 

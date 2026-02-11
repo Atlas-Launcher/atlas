@@ -1,18 +1,12 @@
 use crate::auth;
 use crate::config;
 use crate::models::{
-    AtlasProfile,
-    DeviceCodeResponse,
-    LauncherLinkComplete,
-    LauncherLinkSession,
-    Profile,
+    AtlasProfile, DeviceCodeResponse, LauncherLinkComplete, LauncherLinkSession, Profile,
 };
 use crate::settings;
 use crate::state::AppState;
 use crate::telemetry;
-use atlas_client::hub::{
-    HubClient, LauncherLinkCompleteRequest, LauncherMinecraftPayload,
-};
+use atlas_client::hub::{HubClient, LauncherLinkCompleteRequest, LauncherMinecraftPayload};
 
 #[tauri::command]
 pub async fn start_device_code() -> Result<DeviceCodeResponse, String> {
@@ -233,13 +227,25 @@ pub async fn restore_atlas_session(
     let mut session = auth::ensure_fresh_atlas_session(session)
         .await
         .map_err(|err| err.to_string())?;
-    if session.profile.mojang_uuid.as_deref().unwrap_or_default().is_empty() {
+    if session
+        .profile
+        .mojang_uuid
+        .as_deref()
+        .unwrap_or_default()
+        .is_empty()
+    {
         session = auth::refresh_atlas_profile(session)
             .await
             .map_err(|err| err.to_string())?;
     }
 
-    if session.profile.mojang_uuid.as_deref().unwrap_or_default().is_empty() {
+    if session
+        .profile
+        .mojang_uuid
+        .as_deref()
+        .unwrap_or_default()
+        .is_empty()
+    {
         let hub_url = config::resolve_atlas_hub_url(&settings);
         if let Ok(hub) = HubClient::new(&hub_url) {
             match hub.get_mojang_info(&session.access_token).await {

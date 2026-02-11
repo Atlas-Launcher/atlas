@@ -1,25 +1,16 @@
-mod commands;
 pub mod backup;
+mod commands;
 
+use runner_v2_utils::{ensure_dir, runtime_paths_v2};
 use std::time::Duration;
 use tokio::process::Command;
-use runner_v2_utils::{ensure_dir, runtime_paths_v2};
 
-pub use commands::rcon::{rcon_exec, rcon_interactive};
-pub use commands::core::{ping, shutdown, up};
 pub use commands::auth::exec as auth;
+pub use commands::core::{ping, shutdown, up};
+pub use commands::rcon::{rcon_exec, rcon_interactive};
 pub use commands::supervisor::{
-    daemon_logs_tail,
-    daemon_logs_tail_follow,
-    logs_tail,
-    logs_tail_follow,
-    status,
-    stop,
-    LogsTailInfo,
-    StatusInfo,
-    StopInfo,
+    daemon_logs_tail, daemon_logs_tail_follow, logs_tail, logs_tail_follow, stop,
 };
-
 
 pub(crate) async fn connect_or_start() -> anyhow::Result<runner_ipc_v2::framing::FramedStream> {
     let paths = runtime_paths_v2();

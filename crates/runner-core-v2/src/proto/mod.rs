@@ -1,7 +1,7 @@
-mod types;
-mod rpc;
 mod error;
+mod rpc;
+mod types;
 
-pub use types::*;
 pub use error::*;
 pub use rpc::*;
+pub use types::*;

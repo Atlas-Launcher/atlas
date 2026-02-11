@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::cache::Cache;
+use anyhow::Result;
 use reqwest::Client;
 use std::sync::Arc;
 
@@ -25,10 +25,15 @@ impl Fetcher {
         println!("Downloading artifact: {}", url);
         let response = self.client.get(&url).send().await?.error_for_status()?;
         let data = response.bytes().await?;
-        
+
         let actual_hash = self.cache.compute_hash(&data);
         if actual_hash != expected_hash {
-            anyhow::bail!("Hash mismatch for {}: expected {}, got {}", url, expected_hash, actual_hash);
+            anyhow::bail!(
+                "Hash mismatch for {}: expected {}, got {}",
+                url,
+                expected_hash,
+                actual_hash
+            );
         }
 
         self.cache.store(&data).await?;

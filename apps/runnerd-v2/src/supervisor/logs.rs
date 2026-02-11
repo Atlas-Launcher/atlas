@@ -72,13 +72,10 @@ impl LogStore {
         guard.server_tx.subscribe()
     }
 
-    pub fn daemon_subscribe(&self) -> broadcast::Receiver<LogLine> {
-        let guard = self.inner.lock().expect("log lock poisoned");
-        guard.daemon_tx.subscribe()
-    }
-
     pub fn daemon_writer(&self) -> LogWriterFactory {
-        LogWriterFactory { store: self.clone() }
+        LogWriterFactory {
+            store: self.clone(),
+        }
     }
 }
 
@@ -91,7 +88,10 @@ fn push_bounded(buf: &mut VecDeque<LogLine>, max_lines: usize, entry: LogLine) {
 
 fn tail(buf: &VecDeque<LogLine>, lines: usize) -> Vec<LogLine> {
     let count = lines.min(buf.len());
-    buf.iter().skip(buf.len().saturating_sub(count)).cloned().collect()
+    buf.iter()
+        .skip(buf.len().saturating_sub(count))
+        .cloned()
+        .collect()
 }
 
 pub struct LogWriterFactory {

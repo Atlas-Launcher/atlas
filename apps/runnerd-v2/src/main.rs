@@ -1,13 +1,13 @@
-use tracing::{info, warn};
 use std::process::Command;
+use tracing::{info, warn};
 
 use runner_v2_utils::{ensure_dir, runtime_paths_v2};
 
-mod lock;
-mod daemon;
-mod config;
-mod supervisor;
 mod backup;
+mod config;
+mod daemon;
+mod lock;
+mod supervisor;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -40,14 +40,20 @@ async fn main() -> std::io::Result<()> {
 
     // If a Minecraft server process is already running on this host, exit with an obvious log
     if let Some((pid, cmdline)) = detect_existing_minecraft_process() {
-        warn!("detected existing Minecraft process (pid={}): {}. Exiting daemon to avoid conflicts.", pid, cmdline);
+        warn!(
+            "detected existing Minecraft process (pid={}): {}. Exiting daemon to avoid conflicts.",
+            pid, cmdline
+        );
         return Ok(());
     }
 
     fn detect_existing_minecraft_process() -> Option<(i32, String)> {
         // Use `ps` to list processes and look for common MC server markers in the command line.
         // This avoids depending on sysinfo API version differences and keeps the check simple.
-        let output = Command::new("ps").args(["-axo", "pid,comm,args"]).output().ok()?;
+        let output = Command::new("ps")
+            .args(["-axo", "pid,comm,args"])
+            .output()
+            .ok()?;
         if !output.status.success() {
             return None;
         }

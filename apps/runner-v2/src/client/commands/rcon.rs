@@ -1,7 +1,7 @@
 use anyhow::Context;
-use tokio::io::{self, AsyncBufReadExt, BufReader};
 use runner_core_v2::proto::*;
 use runner_ipc_v2::framing;
+use tokio::io::{self, AsyncBufReadExt, BufReader};
 
 pub async fn rcon_exec(mut framed: framing::FramedStream, command: String) -> anyhow::Result<()> {
     let req = Envelope {
@@ -16,17 +16,17 @@ pub async fn rcon_exec(mut framed: framing::FramedStream, command: String) -> an
     // read daemon outbound until we get the matching response
     while let Some(msg) = framing::read_outbound(&mut framed).await? {
         match msg {
-            Outbound::Response(env) if env.id == 1 => {
-                match env.payload {
-                    Response::RconResult { text } => {
-                        print!("{text}");
-                        if !text.ends_with('\n') { println!(); }
-                        return Ok(());
+            Outbound::Response(env) if env.id == 1 => match env.payload {
+                Response::RconResult { text } => {
+                    print!("{text}");
+                    if !text.ends_with('\n') {
+                        println!();
                     }
-                    Response::Error(e) => anyhow::bail!("rcon error: {} ({:?})", e.message, e.code),
-                    other => anyhow::bail!("unexpected response: {other:?}"),
+                    return Ok(());
                 }
-            }
+                Response::Error(e) => anyhow::bail!("rcon error: {} ({:?})", e.message, e.code),
+                other => anyhow::bail!("unexpected response: {other:?}"),
+            },
             _ => {
                 // ignore unrelated events/responses (shouldn't happen for simple exec)
             }
@@ -39,11 +39,15 @@ pub async fn rcon_exec(mut framed: framing::FramedStream, command: String) -> an
 pub async fn rcon_interactive(mut framed: framing::FramedStream) -> anyhow::Result<()> {
     // Open session
     let open_id = 1;
-    let open_req = Envelope { id: open_id, payload: Request::RconOpen {} };
+    let open_req = Envelope {
+        id: open_id,
+        payload: Request::RconOpen {},
+    };
     send_request(&mut framed, &open_req).await?;
 
     let (session, prompt) = loop {
-        let msg: Outbound = framing::read_outbound(&mut framed).await?
+        let msg: Outbound = framing::read_outbound(&mut framed)
+            .await?
             .context("daemon closed connection")?;
         match msg {
             Outbound::Response(env) if env.id == open_id => match env.payload {

@@ -52,8 +52,8 @@ impl From<CoreError> for RpcError {
                     ("client_protocol".into(), client.to_string()),
                     ("daemon_protocol".into(), daemon.to_string()),
                 ]
-                    .into_iter()
-                    .collect(),
+                .into_iter()
+                .collect(),
             },
             CoreError::InvalidConfig(_) => RpcError {
                 code: ErrorCode::InvalidConfig,

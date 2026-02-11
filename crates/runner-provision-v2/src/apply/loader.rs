@@ -29,9 +29,8 @@ pub async fn ensure_loader_installed(
             let installer_url = format!(
                 "{FABRIC_INSTALLER_MAVEN}/{installer_version}/fabric-installer-{installer_version}.jar"
             );
-            let installer_cache = cache_dir.join(format!(
-                "fabric-installer-{installer_version}.jar"
-            ));
+            let installer_cache =
+                cache_dir.join(format!("fabric-installer-{installer_version}.jar"));
             download_to_path(&installer_url, &installer_cache).await?;
 
             let installer_path = staging_current.join("fabric-installer.jar");

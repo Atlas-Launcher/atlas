@@ -6,7 +6,6 @@ use crate::models::{
 use crate::paths::{auth_store_dir, normalize_path};
 use crate::{launcher, library};
 use serde_json::{json, Value};
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -390,7 +389,8 @@ pub async fn repair_installation(
         ));
     }
 
-    library::uninstall_instance_data(game_dir, input.preserve_saves).map_err(|err| err.to_string())?;
+    library::uninstall_instance_data(game_dir, input.preserve_saves)
+        .map_err(|err| err.to_string())?;
     details.push(format!(
         "Uninstalled instance data (preserve saves: {}).",
         input.preserve_saves
@@ -469,10 +469,8 @@ pub fn create_support_bundle(input: SupportBundleInput) -> Result<SupportBundleR
             "confidence": finding.confidence
         })
     });
-    let attempted_fixes = summarize_attempted_fixes(
-        input.recent_status.as_deref(),
-        &input.recent_logs,
-    );
+    let attempted_fixes =
+        summarize_attempted_fixes(input.recent_status.as_deref(), &input.recent_logs);
 
     let report = json!({
         "generatedAtUnix": stamp,
@@ -540,28 +538,9 @@ fn resolve_files_installed(game_dir: &str) -> bool {
 }
 
 fn resolve_java_ready(settings: &AppSettings, game_dir: Option<&str>) -> bool {
-    if let Some(configured) = find_instance_java_path(settings, game_dir) {
-        let trimmed = configured.trim();
-        if !trimmed.is_empty() {
-            if trimmed.eq_ignore_ascii_case("java") {
-                return find_java_on_path().is_some();
-            }
-            if is_usable_java_binary(Path::new(trimmed)) {
-                return true;
-            }
-        }
-    }
-
-    if find_java_on_path().is_some() {
-        return true;
-    }
-
-    let Some(game_dir) = game_dir else {
-        return false;
-    };
-    find_runtime_java_binary(&normalize_path(game_dir))
-        .map(|candidate| is_usable_java_binary(&candidate))
-        .unwrap_or(false)
+    let configured_java = find_instance_java_path(settings, game_dir).unwrap_or_default();
+    let normalized_game_dir = game_dir.map(normalize_path);
+    launcher::java::is_java_ready_for_launch(normalized_game_dir.as_deref(), &configured_java)
 }
 
 fn find_instance_java_path(settings: &AppSettings, game_dir: Option<&str>) -> Option<String> {
@@ -616,100 +595,6 @@ fn build_launch_options_for_game_dir(
     })
 }
 
-fn find_runtime_java_binary(game_dir: &Path) -> Option<PathBuf> {
-    let mut candidates = Vec::<PathBuf>::new();
-    let runtime_root = resolve_runtime_root(game_dir);
-    candidates.push(runtime_root);
-    candidates.push(game_dir.join("runtimes"));
-
-    for root in candidates {
-        let hits = find_files_named(&root, &["java", "java.exe", "javaw.exe"], 6);
-        if let Some(path) = hits.into_iter().next() {
-            return Some(path);
-        }
-    }
-    None
-}
-
-fn find_java_on_path() -> Option<PathBuf> {
-    let path_value = env::var_os("PATH")?;
-    #[cfg(target_os = "windows")]
-    let executable_names = ["java.exe", "javaw.exe", "java.cmd", "java.bat", "java"];
-    #[cfg(not(target_os = "windows"))]
-    let executable_names = ["java"];
-
-    env::split_paths(&path_value)
-        .flat_map(|dir| executable_names.iter().map(move |name| dir.join(name)))
-        .find(|candidate| is_usable_java_binary(candidate))
-}
-
-fn is_usable_java_binary(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Ok(metadata) = fs::metadata(path) {
-            return metadata.permissions().mode() & 0o111 != 0;
-        }
-        false
-    }
-
-    #[cfg(not(unix))]
-    {
-        true
-    }
-}
-
-fn resolve_runtime_root(game_dir: &Path) -> PathBuf {
-    for ancestor in game_dir.ancestors() {
-        if ancestor.file_name().is_some_and(|name| name == "instances") {
-            if let Some(parent) = ancestor.parent() {
-                return parent.join("runtimes");
-            }
-        }
-    }
-    game_dir.join("runtimes")
-}
-
-fn find_files_named(root: &Path, names: &[&str], max_depth: usize) -> Vec<PathBuf> {
-    let mut out = Vec::<PathBuf>::new();
-    let mut stack = vec![(root.to_path_buf(), 0usize)];
-
-    while let Some((dir, depth)) = stack.pop() {
-        if depth > max_depth || !dir.exists() {
-            continue;
-        }
-        let entries = match fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            Err(_) => continue,
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push((path, depth + 1));
-                continue;
-            }
-            let file_name = path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .map(|value| value.to_ascii_lowercase());
-            if let Some(name) = file_name {
-                if names
-                    .iter()
-                    .any(|expected| name == expected.to_ascii_lowercase())
-                {
-                    out.push(path);
-                }
-            }
-        }
-    }
-
-    out
-}
-
 fn read_text_if_exists(path: &Path) -> Option<String> {
     if !path.exists() {
         return None;
@@ -725,7 +610,11 @@ fn redact_sensitive(input: &str) -> String {
         }
     }
 
-    input.lines().map(redact_line).collect::<Vec<_>>().join("\n")
+    input
+        .lines()
+        .map(redact_line)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn redact_json_value(value: &mut Value) {
@@ -947,8 +836,8 @@ fn resolve_repair_plan(input: &RepairInput) -> RepairPlan {
         if matches!(instance.source, InstanceSource::Local) {
             return RepairPlan {
                 strategy: RepairStrategy::LocalRuntime,
-                decision_reason:
-                    "Repair strategy: local runtime (instance source is local).".to_string(),
+                decision_reason: "Repair strategy: local runtime (instance source is local)."
+                    .to_string(),
             };
         }
 
@@ -971,8 +860,8 @@ fn resolve_repair_plan(input: &RepairInput) -> RepairPlan {
                     pack_id: pack_id.unwrap_or_default(),
                     channel,
                 },
-                decision_reason:
-                    "Repair strategy: Atlas pack sync (instance source is Atlas).".to_string(),
+                decision_reason: "Repair strategy: Atlas pack sync (instance source is Atlas)."
+                    .to_string(),
             };
         }
 

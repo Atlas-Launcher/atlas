@@ -18,7 +18,6 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Window};
 
-
 #[derive(Debug, Clone)]
 struct ArtifactResponse {
     pack_id: String,
@@ -203,8 +202,7 @@ pub async fn sync_atlas_pack(
 
         let kind = dependency_kind_to_pointer_kind(dep.kind);
         let pointer_path = resolve_pointer_path(&dep.pointer_path, kind, &dep.url);
-        let relative_asset_path =
-            resolve_destination_relative_path(&pointer_path, kind, &dep.url);
+        let relative_asset_path = resolve_destination_relative_path(&pointer_path, kind, &dep.url);
         jobs.push((relative_asset_path, dep));
     }
 
@@ -376,8 +374,7 @@ async fn request_artifact_download(
     channel: &str,
     current_build_id: Option<&str>,
 ) -> Result<ArtifactResponse, LibraryError> {
-    let mut hub = HubClient::new(atlas_hub_url)
-        .map_err(|err| format!("Invalid hub URL: {err}"))?;
+    let mut hub = HubClient::new(atlas_hub_url).map_err(|err| format!("Invalid hub URL: {err}"))?;
     hub.set_token(access_token.to_string());
 
     let response = hub
@@ -417,8 +414,7 @@ async fn download_blob_bytes(
     atlas_hub_url: &str,
     download_url: &str,
 ) -> Result<Vec<u8>, LibraryError> {
-    let hub = HubClient::new(atlas_hub_url)
-        .map_err(|err| format!("Invalid hub URL: {err}"))?;
+    let hub = HubClient::new(atlas_hub_url).map_err(|err| format!("Invalid hub URL: {err}"))?;
     hub.download_blob(download_url)
         .await
         .map_err(|err| format!("Failed to download pack blob: {err}").into())
@@ -497,7 +493,6 @@ fn dependency_kind_to_pointer_kind(kind: DependencyKind) -> PointerKind {
         DependencyKind::Resource => PointerKind::Resource,
     }
 }
-
 
 fn is_mod_relative_path(relative_path: &Path) -> bool {
     matches!(
@@ -666,7 +661,6 @@ fn sha256_file(path: &Path) -> Result<String, LibraryError> {
     hasher.update(&bytes);
     Ok(hex::encode(hasher.finalize()))
 }
-
 
 fn emit_sync(
     window: &Window,

@@ -1,25 +1,25 @@
-use anyhow::{Result, bail, Context};
+use crate::backup;
+use crate::hub::whitelist::InstanceConfig;
 use crate::hub::{HubClient, whitelist::WhitelistSync};
-use atlas_client::sse::SseParser;
+use crate::java::ensure_java_for_minecraft;
+use crate::rcon::{RconClient, load_rcon_settings};
 use crate::reconcile::Reconciler;
 use crate::supervisor::Supervisor;
-use crate::hub::whitelist::InstanceConfig;
-use crate::rcon::{load_rcon_settings, RconClient};
+use anyhow::{Context, Result, bail};
+use atlas_client::sse::SseParser;
+use chrono::{Local, NaiveTime, TimeZone};
 use futures::StreamExt;
+use protocol::config::atlas::parse_config;
+use rand::RngCore;
 use serde::Deserialize;
-use std::sync::Arc;
-use std::path::PathBuf;
 use std::fs::OpenOptions;
+use std::path::PathBuf;
 use std::process::Command as StdCommand;
 use std::process::Stdio;
-use tokio::sync::mpsc;
-use tokio::time::{interval, sleep, Duration};
+use std::sync::Arc;
 use tokio::fs;
-use crate::java::ensure_java_for_minecraft;
-use protocol::config::atlas::parse_config;
-use crate::backup;
-use chrono::{Local, NaiveTime, TimeZone};
-use rand::RngCore;
+use tokio::sync::mpsc;
+use tokio::time::{Duration, interval, sleep};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,7 +28,6 @@ struct PackUpdateEvent {
     #[serde(rename = "type")]
     event_type: Option<String>,
     channel: Option<String>,
-    build_id: Option<String>,
 }
 
 async fn sync_whitelist_and_reload(
@@ -97,7 +96,8 @@ async fn run_pack_update_listener(
 ) {
     let mut backoff = Duration::from_secs(2);
     loop {
-        if let Err(err) = listen_pack_update_events(hub.clone(), &pack_id, &channel, &updates).await {
+        if let Err(err) = listen_pack_update_events(hub.clone(), &pack_id, &channel, &updates).await
+        {
             println!("Pack update stream error: {err}");
         }
 
@@ -121,18 +121,18 @@ pub async fn exec(_force_config: bool, attach: bool, skip_setup: bool) -> Result
 }
 
 async fn run_setup(_force_config: bool) -> Result<()> {
-
     ensure_server_stopped().await;
 
     let instance_path = PathBuf::from("instance.toml");
-    let mut config = InstanceConfig::load(&instance_path).await
+    let mut config = InstanceConfig::load(&instance_path)
+        .await
         .context("Missing instance.toml. Run `atlas-runner auth` first.")?;
 
     if config.memory.is_none() {
         config.memory = Some(crate::runner_config::default_memory()?);
         let _ = config.save(&instance_path).await;
     }
-    
+
     let _hub = Arc::new(HubClient::new(&config.hub_url)?);
     let mut hub_mut = HubClient::new(&config.hub_url)?;
     if let Some(service_token) = config.service_token.clone() {
@@ -149,15 +149,21 @@ async fn run_setup(_force_config: bool) -> Result<()> {
     _cache.init().await?;
 
     let _fetcher = Arc::new(crate::fetch::Fetcher::new(_cache.clone()));
-    
+
     // Reconcile
-    let reconciler = Reconciler::new(hub.clone(), _fetcher.clone(), _cache.clone(), PathBuf::from("."));
+    let reconciler = Reconciler::new(
+        hub.clone(),
+        _fetcher.clone(),
+        _cache.clone(),
+        PathBuf::from("."),
+    );
     reconciler
         .reconcile(&config.pack_id, &config.channel)
         .await
         .context("Failed to pull build. Run `atlas-runner auth` to refresh credentials.")?;
 
-    let mut config = InstanceConfig::load(&instance_path).await
+    let mut config = InstanceConfig::load(&instance_path)
+        .await
         .context("Missing instance.toml after reconcile.")?;
 
     let runtime_dir = PathBuf::from("runtime/current");
@@ -175,7 +181,8 @@ async fn run_setup(_force_config: bool) -> Result<()> {
 
 async fn run_server() -> Result<()> {
     let instance_path = PathBuf::from("instance.toml");
-    let mut config = InstanceConfig::load(&instance_path).await
+    let mut config = InstanceConfig::load(&instance_path)
+        .await
         .context("Missing instance.toml. Run `atlas-runner auth` first.")?;
 
     let mut hub_mut = HubClient::new(&config.hub_url)?;
@@ -280,7 +287,6 @@ async fn run_server() -> Result<()> {
             }
         }
     }
-
 }
 
 fn spawn_background_after_setup() -> Result<()> {
@@ -346,14 +352,24 @@ async fn ensure_server_stopped() {
         .and_then(|value| value.trim().parse::<u32>().ok());
     if let Some(pid) = pid {
         let _ = StdCommand::new("kill").arg(pid.to_string()).status();
-        let _ = StdCommand::new("kill").arg("-0").arg(pid.to_string()).status().ok();
-        let _ = StdCommand::new("kill").arg("-9").arg(pid.to_string()).status();
+        let _ = StdCommand::new("kill")
+            .arg("-0")
+            .arg(pid.to_string())
+            .status()
+            .ok();
+        let _ = StdCommand::new("kill")
+            .arg("-9")
+            .arg(pid.to_string())
+            .status();
         let _ = tokio::fs::remove_file(&pid_file).await;
     }
 
     for pid in find_server_pids() {
         let _ = StdCommand::new("kill").arg(pid.to_string()).status();
-        let _ = StdCommand::new("kill").arg("-9").arg(pid.to_string()).status();
+        let _ = StdCommand::new("kill")
+            .arg("-9")
+            .arg(pid.to_string())
+            .status();
     }
 }
 
@@ -405,12 +421,10 @@ async fn run_daily_backups(runtime_dir: PathBuf) {
 
 async fn ensure_java_for_runtime() -> Result<String> {
     let instance_path = PathBuf::from("instance.toml");
-    let config = InstanceConfig::load(&instance_path).await
+    let config = InstanceConfig::load(&instance_path)
+        .await
         .context("Missing instance.toml. Run `atlas-runner auth` first.")?;
-    let mc_version = config
-        .minecraft_version
-        .as_deref()
-        .unwrap_or("1.20.1");
+    let mc_version = config.minecraft_version.as_deref().unwrap_or("1.20.1");
 
     let java_bin = ensure_java_for_minecraft(mc_version, config.java_major).await?;
     Ok(java_bin.to_string_lossy().to_string())
@@ -448,22 +462,26 @@ async fn ensure_server_files(
 
     match modloader.as_str() {
         "fabric" => {
-            let loader_version = resolve_fabric_loader_version(mc_version, config.modloader_version.clone()).await?;
+            let loader_version =
+                resolve_fabric_loader_version(mc_version, config.modloader_version.clone()).await?;
             let url = format!(
                 "https://meta.fabricmc.net/v2/versions/loader/{mc_version}/{loader_version}/server/jar"
             );
-            let cache_path = cache_dir.join(format!("fabric-server-{mc_version}-{loader_version}.jar"));
+            let cache_path =
+                cache_dir.join(format!("fabric-server-{mc_version}-{loader_version}.jar"));
             download_to_path(&url, &cache_path).await?;
             let dest = runtime_dir.join("fabric-server-launch.jar");
             copy_if_missing(&cache_path, &dest).await?;
             config.modloader_version = Some(loader_version);
         }
         "forge" => {
-            let loader_version = resolve_forge_loader_version(mc_version, config.modloader_version.clone()).await?;
+            let loader_version =
+                resolve_forge_loader_version(mc_version, config.modloader_version.clone()).await?;
             let installer_url = format!(
                 "https://maven.minecraftforge.net/net/minecraftforge/forge/{mc_version}-{loader_version}/forge-{mc_version}-{loader_version}-installer.jar"
             );
-            let cache_path = cache_dir.join(format!("forge-installer-{mc_version}-{loader_version}.jar"));
+            let cache_path =
+                cache_dir.join(format!("forge-installer-{mc_version}-{loader_version}.jar"));
             download_to_path(&installer_url, &cache_path).await?;
             let installer_path = runtime_dir.join("forge-installer.jar");
             copy_if_missing(&cache_path, &installer_path).await?;
@@ -471,7 +489,9 @@ async fn ensure_server_files(
             config.modloader_version = Some(loader_version);
         }
         "neoforge" | "neo" => {
-            let loader_version = resolve_neoforge_loader_version(mc_version, config.modloader_version.clone()).await?;
+            let loader_version =
+                resolve_neoforge_loader_version(mc_version, config.modloader_version.clone())
+                    .await?;
             let installer_url = format!(
                 "https://maven.neoforged.net/releases/net/neoforged/neoforge/{loader_version}/neoforge-{loader_version}-installer.jar"
             );
@@ -609,7 +629,9 @@ fn update_server_port(contents: &str, port: u16) -> String {
 }
 
 fn has_property(contents: &str, key: &str) -> bool {
-    contents.lines().any(|line| line.trim_start().starts_with(&format!("{}=", key)))
+    contents
+        .lines()
+        .any(|line| line.trim_start().starts_with(&format!("{}=", key)))
 }
 
 fn get_property(contents: &str, key: &str) -> Option<String> {
@@ -618,7 +640,9 @@ fn get_property(contents: &str, key: &str) -> Option<String> {
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        let Some((current_key, value)) = trimmed.split_once('=') else { continue };
+        let Some((current_key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
         if current_key.trim() == key {
             let value = value.trim();
             if value.is_empty() {
@@ -628,16 +652,6 @@ fn get_property(contents: &str, key: &str) -> Option<String> {
         }
     }
     None
-}
-
-fn ensure_property(contents: &str, key: &str, value: &str) -> String {
-    if has_property(contents, key) {
-        return contents.to_string();
-    }
-    let mut lines = Vec::new();
-    lines.extend(contents.lines().map(|line| line.to_string()));
-    lines.push(format!("{}={}", key, value));
-    format!("{}\n", lines.join("\n"))
 }
 
 fn set_property(contents: &str, key: &str, value: &str) -> String {
@@ -673,7 +687,11 @@ async fn load_atlas_versions(runtime_dir: &PathBuf) -> Option<(String, String)> 
     ))
 }
 
-async fn run_server_installer(java_bin: &str, runtime_dir: &PathBuf, installer: &PathBuf) -> Result<()> {
+async fn run_server_installer(
+    java_bin: &str,
+    runtime_dir: &PathBuf,
+    installer: &PathBuf,
+) -> Result<()> {
     let installer_arg = installer
         .file_name()
         .map(|value| value.to_string_lossy().to_string())
@@ -733,11 +751,13 @@ async fn resolve_forge_loader_version(
         }
     }
 
-    let metadata = reqwest::get("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml")
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
+    let metadata = reqwest::get(
+        "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml",
+    )
+    .await?
+    .error_for_status()?
+    .text()
+    .await?;
     let prefix = format!("{}-", mc_version);
     let mut versions = extract_versions_from_maven_metadata(&metadata)
         .into_iter()
@@ -760,11 +780,13 @@ async fn resolve_neoforge_loader_version(
         }
     }
 
-    let metadata = reqwest::get("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
+    let metadata = reqwest::get(
+        "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml",
+    )
+    .await?
+    .error_for_status()?
+    .text()
+    .await?;
     let all_versions = extract_versions_from_maven_metadata(&metadata);
     let candidate_lines = neoforge_candidate_lines(mc_version)?;
 
@@ -825,7 +847,10 @@ fn extract_versions_from_maven_metadata(metadata: &str) -> Vec<String> {
 fn neoforge_candidate_lines(mc_version: &str) -> Result<Vec<String>> {
     let parts = mc_version.split('.').collect::<Vec<_>>();
     if parts.len() < 3 || parts[0] != "1" {
-        bail!("Unsupported Minecraft version format for NeoForge: {}", mc_version);
+        bail!(
+            "Unsupported Minecraft version format for NeoForge: {}",
+            mc_version
+        );
     }
 
     let major = parts[1].parse::<u64>()?;
@@ -921,7 +946,11 @@ fn tokenize_version(value: &str) -> Vec<VersionToken> {
     tokens
 }
 
-fn push_token(tokens: &mut Vec<VersionToken>, current: &mut String, current_is_number: Option<bool>) {
+fn push_token(
+    tokens: &mut Vec<VersionToken>,
+    current: &mut String,
+    current_is_number: Option<bool>,
+) {
     if current.is_empty() {
         return;
     }
@@ -952,7 +981,10 @@ async fn resolve_launch_command(
         write_user_jvm_args(runtime_dir, max_ram).await?;
         return Ok(LaunchCommand {
             command: java_bin.to_string(),
-            args: vec!["@user_jvm_args.txt".to_string(), "@unix_args.txt".to_string()],
+            args: vec![
+                "@user_jvm_args.txt".to_string(),
+                "@unix_args.txt".to_string(),
+            ],
             envs: Vec::new(),
         });
     }
@@ -996,7 +1028,9 @@ async fn resolve_launch_command(
         });
     }
 
-    bail!("Missing server launch files. Expected run.sh, fabric-server-launch.jar, or server.jar in runtime/current.")
+    bail!(
+        "Missing server launch files. Expected run.sh, fabric-server-launch.jar, or server.jar in runtime/current."
+    )
 }
 
 fn build_java_env(java_bin: &str) -> Vec<(String, String)> {

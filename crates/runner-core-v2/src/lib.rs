@@ -1,5 +1,5 @@
-pub mod proto;
 mod errors;
+pub mod proto;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 

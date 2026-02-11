@@ -1,14 +1,14 @@
-use anyhow::{Result, Context};
+use crate::assemble::Assembler;
+use crate::backup;
+use crate::cache::Cache;
+use crate::fetch::Fetcher;
+use crate::hub::BuildBlobResult;
+use crate::hub::HubClient;
+use crate::hub::whitelist::InstanceConfig;
+use anyhow::{Context, Result};
+use protocol::config::atlas::parse_config;
 use std::path::PathBuf;
 use std::sync::Arc;
-use crate::hub::HubClient;
-use crate::fetch::Fetcher;
-use crate::cache::Cache;
-use crate::assemble::Assembler;
-use crate::hub::BuildBlobResult;
-use crate::backup;
-use crate::hub::whitelist::InstanceConfig;
-use protocol::config::atlas::parse_config;
 // PackBlob removed
 
 pub struct Reconciler {
@@ -19,22 +19,37 @@ pub struct Reconciler {
 }
 
 impl Reconciler {
-    pub fn new(hub: Arc<HubClient>, fetcher: Arc<Fetcher>, cache: Arc<Cache>, base_dir: PathBuf) -> Self {
-        Self { hub, fetcher, cache, base_dir }
+    pub fn new(
+        hub: Arc<HubClient>,
+        fetcher: Arc<Fetcher>,
+        cache: Arc<Cache>,
+        base_dir: PathBuf,
+    ) -> Self {
+        Self {
+            hub,
+            fetcher,
+            cache,
+            base_dir,
+        }
     }
 
     pub async fn reconcile(&self, pack_id: &str, channel: &str) -> Result<()> {
-        println!("Reconciling instance for pack: {} (channel: {})", pack_id, channel);
+        println!(
+            "Reconciling instance for pack: {} (channel: {})",
+            pack_id, channel
+        );
 
         // 1. Fetch latest blob
         println!("Downloading pack build from Hub...");
-        let build = self.hub.get_build_blob(pack_id, channel).await
+        let build = self
+            .hub
+            .get_build_blob(pack_id, channel)
+            .await
             .context("Failed to fetch build blob")?;
-        
+
         // 2. Decode blob
         println!("Decoding pack build...");
-        let blob = protocol::decode_blob(&build.bytes)
-            .context("Failed to decode build blob")?;
+        let blob = protocol::decode_blob(&build.bytes).context("Failed to decode build blob")?;
 
         println!(
             "Minecraft {} with {} loader.",
@@ -55,19 +70,21 @@ impl Reconciler {
         for dep in &blob.manifest.dependencies {
             artifacts.push((dep.url.clone(), dep.hash.hex.clone()));
         }
-        
+
         println!("Pulling {} mod artifacts...", artifacts.len());
         self.fetcher.fetch_multiple(artifacts).await?;
 
         // 4. Assemble runtime in staging area
         let staging_dir = self.base_dir.join("runtime/staging");
         let assembler = Assembler::new(staging_dir.clone());
-        
+
         println!("Writing server files and configs...");
         assembler.assemble(&blob).await?;
 
         println!("Installing loader and linking mods...");
-        assembler.link_artifacts(&self.cache.get_path(""), &blob.manifest).await?;
+        assembler
+            .link_artifacts(&self.cache.get_path(""), &blob.manifest)
+            .await?;
 
         // 5. Finalize (Stop server, Swap, Start server)
         // This will be implemented when Supervisor is ready
@@ -78,21 +95,15 @@ impl Reconciler {
 
     async fn finalize(&self, staging_dir: &PathBuf, reinstall_required: bool) -> Result<()> {
         let current_dir = self.base_dir.join("runtime/current");
-        
+
         println!("Finalizing deployment (atomic swap)...");
-        
+
         // TODO: Stop server here if running
-        
+
         if current_dir.exists() {
             if reinstall_required {
                 let archive_dir = self.base_dir.join("runtime/world-archive");
-                let _ = backup::archive_worlds(
-                    &current_dir,
-                    &archive_dir,
-                    "worlds",
-                    0,
-                )
-                .await?;
+                let _ = backup::archive_worlds(&current_dir, &archive_dir, "worlds", 0).await?;
             } else {
                 preserve_server_files(&current_dir, staging_dir).await?;
             }
@@ -105,7 +116,7 @@ impl Reconciler {
         }
 
         tokio::fs::rename(staging_dir, &current_dir).await?;
-        
+
         // TODO: Start server here
 
         Ok(())
@@ -176,7 +187,8 @@ async fn write_pack_metadata(base_dir: &PathBuf, blob: &protocol::PackBlob) -> R
 
 async fn update_instance_metadata(base_dir: &PathBuf, blob: &protocol::PackBlob) -> Result<()> {
     let instance_path = base_dir.join("instance.toml");
-    let mut config = InstanceConfig::load(&instance_path).await
+    let mut config = InstanceConfig::load(&instance_path)
+        .await
         .context("Missing instance.toml while updating metadata")?;
     config.minecraft_version = Some(blob.metadata.minecraft_version.clone());
     config.modloader = Some(format_loader(blob.metadata.loader).to_ascii_lowercase());
@@ -208,18 +220,21 @@ async fn should_force_reinstall(
     };
 
     let meta: serde_json::Value = serde_json::from_str(&content)?;
-    let prev_mc = meta.get("minecraftVersion").and_then(|value| value.as_str());
+    let prev_mc = meta
+        .get("minecraftVersion")
+        .and_then(|value| value.as_str());
     let prev_loader = meta.get("loader").and_then(|value| value.as_str());
 
     let new_loader = format_loader(blob.metadata.loader);
-    let loader_changed = prev_loader.map(|value| value != new_loader).unwrap_or(false);
+    let loader_changed = prev_loader
+        .map(|value| value != new_loader)
+        .unwrap_or(false);
     let mc_changed = prev_mc
         .map(|value| value != blob.metadata.minecraft_version)
         .unwrap_or(false);
 
     Ok(loader_changed || mc_changed)
 }
-
 
 fn format_loader(loader: protocol::Loader) -> &'static str {
     match loader {

@@ -1,9 +1,7 @@
-use tokio::time::{sleep, Duration};
-use tracing::{info, warn};
+use tokio::time::{Duration, sleep};
 
-use super::server::spawn_server;
 use super::state::SharedState;
-use super::util::{default_server_root, now_millis};
+use super::util::now_millis;
 use runner_core_v2::proto::{ExitInfo, ServerStatus};
 
 pub async fn ensure_monitor(state: SharedState) {
@@ -34,7 +32,10 @@ pub async fn ensure_monitor(state: SharedState) {
                             .map(|start| now_millis().saturating_sub(start))
                             .unwrap_or(0);
                         let exit_code = status.code();
-                        let exit = ExitInfo { code: exit_code, signal: None };
+                        let exit = ExitInfo {
+                            code: exit_code,
+                            signal: None,
+                        };
                         let profile = guard.profile.clone().unwrap_or_else(|| "default".into());
                         guard.child = None;
                         guard.status = ServerStatus::Exited {
@@ -44,9 +45,8 @@ pub async fn ensure_monitor(state: SharedState) {
                         };
                         let logs = guard.logs.clone();
                         logs.push_daemon(format!(
-                            "server crashed: profile={} exit_code={:?}",
-                            profile,
-                            exit_code
+                            "server crashed: profile={} exit_code={:?} uptime_ms={}",
+                            profile, exit_code, uptime_ms
                         ));
                         guard.restart_disabled = true;
                         continue;
@@ -57,7 +57,6 @@ pub async fn ensure_monitor(state: SharedState) {
                     continue;
                 }
             }
-
         }
     });
 }

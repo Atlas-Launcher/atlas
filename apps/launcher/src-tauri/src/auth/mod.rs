@@ -106,8 +106,7 @@ pub async fn complete_atlas_login(
         &pending.code_verifier,
     )
     .await?;
-    let profile =
-        atlas::fetch_user_info(&pending.auth_base_url, &token.access_token).await?;
+    let profile = atlas::fetch_user_info(&pending.auth_base_url, &token.access_token).await?;
 
     Ok(AtlasSession {
         access_token: token.access_token,

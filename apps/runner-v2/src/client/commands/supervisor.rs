@@ -1,14 +1,9 @@
 use anyhow::Result;
-use runner_core_v2::proto::{DaemonStatus, Envelope, ExitInfo, LogLine, Outbound, Request, Response, ServerStatus};
+use runner_core_v2::proto::{Envelope, ExitInfo, LogLine, Outbound, Request, Response};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::client::connect_or_start;
-
-pub struct StatusInfo {
-    pub daemon: DaemonStatus,
-    pub server: ServerStatus,
-}
 
 pub struct StopInfo {
     pub exit: Option<ExitInfo>,
@@ -18,23 +13,6 @@ pub struct StopInfo {
 pub struct LogsTailInfo {
     pub lines: Vec<LogLine>,
     pub truncated: bool,
-}
-
-pub async fn status() -> Result<StatusInfo> {
-    let mut framed = connect_or_start().await?;
-    let req = Envelope {
-        id: 1,
-        payload: Request::Status {},
-    };
-
-    runner_ipc_v2::framing::send_request(&mut framed, &req).await?;
-    let resp = read_response_payload(&mut framed).await?;
-
-    match resp {
-        Response::Status { daemon, server } => Ok(StatusInfo { daemon, server }),
-        Response::Error(err) => Err(anyhow::anyhow!("status failed: {}", err.message)),
-        other => Err(anyhow::anyhow!("unexpected response: {other:?}")),
-    }
 }
 
 pub async fn stop(force: bool) -> Result<StopInfo> {
@@ -51,12 +29,18 @@ pub async fn stop(force: bool) -> Result<StopInfo> {
     let resp = read_response_payload(&mut framed).await?;
 
     match resp {
-        Response::Stopped { exit, stopped_at_ms } => {
+        Response::Stopped {
+            exit,
+            stopped_at_ms,
+        } => {
             if let Ok(mut config) = load_deploy_key() {
                 config.should_autostart = Some(false);
                 let _ = save_deploy_key(&config);
             }
-            Ok(StopInfo { exit, stopped_at_ms })
+            Ok(StopInfo {
+                exit,
+                stopped_at_ms,
+            })
         }
         Response::Error(err) => Err(anyhow::anyhow!("stop failed: {}", err.message)),
         other => Err(anyhow::anyhow!("unexpected response: {other:?}")),
@@ -197,7 +181,9 @@ fn config_dir() -> Result<PathBuf> {
     if let Some(home) = dirs::home_dir() {
         return Ok(home.join(".atlas").join("runnerd"));
     }
-    Err(anyhow::anyhow!("Unable to resolve a writable data directory"))
+    Err(anyhow::anyhow!(
+        "Unable to resolve a writable data directory"
+    ))
 }
 
 fn default_channel() -> String {
