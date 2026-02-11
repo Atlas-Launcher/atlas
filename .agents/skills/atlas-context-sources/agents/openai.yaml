@@ -1,0 +1,4 @@
+interface:
+  display_name: "Atlas Context Sources"
+  short_description: "Find authoritative context sources for Atlas tasks"
+  default_prompt: "Locate and prioritize the best sources before making Atlas changes"
