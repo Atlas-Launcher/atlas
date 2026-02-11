@@ -215,3 +215,21 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
         .as_nanos();
     std::env::temp_dir().join(format!("atlas-launcher-{prefix}-{nanos}"))
 }
+
+#[test]
+fn parses_java_major_from_modern_version_output() {
+    let output = r#"openjdk version "21.0.5" 2024-10-15"#;
+    assert_eq!(java::parse_java_major_version(output), Some(21));
+}
+
+#[test]
+fn parses_java_major_from_legacy_version_output() {
+    let output = r#"java version "1.8.0_432""#;
+    assert_eq!(java::parse_java_major_version(output), Some(8));
+}
+
+#[test]
+fn parse_java_major_returns_none_for_unexpected_output() {
+    let output = "this is not java -version output";
+    assert_eq!(java::parse_java_major_version(output), None);
+}
