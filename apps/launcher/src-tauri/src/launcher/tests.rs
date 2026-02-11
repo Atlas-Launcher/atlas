@@ -4,7 +4,9 @@ use crate::launcher::manifest::{
     VersionDownloads,
 };
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn base_version() -> VersionData {
     VersionData {
@@ -151,4 +153,65 @@ fn locate_java_binary_prefers_manifest_entry() {
     let runtime_home = PathBuf::from("/tmp/runtime");
     let path = java::locate_java_binary(&runtime_home, &manifest);
     assert!(path.to_string_lossy().ends_with("runtime/bin/java"));
+}
+
+#[test]
+fn validates_runtime_structure_and_hashes() {
+    let temp = unique_temp_dir("java-runtime-validate");
+    let runtime_home = temp.join("runtime-home");
+    fs::create_dir_all(runtime_home.join("bin")).expect("create runtime bin");
+
+    let java_file = runtime_home.join("bin").join("java");
+    let java_bytes = b"java-runtime-binary";
+    fs::write(&java_file, java_bytes).expect("write java binary");
+    let sha1 = {
+        use sha1::{Digest, Sha1};
+        let mut hasher = Sha1::new();
+        hasher.update(java_bytes);
+        hex::encode(hasher.finalize())
+    };
+
+    let manifest = java::JavaRuntimeFiles {
+        files: HashMap::from([
+            (
+                "bin".to_string(),
+                java::JavaRuntimeFile {
+                    kind: "directory".to_string(),
+                    executable: false,
+                    downloads: None,
+                    target: None,
+                },
+            ),
+            (
+                "bin/java".to_string(),
+                java::JavaRuntimeFile {
+                    kind: "file".to_string(),
+                    executable: true,
+                    downloads: Some(java::JavaRuntimeDownloads {
+                        raw: Some(Download {
+                            path: None,
+                            url: "https://example.com/java".to_string(),
+                            sha1: Some(sha1.clone()),
+                            size: Some(java_bytes.len() as u64),
+                        }),
+                    }),
+                    target: None,
+                },
+            ),
+        ]),
+    };
+
+    assert!(java::validate_runtime_install(&runtime_home, &manifest).is_ok());
+
+    fs::write(&java_file, b"tampered").expect("tamper java binary");
+    assert!(java::validate_runtime_install(&runtime_home, &manifest).is_err());
+    let _ = fs::remove_dir_all(temp);
+}
+
+fn unique_temp_dir(prefix: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    std::env::temp_dir().join(format!("atlas-launcher-{prefix}-{nanos}"))
 }

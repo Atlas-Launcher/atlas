@@ -204,7 +204,7 @@ function updateThemeMode(value: string) {
         <div class="flex items-center gap-2">
           <Button :disabled="props.working" variant="outline" @click="emit('open-readiness-wizard')">
             <ShieldAlert class="mr-1 h-4 w-4" />
-            Open readiness wizard
+            Get ready to play
           </Button>
           <Button :disabled="props.working" variant="outline" @click="emit('open-troubleshooter')">
             Open troubleshooter

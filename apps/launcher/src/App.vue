@@ -23,7 +23,7 @@ import { useSettings } from "./lib/useSettings";
 import { useStatus } from "./lib/useStatus";
 import { useUpdater } from "./lib/useUpdater";
 import { useWorking } from "./lib/useWorking";
-import type { LaunchReadinessReport, RepairResult } from "@/types/diagnostics";
+import type { LaunchReadinessReport } from "@/types/diagnostics";
 import type { AtlasPackSyncResult, AtlasRemotePack } from "@/types/library";
 import type { InstanceConfig, ModLoaderKind } from "@/types/settings";
 
@@ -51,7 +51,6 @@ const {
   signOut,
   signOutAtlas,
   createLauncherLink,
-  completeLauncherLink,
   startLauncherLinkCompletionPoll
 } = useAuth({ setStatus, pushLog, run });
 const {
@@ -135,9 +134,7 @@ const hubUrl = computed(() => (settingsAtlasHubUrl.value ?? "").trim() || import
 const readinessNextActionLabels: Partial<Record<string, string>> = {
   atlasLogin: "Sign in to Atlas",
   microsoftLogin: "Sign in to Microsoft",
-  accountLink: "Link accounts",
-  filesInstalled: "Install files",
-  javaReady: "Repair runtime"
+  accountLink: "Link accounts"
 };
 
 function normalizeUuid(value?: string | null) {
@@ -200,8 +197,14 @@ const statusSuggestsFailure = computed(() => {
     value.includes("missing")
   );
 });
+const troubleshooterBlockedByReadiness = computed(
+  () => !launchReadiness.value || !launchReadiness.value.readyToLaunch
+);
 const showTroubleshooterFailurePrompt = computed(
-  () => statusSuggestsFailure.value && dismissedFailureStatus.value !== status.value
+  () =>
+    !troubleshooterBlockedByReadiness.value &&
+    statusSuggestsFailure.value &&
+    dismissedFailureStatus.value !== status.value
 );
 
 function openInstance(id: string) {
@@ -239,7 +242,11 @@ async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
 function shouldAutoOpenReadinessWizard(report: LaunchReadinessReport) {
   const dismissed = !!settings.value.launchReadinessWizard?.dismissedAt;
   const completed = !!settings.value.launchReadinessWizard?.completedAt;
-  return !report.readyToLaunch && !dismissed && !completed;
+  return hasLoginReadinessBlockers(report) && !dismissed && !completed;
+}
+
+function hasLoginReadinessBlockers(report: LaunchReadinessReport) {
+  return !report.atlasLoggedIn || !report.microsoftLoggedIn || !report.accountsLinked;
 }
 
 async function persistReadinessWizardState(state: { dismissedAt?: string | null; completedAt?: string | null }) {
@@ -276,7 +283,23 @@ function dismissTroubleshooterFailurePrompt() {
   dismissedFailureStatus.value = status.value;
 }
 
-function openTroubleshooter(trigger: "settings" | "help" | "failure") {
+async function openTroubleshooter(trigger: "settings" | "help" | "failure") {
+  await refreshLaunchReadiness();
+  const readiness = launchReadiness.value;
+  if (!readiness || !readiness.readyToLaunch) {
+    const blocker = readiness?.checklist.find((item) => !item.ready)?.label;
+    setStatus(
+      blocker
+        ? `Complete readiness check first: ${blocker}.`
+        : "Complete launch readiness checks before opening Troubleshooter."
+    );
+    readinessWizardOpen.value = true;
+    if (trigger === "failure") {
+      dismissTroubleshooterFailurePrompt();
+    }
+    return;
+  }
+
   troubleshooterTrigger.value = trigger;
   troubleshooterOpen.value = true;
   if (trigger === "failure") {
@@ -329,21 +352,6 @@ async function startLauncherLinking() {
   } else {
     pushLog("Launcher link session creation failed.");
   }
-}
-
-async function completeLauncherLinkingFromMenu() {
-  pushLog("Complete link clicked.");
-  if (!profile.value) {
-    setStatus("Sign in with Microsoft first.");
-    pushLog("Complete link blocked: missing Microsoft profile.");
-    return;
-  }
-  if (!launcherLinkSession.value) {
-    await startLauncherLinking();
-    return;
-  }
-  pushLog("Complete link: finishing launcher link session.");
-  await completeLauncherLink();
 }
 
 function resolveLoaderKind(modloader: string | null | undefined): ModLoaderKind {
@@ -677,36 +685,6 @@ async function restartLauncherAfterUpdate() {
   await restartNow();
 }
 
-async function repairRuntimeFromWizard() {
-  const instance = activeInstance.value;
-  if (!instance) {
-    setStatus("Select a profile before repairing runtime.");
-    return;
-  }
-  const gameDir = resolveInstanceGameDir(instance);
-  if (!gameDir) {
-    setStatus("Profile game directory is missing.");
-    return;
-  }
-  await runTask("Repairing runtime", async () => {
-    try {
-      const result = await invoke<RepairResult>("repair_installation", {
-        gameDir,
-        packId: instance.atlasPack?.packId ?? null,
-        channel: instance.atlasPack?.channel ?? null,
-        preserveSaves: true
-      });
-      setStatus(result.message);
-      await loadInstalledVersions();
-      await refreshInstanceInstallStates();
-      await loadMods();
-      await refreshLaunchReadiness();
-    } catch (err) {
-      setStatus(`Runtime repair failed: ${String(err)}`);
-    }
-  });
-}
-
 async function handleReadinessAction(key: string) {
   if (key === "atlasLogin") {
     await startAtlasLogin();
@@ -722,15 +700,6 @@ async function handleReadinessAction(key: string) {
     await startLauncherLinking();
     await refreshLaunchReadiness();
     return;
-  }
-  if (key === "filesInstalled") {
-    await installSelectedVersion();
-    await refreshLaunchReadiness();
-    return;
-  }
-  if (key === "javaReady") {
-    await repairRuntimeFromWizard();
-    await refreshLaunchReadiness();
   }
 }
 
@@ -939,8 +908,6 @@ watch(
       :is-signing-in="isSigningIn"
       @sign-out-microsoft="signOutMicrosoft"
       @sign-out-atlas="signOutAtlasFromMenu"
-      @start-auth-flow="startUnifiedAuthFlow"
-      @complete-link="completeLauncherLinkingFromMenu"
       @open-readiness-wizard="openReadinessWizard"
     />
     
@@ -1087,6 +1054,9 @@ watch(
     <LaunchReadinessWizard
       :open="readinessWizardOpen"
       :readiness="launchReadiness"
+      :is-signing-in="isSigningIn"
+      :link-session="launcherLinkSession"
+      :hub-url="hubUrl"
       :working="working"
       :next-action-labels="readinessNextActionLabels"
       @action="handleReadinessAction"
