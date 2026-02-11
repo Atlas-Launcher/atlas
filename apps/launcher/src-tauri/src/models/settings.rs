@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::paths;
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
