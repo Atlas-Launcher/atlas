@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, ProgressBarStatus, Window } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -724,8 +724,7 @@ async function openModsFolder() {
     return;
   }
   try {
-    const { open } = await import("@tauri-apps/plugin-opener");
-    await open(modsDir.value);
+    await openUrl(modsDir.value)
   } catch (err) {
     setStatus(`Failed to open mods folder: ${String(err)}`);
   }
@@ -1192,7 +1191,7 @@ watch(
             @back="backToLibrary"
             @launch="launchActiveInstance"
             @update-files="installSelectedVersion"
-            @toggle-mod="toggleMod"
+            @toggle-mod="({ fileName, enabled }) => toggleMod(fileName, enabled)"
             @delete-mod="deleteMod"
             @refresh-mods="refreshMods"
             @open-mods-folder="openModsFolder"
