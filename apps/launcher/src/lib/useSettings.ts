@@ -220,12 +220,10 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
       settings.value.defaultMemoryMb = 4096;
       changed = true;
     }
-
-    if (!settings.value.instances || settings.value.instances.length === 0) {
-      const instance = createInstanceConfig("default", "Default", defaultGameDir.value);
-      settings.value.instances = [instance];
-      settings.value.selectedInstanceId = instance.id;
-      return true;
+    // Do not auto-create a default local profile. Start with zero instances if none exist.
+    if (!settings.value.instances) {
+      settings.value.instances = [];
+      changed = true;
     }
 
     if (!settings.value.launchReadinessWizard) {
@@ -235,6 +233,7 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
 
     const selected = settings.value.selectedInstanceId;
     if (!selected || !settings.value.instances.some((instance) => instance.id === selected)) {
+      // If there are instances, prefer the first. Otherwise leave as null instead of creating one.
       settings.value.selectedInstanceId = settings.value.instances[0]?.id ?? null;
       changed = true;
     }
@@ -312,10 +311,7 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
   }
 
   async function removeInstance(id: string) {
-    if (instances.value.length <= 1) {
-      setStatus("At least one instance is required.");
-      return;
-    }
+    // Allow removing the last local profile; it is valid to have zero instances.
     const filtered = instances.value.filter((instance) => instance.id !== id);
     settings.value.instances = filtered;
     if (settings.value.selectedInstanceId === id) {
