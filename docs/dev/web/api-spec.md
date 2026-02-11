@@ -99,6 +99,7 @@ Use your Hub deployment URL (Vercel).
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/api/v1/download/{downloadId}` | Universal immutable artifact resolver (302 redirect to storage). |
 | `GET` | `/download/app/latest` | Latest launcher artifact descriptor/redirect. |
 | `GET` | `/download/app/file/{tag}/{asset}` | Download launcher artifact by tag/asset. |
 | `GET` | `/download/app/installer/latest` | Latest launcher installer (generic). |
@@ -111,6 +112,16 @@ Use your Hub deployment URL (Vercel).
 | `GET` | `/download/cli/latest/{os}/{arch}` | Latest CLI binary by platform. |
 | `GET` | `/download/cli/file/{tag}/{asset}` | CLI binary by tag/asset. |
 | `GET` | `/download/ci/workflow` | Download generated CI workflow template. |
+
+## 8) Distribution API v1
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/releases/{product}/latest/{os}/{arch}` | Resolve latest release metadata for a product/platform. |
+| `GET` | `/api/v1/releases/{product}/{version}/{os}/{arch}` | Resolve specific release metadata for a product/platform. |
+| `POST` | `/api/v1/releases/{product}/publish` | Register immutable artifacts for one product/version/platform release. |
+| `GET` | `/api/v1/launcher/updates/{os}/{arch}` | Stable launcher updater view projected from canonical release metadata. |
+| `GET` | `/api/v1/launcher/updates/{channel}/{os}/{arch}` | Channelized launcher updater view projected from canonical release metadata. |
 
 ## Error Shape
 

@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use atlas_client::hub::{DistributionReleaseAsset, DistributionReleaseResponse, HubClient};
 use runner_core_v2::proto::{LogLine, LogStream};
 use runner_v2_utils::runtime_paths_v2;
 use std::path::{Path, PathBuf};
@@ -173,7 +174,7 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", root.display());
         }
         Cmd::Install { user, runnerd_path } => {
-            install_systemd(user, runnerd_path)?;
+            install_systemd(user, runnerd_path).await?;
             println!("atlas-runnerd systemd service enabled and started.");
         }
         Cmd::Backup => {
@@ -242,16 +243,18 @@ fn resolve_server_root(server_root: Option<PathBuf>) -> PathBuf {
     paths.runtime_dir.join("servers").join("default")
 }
 
-fn install_systemd(user: Option<String>, runnerd_path: Option<PathBuf>) -> anyhow::Result<()> {
+async fn install_systemd(user: Option<String>, runnerd_path: Option<PathBuf>) -> anyhow::Result<()> {
     if std::env::consts::OS != "linux" {
         anyhow::bail!("systemd install is only supported on Linux");
     }
 
     let service_user = user.unwrap_or_else(current_user);
-    let runnerd = runnerd_path
-        .as_ref()
-        .map(|path| path.display().to_string())
-        .unwrap_or_else(|| "atlas-runnerd".to_string());
+    let runnerd = if let Some(path) = runnerd_path.as_ref() {
+        path.display().to_string()
+    } else {
+        let downloaded = download_runnerd_via_distribution_api().await?;
+        downloaded.display().to_string()
+    };
 
     let service_path = Path::new("/etc/systemd/system/atlas-runnerd.service");
     let contents = format!(
@@ -276,6 +279,112 @@ WantedBy=multi-user.target\n"
     run_systemctl(["daemon-reload"])?;
     run_systemctl(["enable", "--now", "atlas-runnerd.service"])?;
     Ok(())
+}
+
+async fn download_runnerd_via_distribution_api() -> anyhow::Result<PathBuf> {
+    let hub_url = resolve_install_hub_url()?;
+    let mut hub = HubClient::new(&hub_url)?;
+    if let Ok(token) = std::env::var("ATLAS_TOKEN") {
+        if !token.trim().is_empty() {
+            hub.set_token(token);
+        }
+    }
+
+    let arch = normalize_distribution_arch(std::env::consts::ARCH)?;
+    let release = hub
+        .get_latest_distribution_release("runnerd", "linux", arch)
+        .await?;
+    let asset = select_runnerd_asset(&release)?;
+    let bytes = hub.download_distribution_asset(&asset.download_id).await?;
+
+    let install_path = PathBuf::from("/usr/local/bin/atlas-runnerd");
+    std::fs::write(&install_path, &bytes).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to write runnerd binary to {}: {err}",
+            install_path.display()
+        )
+    })?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&install_path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|err| {
+                anyhow::anyhow!(
+                    "Failed to set executable permissions on {}: {err}",
+                    install_path.display()
+                )
+            })?;
+    }
+
+    Ok(install_path)
+}
+
+fn select_runnerd_asset(release: &DistributionReleaseResponse) -> anyhow::Result<&DistributionReleaseAsset> {
+    release
+        .assets
+        .iter()
+        .find(|asset| asset.kind == "binary")
+        .or_else(|| release.assets.iter().find(|asset| asset.kind == "installer"))
+        .ok_or_else(|| anyhow::anyhow!("No runnerd binary/installer asset found in distribution release"))
+}
+
+fn resolve_install_hub_url() -> anyhow::Result<String> {
+    if let Ok(url) = std::env::var("ATLAS_HUB_URL") {
+        let trimmed = url.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    let deploy_config_path = resolve_runnerd_deploy_config_path()?;
+    let content = std::fs::read_to_string(&deploy_config_path).map_err(|err| {
+        anyhow::anyhow!(
+            "ATLAS_HUB_URL is not set and failed to read {}: {err}",
+            deploy_config_path.display()
+        )
+    })?;
+    let value: serde_json::Value = serde_json::from_str(&content).map_err(|err| {
+        anyhow::anyhow!(
+            "ATLAS_HUB_URL is not set and failed to parse {}: {err}",
+            deploy_config_path.display()
+        )
+    })?;
+
+    let hub_url = value
+        .get("hub_url")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "ATLAS_HUB_URL is not set and deploy config does not contain hub_url ({})",
+                deploy_config_path.display()
+            )
+        })?;
+    Ok(hub_url.to_string())
+}
+
+fn resolve_runnerd_deploy_config_path() -> anyhow::Result<PathBuf> {
+    if let Some(base) = dirs::data_dir() {
+        return Ok(base.join("atlas").join("runnerd").join("deploy.json"));
+    }
+    if let Some(home) = dirs::home_dir() {
+        return Ok(home.join(".atlas").join("runnerd").join("deploy.json"));
+    }
+    Err(anyhow::anyhow!(
+        "Unable to resolve deploy config path and ATLAS_HUB_URL is not set"
+    ))
+}
+
+fn normalize_distribution_arch(arch: &str) -> anyhow::Result<&'static str> {
+    match arch {
+        "x86_64" | "amd64" => Ok("x64"),
+        "aarch64" | "arm64" => Ok("arm64"),
+        other => Err(anyhow::anyhow!(
+            "Unsupported architecture '{other}' for runnerd distribution install"
+        )),
+    }
 }
 
 fn run_systemctl<const N: usize>(args: [&str; N]) -> anyhow::Result<()> {
