@@ -1,12 +1,114 @@
 name: ci
 
 on:
+  pull_request:
+    paths-ignore:
+      - "apps/web/**"
+      - "**/*.md"
   push:
     branches: [main, master]
-  pull_request:
+    paths-ignore:
+      - "apps/web/**"
+      - "**/*.md"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-lint-test:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust_core: ${{ steps.filter.outputs.rust_core }}
+      launcher_tauri: ${{ steps.filter.outputs.launcher_tauri }}
+      launcher_frontend: ${{ steps.filter.outputs.launcher_frontend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Paths filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            # Any Rust workspace changes (shared crates + rust apps)
+            rust_core:
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - "crates/**"
+              - "apps/cli/**"
+              - "apps/runner-v2/**"
+              - "apps/runnerd-v2/**"
+              - "apps/runner/**"
+
+            # Tauri backend (Rust) changes for the launcher only
+            launcher_tauri:
+              - "apps/launcher/src-tauri/**"
+
+            # Vue/TS frontend changes for the launcher only
+            launcher_frontend:
+              - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
+              - "turbo.json"
+              - "apps/launcher/package.json"
+              - "apps/launcher/tsconfig*.json"
+              - "apps/launcher/vite*.ts"
+              - "apps/launcher/src/**"
+              - "apps/launcher/**/*.vue"
+              - "apps/launcher/**/*.ts"
+              - "apps/launcher/**/*.tsx"
+
+  no-changes:
+    name: No relevant changes
+    needs: changes
+    if: needs.changes.outputs.rust_core != 'true' && needs.changes.outputs.launcher_tauri != 'true' && needs.changes.outputs.launcher_frontend != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Nothing to do
+        run: echo "No Rust or launcher frontend changes detected; skipping checks."
+
+  rust-ci:
+    name: Rust (fmt, clippy, test) — linux
+    needs: changes
+    if: needs.changes.outputs.rust_core == 'true' || needs.changes.outputs.launcher_tauri == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+          shared-key: rust-ci-${{ runner.os }}
+          cache-all-crates: true
+          cache-on-failure: true
+
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: tests
+        run: cargo test --workspace --all-targets
+
+  launcher-ts:
+    name: Launcher frontend (vue-tsc) — linux
+    needs: changes
+    if: needs.changes.outputs.launcher_frontend == 'true'
     runs-on: ubuntu-latest
     env:
       TURBO_TELEMETRY_DISABLED: "1"
@@ -27,31 +129,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            . -> target
-          shared-key: ci-${{ runner.os }}
-          cache-all-crates: true
-          cache-on-failure: true
-
-      - name: Cache Turbo
-        uses: actions/cache@v4
-        with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.ref_name }}
-          restore-keys: |
-            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-
-            turbo-${{ runner.os }}-
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Turbo build, lint, test
-        run: pnpm turbo run build lint test
+      - name: Typecheck (apps/launcher)
+        run: pnpm --dir apps/launcher run typecheck

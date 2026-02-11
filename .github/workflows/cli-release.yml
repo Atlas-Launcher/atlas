@@ -1,4 +1,4 @@
-name: tag-build
+name: cli-release
 
 on:
   push:
@@ -7,6 +7,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: cli-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-cli:
@@ -17,6 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +37,8 @@ jobs:
         with:
           workspaces: |
             . -> target
-          shared-key: tag-build-cli-${{ matrix.os }}
+          shared-key: cli-build-${{ matrix.os }}
+          cache-on-failure: true
 
       - name: Build CLI
         run: cargo build --release -p atlas-cli
@@ -44,7 +50,7 @@ jobs:
           mkdir -p dist
 
           BIN_PATH="target/release/atlas"
-          FILE_NAME="atlas-cli-${{ runner.os }}-${{ runner.arch }}"
+          FILE_NAME="atlas-${{ runner.os }}-${{ runner.arch }}"
 
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             BIN_PATH="target/release/atlas.exe"
@@ -58,14 +64,140 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: atlas-cli-${{ matrix.os }}
-          path: dist/atlas-cli-*
+          path: dist/atlas-*
           if-no-files-found: error
 
-  release-cli:
+  build-installers:
+    name: Build CLI installers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    if: startsWith(github.ref_name, 'cli-v')
+    needs: [build-cli]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Download CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: atlas-cli-${{ matrix.os }}
+          path: dist/cli
+
+      - name: Build unsigned Linux .deb installer
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          VERSION="${GITHUB_REF_NAME#cli-v}"
+
+          MACHINE="$(uname -m)"
+          case "${MACHINE}" in
+            x86_64) DEB_ARCH="amd64" ;;
+            aarch64|arm64) DEB_ARCH="arm64" ;;
+            *) DEB_ARCH="${MACHINE}" ;;
+          esac
+
+          PKG_DIR="staging/atlas-cli-installer-linux-${DEB_ARCH}"
+          mkdir -p "${PKG_DIR}/DEBIAN" "${PKG_DIR}/usr/local/bin"
+
+          install -m 0755 "dist/cli/atlas-Linux-${{ runner.arch }}" "${PKG_DIR}/usr/local/bin/atlas"
+
+          cat > "${PKG_DIR}/DEBIAN/control" <<EOF
+          Package: atlas-cli
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: ${DEB_ARCH}
+          Maintainer: Atlas <noreply@atlas.dev>
+          Description: Atlas CLI for modpack build and deploy workflows.
+          EOF
+
+          dpkg-deb --build "${PKG_DIR}" "dist/atlas-cli-installer-linux-${DEB_ARCH}.deb"
+
+      - name: Build unsigned macOS .pkg installer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          VERSION="${GITHUB_REF_NAME#cli-v}"
+          MACHINE="$(uname -m)"
+
+          # Find downloaded binary (arch naming differs)
+          BIN="$(ls -1 dist/cli/atlas-Darwin-* | head -n 1)"
+          chmod +x "$BIN"
+
+          ROOT_DIR="staging/pkgroot"
+          mkdir -p "${ROOT_DIR}/usr/local/bin"
+          install -m 0755 "$BIN" "${ROOT_DIR}/usr/local/bin/atlas"
+
+          pkgbuild \
+            --root "${ROOT_DIR}" \
+            --identifier "dev.atlas.cli" \
+            --version "${VERSION}" \
+            --install-location "/" \
+            "dist/atlas-cli-installer-macos-${MACHINE}.pkg"
+
+      - name: Build unsigned Windows installer bundle (zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+
+          $arch = $env:PROCESSOR_ARCHITECTURE.ToLowerInvariant()
+          switch ($arch) {
+            "amd64" { $arch = "x64" }
+            "x86_64" { $arch = "x64" }
+            "arm64" { $arch = "arm64" }
+            default { }
+          }
+
+          $bundleDir = "staging/atlas-cli-installer-windows-$arch"
+          New-Item -ItemType Directory -Path $bundleDir -Force | Out-Null
+
+          Copy-Item "dist/cli/atlas-Windows-${{ runner.arch }}.exe" "$bundleDir/atlas.exe"
+
+          @"
+          param(
+            [string]`$InstallDir = "`$env:ProgramFiles\Atlas CLI"
+          )
+
+          New-Item -ItemType Directory -Path `$InstallDir -Force | Out-Null
+          Copy-Item "`$PSScriptRoot\atlas.exe" "`$InstallDir\atlas.exe" -Force
+          Write-Host "Installed atlas.exe to `$InstallDir"
+          Write-Host "Add this directory to PATH if it is not already configured."
+          "@ | Set-Content -Path "$bundleDir/install.ps1" -Encoding UTF8
+
+          @"
+          Atlas CLI installer bundle
+
+          Run install.ps1 in PowerShell (as Administrator if needed) to install atlas.exe.
+          "@ | Set-Content -Path "$bundleDir/README.txt" -Encoding UTF8
+
+          Compress-Archive -Path "$bundleDir/*" -DestinationPath "dist/atlas-cli-installer-windows-$arch.zip" -Force
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-cli-installers-${{ matrix.os }}
+          path: dist/atlas-cli-installer-*
+          if-no-files-found: error
+
+  release:
     name: Release CLI
     runs-on: ubuntu-latest
     if: startsWith(github.ref_name, 'cli-v')
-    needs: [build-cli]
+    needs: [build-cli, build-installers]
     steps:
       - name: Parse version
         id: tag
@@ -74,11 +206,14 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist/cli
+          path: dist
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           name: Atlas CLI v${{ steps.tag.outputs.version }}
           tag_name: ${{ github.ref_name }}
-          files: dist/cli/**/atlas-cli-*
+          files: |
+            dist/**/atlas-*
+            dist/**/atlas-cli-installer-*
+          fail_on_unmatched_files: true
