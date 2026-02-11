@@ -71,14 +71,15 @@ pub fn run_troubleshooter(
         settings,
         atlas_session,
         auth_session,
-        game_dir,
+        game_dir: game_dir.clone(),
     });
+    let merged_logs = diagnostics::collect_troubleshooter_logs(game_dir.as_deref(), recent_logs);
 
     Ok(diagnostics::run_troubleshooter(
         diagnostics::TroubleshooterInput {
             readiness,
             recent_status,
-            recent_logs: recent_logs.unwrap_or_default(),
+            recent_logs: merged_logs,
         },
     ))
 }

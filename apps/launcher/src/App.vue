@@ -8,7 +8,6 @@ import GlobalProgressBar from "./components/GlobalProgressBar.vue";
 import InstanceView from "./components/InstanceView.vue";
 import LibraryView from "./components/LibraryView.vue";
 import LaunchReadinessWizard from "./components/LaunchReadinessWizard.vue";
-import LauncherLinkCard from "./components/LauncherLinkCard.vue";
 import SettingsCard from "./components/SettingsCard.vue";
 import SidebarNav from "./components/SidebarNav.vue";
 import TitleBar from "./components/TitleBar.vue";
@@ -23,9 +22,9 @@ import { useSettings } from "./lib/useSettings";
 import { useStatus } from "./lib/useStatus";
 import { useUpdater } from "./lib/useUpdater";
 import { useWorking } from "./lib/useWorking";
-import type { LaunchReadinessReport } from "@/types/diagnostics";
+import type { LaunchReadinessReport, TroubleshooterReport } from "@/types/diagnostics";
 import type { AtlasPackSyncResult, AtlasRemotePack } from "@/types/library";
-import type { InstanceConfig, ModLoaderKind } from "@/types/settings";
+import type { AppSettings, InstanceConfig, ModLoaderKind } from "@/types/settings";
 
 const {
   status,
@@ -51,6 +50,7 @@ const {
   signOut,
   signOutAtlas,
   createLauncherLink,
+  completeLauncherLink,
   startLauncherLinkCompletionPoll
 } = useAuth({ setStatus, pushLog, run });
 const {
@@ -129,7 +129,10 @@ const readinessWizardOpen = ref(false);
 const troubleshooterOpen = ref(false);
 const troubleshooterTrigger = ref<"settings" | "help" | "failure">("settings");
 const dismissedFailureStatus = ref<string | null>(null);
+const failurePromptEligible = ref(false);
 const appBootstrapped = ref(false);
+let failurePromptCheckVersion = 0;
+const lastAutoTroubleshooterSignal = ref<string | null>(null);
 const hubUrl = computed(() => (settingsAtlasHubUrl.value ?? "").trim() || import.meta.env.VITE_ATLAS_HUB_URL || "https://atlas.nathanm.org");
 const readinessNextActionLabels: Partial<Record<string, string>> = {
   atlasLogin: "Sign in to Atlas",
@@ -197,13 +200,34 @@ const statusSuggestsFailure = computed(() => {
     value.includes("missing")
   );
 });
+const recentLogsSuggestFailure = computed(() => {
+  const haystack = logs.value.slice(0, 120).join("\n").toLowerCase();
+  if (!haystack.trim()) {
+    return false;
+  }
+  return (
+    haystack.includes("out of memory") ||
+    haystack.includes("java heap space") ||
+    haystack.includes("missing minecraft version") ||
+    haystack.includes("missing neoforge loader version") ||
+    haystack.includes("launch failed") ||
+    haystack.includes("client jar is missing") ||
+    haystack.includes("pack update failed")
+  );
+});
+const NON_ACTIONABLE_TROUBLESHOOTER_CODES = new Set([
+  "atlas_not_signed_in",
+  "microsoft_not_signed_in",
+  "account_link_mismatch"
+]);
 const troubleshooterBlockedByReadiness = computed(
   () => !launchReadiness.value || !launchReadiness.value.readyToLaunch
 );
 const showTroubleshooterFailurePrompt = computed(
   () =>
     !troubleshooterBlockedByReadiness.value &&
-    statusSuggestsFailure.value &&
+    failurePromptEligible.value &&
+    (statusSuggestsFailure.value || recentLogsSuggestFailure.value) &&
     dismissedFailureStatus.value !== status.value
 );
 
@@ -258,6 +282,39 @@ async function persistReadinessWizardState(state: { dismissedAt?: string | null;
     }
   };
   await updateSettings(nextSettings);
+}
+
+function buildDefaultLauncherSettings(): AppSettings {
+  const base = (defaultGameDir.value ?? "").trim().replace(/[\\/]+$/, "");
+  return {
+    msClientId: null,
+    atlasHubUrl: null,
+    defaultMemoryMb: 4096,
+    defaultJvmArgs: null,
+    instances: [
+      {
+        id: "default",
+        name: "Default",
+        gameDir: base ? `${base}/instances/default` : "",
+        version: null,
+        loader: {
+          kind: "vanilla",
+          loaderVersion: null
+        },
+        javaPath: "",
+        memoryMb: null,
+        jvmArgs: null,
+        source: "local",
+        atlasPack: null
+      }
+    ],
+    selectedInstanceId: "default",
+    themeMode: "system",
+    launchReadinessWizard: {
+      dismissedAt: null,
+      completedAt: null
+    }
+  };
 }
 
 async function startUnifiedAuthFlow() {
@@ -315,16 +372,38 @@ function handleTroubleshooterLog(message: string) {
   pushLog(`[Troubleshooter:${troubleshooterTrigger.value}] ${message}`);
 }
 
+async function refreshFailurePromptEligibility() {
+  if (
+    (!statusSuggestsFailure.value && !recentLogsSuggestFailure.value) ||
+    troubleshooterBlockedByReadiness.value
+  ) {
+    failurePromptEligible.value = false;
+    return;
+  }
+
+  const checkVersion = ++failurePromptCheckVersion;
+  try {
+    const report = await invoke<TroubleshooterReport>("run_troubleshooter", {
+      gameDir: troubleshooterGameDir.value,
+      recentStatus: status.value || null,
+      recentLogs: logs.value.slice(0, 120)
+    });
+    if (checkVersion !== failurePromptCheckVersion) {
+      return;
+    }
+    failurePromptEligible.value = report.findings.some(
+      (finding) => !NON_ACTIONABLE_TROUBLESHOOTER_CODES.has(finding.code)
+    );
+  } catch {
+    if (checkVersion !== failurePromptCheckVersion) {
+      return;
+    }
+    failurePromptEligible.value = false;
+  }
+}
+
 async function handleTroubleshooterRelinkRequested() {
   await startUnifiedAuthFlow();
-}
-
-async function signOutMicrosoft() {
-  await signOut();
-}
-
-async function signOutAtlasFromMenu() {
-  await signOutAtlas();
 }
 
 async function openLauncherLinkPage(code: string) {
@@ -352,6 +431,38 @@ async function startLauncherLinking() {
   } else {
     pushLog("Launcher link session creation failed.");
   }
+}
+
+async function continueAccountLinking() {
+  if (!atlasProfile.value) {
+    await startAtlasLogin();
+    return;
+  }
+
+  if (!profile.value) {
+    await startMicrosoftSignIn();
+    return;
+  }
+
+  if (launcherLinkSession.value) {
+    setStatus("Checking account link status...");
+    const completed = await completeLauncherLink();
+    if (completed) {
+      await refreshLaunchReadiness();
+      return;
+    }
+
+    const activeSession = launcherLinkSession.value;
+    if (activeSession) {
+      await openLauncherLinkPage(activeSession.linkCode);
+      startLauncherLinkCompletionPoll(activeSession);
+    }
+    await refreshLaunchReadiness();
+    return;
+  }
+
+  await startLauncherLinking();
+  await refreshLaunchReadiness();
 }
 
 function resolveLoaderKind(modloader: string | null | undefined): ModLoaderKind {
@@ -697,8 +808,7 @@ async function handleReadinessAction(key: string) {
     return;
   }
   if (key === "accountLink") {
-    await startLauncherLinking();
-    await refreshLaunchReadiness();
+    await continueAccountLinking();
     return;
   }
 }
@@ -715,6 +825,35 @@ async function completeReadinessWizard() {
   await persistReadinessWizardState({
     completedAt: new Date().toISOString(),
     dismissedAt: null
+  });
+}
+
+async function handleReadinessSignOut(scope: "microsoft" | "all") {
+  await runTask("Signing out", async () => {
+    if (scope === "all") {
+      if (profile.value) {
+        await signOut();
+      }
+      if (atlasProfile.value) {
+        await signOutAtlas();
+      }
+      await updateSettings(buildDefaultLauncherSettings());
+      await refreshInstanceInstallStates();
+      await loadInstalledVersions();
+      await loadMods();
+      setStatus("Signed out of Atlas and Microsoft. Launcher reset to defaults.");
+    } else {
+      if (profile.value) {
+        await signOut();
+      }
+      await persistReadinessWizardState({
+        dismissedAt: null,
+        completedAt: null
+      });
+      setStatus("Signed out of Microsoft.");
+    }
+    readinessWizardOpen.value = true;
+    await refreshLaunchReadiness({ autoOpen: true });
   });
 }
 
@@ -791,11 +930,39 @@ onMounted(async () => {
 });
 
 watch(
-  () => status.value,
-  (value) => {
-    if (!value || !statusSuggestsFailure.value) {
+  () => [
+    status.value,
+    launchReadiness.value?.readyToLaunch ?? false,
+    troubleshooterGameDir.value,
+    logs.value[0] ?? ""
+  ],
+  async ([value, readyToLaunch]) => {
+    if ((!value && !recentLogsSuggestFailure.value) || !readyToLaunch) {
       dismissedFailureStatus.value = null;
+      failurePromptEligible.value = false;
+      return;
     }
+    await refreshFailurePromptEligibility();
+  }
+);
+
+watch(
+  () => [
+    showTroubleshooterFailurePrompt.value,
+    recentLogsSuggestFailure.value,
+    status.value,
+    logs.value[0] ?? ""
+  ],
+  async ([shouldPrompt, logTriggered, statusValue, firstLog]) => {
+    if (!shouldPrompt || !logTriggered || troubleshooterOpen.value) {
+      return;
+    }
+    const signal = `${statusValue ?? ""}|${firstLog ?? ""}`;
+    if (lastAutoTroubleshooterSignal.value === signal) {
+      return;
+    }
+    lastAutoTroubleshooterSignal.value = signal;
+    await openTroubleshooter("failure");
   }
 );
 
@@ -906,8 +1073,6 @@ watch(
       :profile="profile"
       :atlas-profile="atlasProfile"
       :is-signing-in="isSigningIn"
-      @sign-out-microsoft="signOutMicrosoft"
-      @sign-out-atlas="signOutAtlasFromMenu"
       @open-readiness-wizard="openReadinessWizard"
     />
     
@@ -919,6 +1084,7 @@ watch(
         :tasks-open="tasksPanelOpen"
         @select="activeTab = $event"
         @toggle-tasks="toggleTasksPanel"
+        @open-help="openTroubleshooter('help')"
       />
 
       <!-- Main Content: Floating Pane -->
@@ -1013,13 +1179,6 @@ watch(
           />
         </section>
         <section v-else class="flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-6">
-          <LauncherLinkCard
-            :link-session="launcherLinkSession"
-            :atlas-profile="atlasProfile"
-            :profile="profile"
-            :hub-url="hubUrl"
-            :working="working"
-          />
           <SettingsCard
             v-model:settingsClientId="settingsClientId"
             v-model:settingsAtlasHubUrl="settingsAtlasHubUrl"
@@ -1034,7 +1193,6 @@ watch(
             @save-settings="saveSettings"
             @check-updates="checkForUpdatesFromSettings"
             @open-readiness-wizard="openReadinessWizard"
-            @open-troubleshooter="openTroubleshooter('settings')"
           />
           <ActivityCard
             title="Recent activity"
@@ -1054,12 +1212,15 @@ watch(
     <LaunchReadinessWizard
       :open="readinessWizardOpen"
       :readiness="launchReadiness"
+      :atlas-signed-in="!!atlasProfile"
+      :microsoft-signed-in="!!profile"
       :is-signing-in="isSigningIn"
       :link-session="launcherLinkSession"
       :hub-url="hubUrl"
       :working="working"
       :next-action-labels="readinessNextActionLabels"
       @action="handleReadinessAction"
+      @sign-out="handleReadinessSignOut"
       @close="dismissReadinessWizard"
       @complete="completeReadinessWizard"
     />
