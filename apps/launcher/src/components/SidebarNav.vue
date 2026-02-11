@@ -136,7 +136,7 @@ const tasksBadge = computed(() => (props.tasksCount > 9 ? "9+" : String(props.ta
               <CircleQuestionMark class="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="right">Help</TooltipContent>
+          <TooltipContent side="right">Troubleshooter</TooltipContent>
         </Tooltip>
       </div>
     </TooltipProvider>
