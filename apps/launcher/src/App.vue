@@ -341,15 +341,19 @@ function dismissTroubleshooterFailurePrompt() {
 }
 
 async function openTroubleshooter(trigger: "settings" | "help" | "failure") {
+  pushLog(`[Troubleshooter] openTroubleshooter called (trigger=${trigger})`);
   await refreshLaunchReadiness();
+  pushLog(`[Troubleshooter] launchReadiness=${JSON.stringify(launchReadiness.value)}`);
   const readiness = launchReadiness.value;
-  if (!readiness || !readiness.readyToLaunch) {
+  // Only block opening the troubleshooter automatically for failure-triggered auto-open when readiness is not ready.
+  if (trigger === "failure" && (!readiness || !readiness.readyToLaunch)) {
     const blocker = readiness?.checklist.find((item) => !item.ready)?.label;
     setStatus(
       blocker
         ? `Complete readiness check first: ${blocker}.`
         : "Complete launch readiness checks before opening Troubleshooter."
     );
+    pushLog(`[Troubleshooter] blocked auto-open due to readiness; trigger=${trigger}; blocker=${blocker ?? "none"}`);
     readinessWizardOpen.value = true;
     if (trigger === "failure") {
       dismissTroubleshooterFailurePrompt();
@@ -357,8 +361,10 @@ async function openTroubleshooter(trigger: "settings" | "help" | "failure") {
     return;
   }
 
+  // For manual opens (help/settings) we allow showing the troubleshooter even if readiness isn't fully ready.
   troubleshooterTrigger.value = trigger;
   troubleshooterOpen.value = true;
+  pushLog(`[Troubleshooter] opened (trigger=${trigger})`);
   if (trigger === "failure") {
     dismissTroubleshooterFailurePrompt();
   }

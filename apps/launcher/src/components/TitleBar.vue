@@ -99,6 +99,7 @@ const needsLinkCompletion = computed(() => {
 <template>
   <div 
     class="fixed top-0 left-0 right-0 h-11 z-50 flex items-center justify-between select-none px-3 transition-colors"
+    data-tauri-drag-region
   >
     <!-- Left Section: Compact spacer for traffic lights -->
     <div class="flex items-center h-full" data-tauri-drag-region>
@@ -120,33 +121,36 @@ const needsLinkCompletion = computed(() => {
       </span>
     </div>
 
-    <!-- Right Section: Launch Readiness & Controls -->
-    <div class="flex items-center gap-2.5 h-full pr-0.5">
-      <button
-        class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300"
-        :class="{ 'bg-amber-500/10 border-amber-500/30': needsSetup }"
-        @click.stop="emit('open-readiness-wizard')"
-      >
-        <span
-          class="w-2 h-2 rounded-full mr-2.5 transition-all duration-300 group-hover:scale-110"
-          :class="needsSetup ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : statusDotClass"
-        ></span>
-        <div class="text-xs tracking-tight transition-colors duration-300" :class="{ 'text-amber-500 font-bold': needsSetup }">
-          {{ needsSetup ? "Get ready" : statusText }}
-        </div>
-      </button>
+    <!-- Right Section: Launch Readiness & Controls (anchored to right-4 for a consistent gap) -->
+    <div class="absolute right-4 top-0 h-11 flex items-center z-50" data-tauri-no-drag>
+      <div class="flex items-center gap-2.5 h-full pr-0.5">
+        <button
+          class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300"
+          :class="{ 'bg-amber-500/10 border-amber-500/30': needsSetup }"
+          @click.stop="emit('open-readiness-wizard')"
+          data-tauri-no-drag
+        >
+          <span
+            class="w-2 h-2 rounded-full mr-2.5 transition-all duration-300 group-hover:scale-110"
+            :class="needsSetup ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : statusDotClass"
+          ></span>
+          <span class="text-xs tracking-tight transition-colors duration-300" :class="{ 'text-amber-500 font-bold': needsSetup }">
+            {{ needsSetup ? "Get ready" : statusText }}
+          </span>
+        </button>
 
-      <div v-if="!isMac" class="glass flex items-center h-8 rounded-full px-1 gap-0.5">
-        <button class="h-6 w-8 flex items-center justify-center rounded-full hover:bg-foreground/[0.05] active:bg-foreground/[0.1] transition-colors" @click="minimize" tabindex="-1">
-          <Minus class="w-3.5 h-3.5 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
-        </button>
-        <button class="h-6 w-8 flex items-center justify-center rounded-full hover:bg-foreground/[0.05] active:bg-foreground/[0.1] transition-colors" @click="toggleMaximize" tabindex="-1">
-          <Square v-if="!isMaximized" class="w-3 h-3 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
-          <Copy v-else class="w-3 h-3 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
-        </button>
-        <button class="h-6 w-8 flex items-center justify-center rounded-full hover:bg-destructive hover:text-white transition-colors" @click="closeApp" tabindex="-1">
-          <X class="w-3.5 h-3.5 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
-        </button>
+        <div v-if="!isMac" class="glass flex items-center h-8 rounded-full px-1 gap-0.5" data-tauri-no-drag>
+          <button class="h-6 w-8 flex items-center justify-center rounded-full hover:bg-foreground/[0.05] active:bg-foreground/[0.1] transition-colors" @click="minimize" tabindex="-1" data-tauri-no-drag>
+            <Minus class="w-3.5 h-3.5 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
+          </button>
+          <button class="h-6 w-8 flex items-center justify-center rounded-full hover:bg-foreground/[0.05] active:bg-foreground/[0.1] transition-colors" @click="toggleMaximize" tabindex="-1" data-tauri-no-drag>
+            <Square v-if="!isMaximized" class="w-3 h-3 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
+            <Copy v-else class="w-3 h-3 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
+          </button>
+          <button class="h-6 w-8 flex items-center justify-center rounded-full hover:bg-destructive hover:text-white transition-colors" @click="closeApp" tabindex="-1" data-tauri-no-drag>
+            <X class="w-3.5 h-3.5 translate-y-[0.5px] opacity-40 hover:opacity-100 transition-opacity" />
+          </button>
+        </div>
       </div>
     </div>
   </div>
