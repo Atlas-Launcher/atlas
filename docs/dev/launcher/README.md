@@ -29,6 +29,7 @@ Key backend modules:
 - Tauri updater endpoints should target Distribution API routes:
 - `/api/v1/launcher/updates/{os}/{arch}` (or channelized variant).
 - Release workflow stamps `apps/launcher/src-tauri/tauri.conf.json` version from `launcher-vx.x.x` tags before `tauri build`.
+- Because `apps/launcher/src-tauri` is a Cargo workspace member, CI release bundle output may be written to repo-root `target/release/bundle` (not only `apps/launcher/**/target/**/release/bundle`).
 
 ## Command Surface (Tauri)
 
