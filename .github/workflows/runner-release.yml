@@ -6,7 +6,7 @@ on:
       - "runner-v*"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: runner-release-${{ github.ref }}
@@ -214,13 +214,3 @@ jobs:
           version: ${{ steps.tag.outputs.version }}
           channel: stable
           files_manifest: .atlas-release/runnerd-files.txt
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Atlas Runner v${{ steps.tag.outputs.version }}
-          tag_name: ${{ github.ref_name }}
-          files: |
-            dist/**/atlas-runner-*
-            dist/**/atlas-runnerd-*
-          fail_on_unmatched_files: true

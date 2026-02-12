@@ -6,7 +6,7 @@ on:
       - "launcher-v*"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: launcher-release-${{ github.ref }}
@@ -75,22 +75,32 @@ jobs:
           node -e 'const fs=require("fs"); const path="apps/launcher/src-tauri/tauri.conf.json"; const cfg=JSON.parse(fs.readFileSync(path,"utf8")); cfg.version=process.env.VERSION; fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + "\n");'
           grep -n '"version"' apps/launcher/src-tauri/tauri.conf.json
 
-      - name: Build and upload launcher bundles
+      - name: Build launcher bundles
         uses: tauri-apps/tauri-action@5c73698991aa26946b2d232c344ea4d54b880ff7
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/launcher
           tauriScript: pnpm tauri
-          tagName: ${{ github.ref_name }}
-          releaseName: Atlas Launcher ${{ github.ref_name }}
-          releaseDraft: false
-          prerelease: false
-          uploadUpdaterJson: false
-          uploadUpdaterSignatures: true
           args: ${{ matrix.tauri_args }}
+
+      - name: Collect launcher bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release
+          find apps/launcher/src-tauri/target/release/bundle -type f \
+            \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.sig' \) \
+            -exec cp {} dist/release/ \;
+          ls -lah dist/release
+
+      - name: Upload launcher bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-bundles-${{ matrix.platform }}
+          path: dist/release/*
+          if-no-files-found: error
 
   publish-atlas:
     name: Publish launcher to Atlas Distribution API
@@ -105,14 +115,12 @@ jobs:
         id: tag
         run: echo "version=${GITHUB_REF_NAME#launcher-v}" >> "$GITHUB_OUTPUT"
 
-      - name: Download release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist/release
-          gh release download "${GITHUB_REF_NAME}" --dir dist/release --clobber
-          ls -lah dist/release
+      - name: Download launcher bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/release
+          pattern: launcher-bundles-*
+          merge-multiple: true
 
       - name: Build Atlas publish manifest
         shell: bash

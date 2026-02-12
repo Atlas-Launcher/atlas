@@ -50,6 +50,8 @@ Release workflows use `.github/actions/atlas-release`:
 2. Upload artifacts via `/api/v1/storage/presign` using the returned direct URL and any returned `uploadHeaders` (required for providers such as Vercel Blob).
 3. For Vercel Blob, uploads should use short-lived, path-scoped client tokens generated per artifact (not the global read/write token in clients/CI).
 4. Publish release metadata via `/api/v1/releases/{product}/publish`.
+5. Launcher release workflow consumes build outputs from GitHub Actions workflow artifacts, not GitHub Releases.
+6. CLI and runner release workflows also use GitHub Actions artifacts only; no workflow publishes GitHub Releases.
 
 For pack deploy workflows:
 - Prefer GitHub OIDC (`x-atlas-oidc-token`) where available.
