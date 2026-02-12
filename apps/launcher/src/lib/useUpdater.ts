@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, markRaw, ref, shallowRef } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 
@@ -28,7 +28,7 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
   const lastCheckedAt = ref<string | null>(null);
   const downloadedBytes = ref(0);
   const totalBytes = ref<number | null>(null);
-  const updateHandle = ref<Update | null>(null);
+  const updateHandle = shallowRef<Update | null>(null);
 
   const updateInfo = computed<ReleaseInfo | null>(() => {
     if (!updateHandle.value) {
@@ -129,7 +129,7 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
       }
 
       await releaseCurrentHandle();
-      updateHandle.value = result;
+      updateHandle.value = markRaw(result);
       installComplete.value = false;
       bannerDismissed.value = false;
       if (options?.userInitiated) {
@@ -159,13 +159,28 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
   }
 
   async function installUpdate() {
-    if (!updateHandle.value || updaterBusy.value) {
+    if (!updateHandle.value) {
+      const message = "No pending launcher update is available to install.";
+      errorMessage.value = message;
+      dialogOpen.value = true;
+      setStatus(message);
+      pushLog(message);
+      return false;
+    }
+    if (updaterBusy.value) {
+      const message = "Updater is already busy. Please wait for the current task to finish.";
+      errorMessage.value = message;
+      dialogOpen.value = true;
+      setStatus(message);
+      pushLog(message);
       return false;
     }
     installing.value = true;
+    dialogOpen.value = true;
     errorMessage.value = null;
     downloadedBytes.value = 0;
     totalBytes.value = null;
+    setStatus(`Downloading launcher update ${updateHandle.value.version}...`);
     try {
       await updateHandle.value.downloadAndInstall(handleDownloadEvent);
       installComplete.value = true;
@@ -175,10 +190,15 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
       pushLog(`Launcher update installed: ${updateHandle.value.version}`);
       return true;
     } catch (err) {
-      const message = `Failed to install update: ${String(err)}`;
+      const rawError = String(err);
+      const hasSignatureError =
+        rawError.toLowerCase().includes("signature") || rawError.toLowerCase().includes("verify");
+      const message = hasSignatureError
+        ? "Failed to verify update signature. Ensure release signing keys match the launcher pubkey."
+        : `Failed to install update: ${rawError}`;
       errorMessage.value = message;
       setStatus(message);
-      pushLog(message);
+      pushLog(`Updater install failed: ${rawError}`);
       return false;
     } finally {
       installing.value = false;

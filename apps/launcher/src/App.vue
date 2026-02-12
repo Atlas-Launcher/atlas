@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, ProgressBarStatus, Window } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -133,6 +133,8 @@ const troubleshooterTrigger = ref<"settings" | "help" | "failure">("settings");
 const dismissedFailureStatus = ref<string | null>(null);
 const failurePromptEligible = ref(false);
 const appBootstrapped = ref(false);
+const HOURLY_UPDATE_CHECK_MS = 60 * 60 * 1000;
+let updateCheckInterval: ReturnType<typeof setInterval> | null = null;
 let failurePromptCheckVersion = 0;
 const lastAutoTroubleshooterSignal = ref<string | null>(null);
 const hubUrl = computed(() => (settingsAtlasHubUrl.value ?? "").trim() || import.meta.env.VITE_ATLAS_HUB_URL || "https://atlas.nathanm.org");
@@ -824,7 +826,25 @@ async function checkForUpdatesFromSettings() {
 }
 
 async function installLauncherUpdate() {
-  await installUpdate();
+  const started = await installUpdate();
+  if (!started) {
+    openUpdaterDialog();
+  }
+}
+
+function stopHourlyUpdateChecks() {
+  if (!updateCheckInterval) {
+    return;
+  }
+  clearInterval(updateCheckInterval);
+  updateCheckInterval = null;
+}
+
+function startHourlyUpdateChecks() {
+  stopHourlyUpdateChecks();
+  updateCheckInterval = setInterval(() => {
+    void checkForUpdates();
+  }, HOURLY_UPDATE_CHECK_MS);
 }
 
 async function restartLauncherAfterUpdate() {
@@ -963,6 +983,7 @@ onMounted(async () => {
   await loadMods();
   await syncAtlasPacks();
   void checkForUpdates();
+  startHourlyUpdateChecks();
   appBootstrapped.value = true;
   try {
     const windows = await Window.getAll();
@@ -976,6 +997,10 @@ onMounted(async () => {
   } catch {
     // Ignore if not running in a Tauri window.
   }
+});
+
+onUnmounted(() => {
+  stopHourlyUpdateChecks();
 });
 
 watch(
