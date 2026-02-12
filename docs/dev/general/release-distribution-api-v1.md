@@ -67,6 +67,11 @@ Where:
 - Existing GitHub release publishing remains in place for public release assets.
 - `ATLAS_HUB_URL` may include a trailing slash; the release action normalizes it before calling Hub APIs.
 - The release action publishes artifact payloads using `key` (raw object key) + `provider` from presign responses.
+- Workspace release profile sets `debug = 0` at `Cargo.toml` (`[profile.release]`) so release binaries do not include debuginfo by default.
+- Release/CI workflows export `CARGO_TARGET_*_WINDOWS_MSVC_LINKER=lld-link` to consistently use LLVM's `lld-link` on Windows runners.
+- Windows release jobs now verify `lld-link` availability and install LLVM via Chocolatey when missing before Rust builds run.
+- Rust build jobs enable `sccache` (`RUSTC_WRAPPER=sccache`, `SCCACHE_GHA_ENABLED=true`) to accelerate repeat CI/release compiles.
+- Rust build cache keys are unified across workflows by OS (`atlas-rust-${runner.os}-workspace`) to improve cache reuse between CI and release jobs.
 - Launcher workflow kind mapping differentiates installables from updater payloads:
   - `installer`: `.dmg`, `.pkg`, `.exe`, `.msi`, `.deb`, `.rpm`, `.AppImage`
   - `binary`: `.app.tar.gz`, `.app.zip`, `.nsis.zip`, `.msi.zip`, `.AppImage.tar.gz`

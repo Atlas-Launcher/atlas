@@ -16,6 +16,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+  CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: lld-link
+  CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER: lld-link
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: "true"
+
 jobs:
   changes:
     name: Detect changes
@@ -87,6 +94,9 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
       - name: Install Linux system dependencies (launcher tauri)
         if: needs.changes.outputs.launcher_tauri == 'true'
         run: |
@@ -105,7 +115,7 @@ jobs:
         with:
           workspaces: |
             . -> target
-          shared-key: rust-ci-${{ runner.os }}
+          shared-key: atlas-rust-${{ runner.os }}-workspace
           cache-all-crates: true
           cache-on-failure: true
 

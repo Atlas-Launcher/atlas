@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use reqwest::{header, Client, Response};
 use serde::{Deserialize, Serialize};
+use std::future::Future;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use url::Url;
@@ -867,6 +868,26 @@ impl HubClient {
         Ok(())
     }
 
+    fn block_on_hub_future<T>(&self, future: impl Future<Output = Result<T>>) -> Result<T> {
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            return match handle.runtime_flavor() {
+                tokio::runtime::RuntimeFlavor::MultiThread => {
+                    tokio::task::block_in_place(|| handle.block_on(future))
+                }
+                tokio::runtime::RuntimeFlavor::CurrentThread => Err(anyhow::anyhow!(
+                    "HubClient blocking_* methods cannot run inside a current-thread Tokio runtime."
+                )),
+                _ => tokio::task::block_in_place(|| handle.block_on(future)),
+            };
+        }
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .context("Failed to create Tokio runtime for blocking Hub client call")?;
+        runtime.block_on(future)
+    }
+
     // Blocking versions for synchronous CLI usage
 
     /// Downloads the CI workflow template (blocking version).
@@ -878,9 +899,7 @@ impl HubClient {
     ///
     /// Returns a `CiWorkflowResponse` containing the workflow file content and path.
     pub fn blocking_download_ci_workflow(&self) -> Result<CiWorkflowResponse> {
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(self.download_ci_workflow())
-        })
+        self.block_on_hub_future(self.download_ci_workflow())
     }
 
     /// Retrieves the linked GitHub access token (blocking version).
@@ -893,9 +912,7 @@ impl HubClient {
     /// Returns `Some(String)` containing the GitHub access token if the user has linked
     /// their GitHub account, or `None` if no GitHub account is linked.
     pub fn blocking_get_github_token(&self) -> Result<Option<String>> {
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(self.get_github_token())
-        })
+        self.block_on_hub_future(self.get_github_token())
     }
 
     /// Generates a presigned URL for CI artifact uploads (blocking version).
@@ -911,9 +928,7 @@ impl HubClient {
     ///
     /// Returns a `CiPresignResponse` containing the build ID, artifact key, and upload URL.
     pub fn blocking_presign_ci_upload(&self, pack_id: &str) -> Result<CiPresignResponse> {
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(self.presign_ci_upload(pack_id))
-        })
+        self.block_on_hub_future(self.presign_ci_upload(pack_id))
     }
 
     /// Completes a CI build (blocking version).
@@ -929,9 +944,7 @@ impl HubClient {
     ///
     /// Returns `Ok(())` on successful completion.
     pub fn blocking_complete_ci_build(&self, request: &CiCompleteRequest) -> Result<()> {
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(self.complete_ci_build(request))
-        })
+        self.block_on_hub_future(self.complete_ci_build(request))
     }
 
     /// Lists launcher packs (blocking version).
@@ -943,9 +956,7 @@ impl HubClient {
     ///
     /// Returns a vector of `LauncherPack` objects representing available packs.
     pub fn blocking_list_launcher_packs(&self) -> Result<Vec<LauncherPack>> {
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(self.list_launcher_packs())
-        })
+        self.block_on_hub_future(self.list_launcher_packs())
     }
 }
 

@@ -12,6 +12,13 @@ concurrency:
   group: launcher-release-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+  CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: lld-link
+  CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER: lld-link
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: "true"
+
 jobs:
   publish-launcher:
     name: Build Launcher (${{ matrix.platform }})
@@ -47,12 +54,35 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Ensure lld-link is available (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $lld = Get-Command lld-link -ErrorAction SilentlyContinue
+          if (-not $lld) {
+            choco install llvm --yes --no-progress
+            $llvmBin = Join-Path $env:ProgramFiles "LLVM\\bin"
+            if (Test-Path $llvmBin) {
+              Add-Content -Path $env:GITHUB_PATH -Value $llvmBin
+              $env:Path = "$llvmBin;$env:Path"
+            }
+          }
+
+          $lld = Get-Command lld-link -ErrorAction SilentlyContinue
+          if (-not $lld) {
+            throw "lld-link not found after attempting LLVM installation."
+          }
+          Write-Host "lld-link found at $($lld.Source)"
+
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             . -> target
-          shared-key: launcher-release-${{ matrix.platform }}
+          shared-key: atlas-rust-${{ runner.os }}-workspace
           cache-all-crates: true
           cache-on-failure: true
 
