@@ -12,6 +12,13 @@ concurrency:
   group: runner-release-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+  CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: lld-link
+  CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER: lld-link
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: "true"
+
 jobs:
   build-runner:
     name: Build runner-v2 (${{ matrix.os }})
@@ -32,12 +39,16 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             . -> target
-          shared-key: runner-build-${{ matrix.os }}
+          shared-key: atlas-rust-${{ runner.os }}-workspace
+          cache-all-crates: true
           cache-on-failure: true
 
       - name: Build runner-v2
@@ -81,12 +92,16 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             . -> target
-          shared-key: runnerd-build-${{ matrix.os }}
+          shared-key: atlas-rust-${{ runner.os }}-workspace
+          cache-all-crates: true
           cache-on-failure: true
 
       - name: Build runnerd-v2

@@ -39,3 +39,8 @@ Treat platform behavior as best-effort developer tooling unless explicitly docum
 
 - Keep CLI command modules warning-clean under `cargo check --workspace`.
 - Remove stale request/response structs and helper functions once command flows migrate to `atlas_client::hub` APIs.
+
+## Runtime Notes
+
+- `atlas_client::hub` blocking helper methods now bootstrap their own Tokio runtime when no runtime exists (normal synchronous CLI execution, including GitHub Actions shell steps).
+- This prevents `there is no reactor running` panics when `atlas` commands call Hub APIs from non-async contexts.

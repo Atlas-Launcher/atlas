@@ -15,3 +15,6 @@ members = [
   "crates/runner-v2-utils",
   "crates/runner-v2-rcon"
 ]
+
+[profile.release]
+debug = 0
