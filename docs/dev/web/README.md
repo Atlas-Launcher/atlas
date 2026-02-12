@@ -12,6 +12,7 @@ Framework: Next.js app router
 - Launcher/runner API endpoints.
 - CI upload/complete flows and download endpoints.
 - Storage provider abstraction (R2 / Vercel Blob harness).
+- GitHub repo onboarding automation, including pack CI workflow + required Actions secrets.
 
 ## API Surface
 
@@ -36,6 +37,16 @@ The web app now exposes a unified distribution registry for launcher/cli/runner/
 - `POST /api/v1/releases/{product}/publish`
 
 Data is backed by `distribution_releases`, `distribution_release_platforms`, and `distribution_artifacts` (Drizzle migration `0011_distribution_api_v1.sql`).
+
+## Repository Onboarding
+
+When packs are imported/created with GitHub repo setup, Hub configures repository automation by:
+- Updating `atlas.toml` (`pack_id`, `hub_url`)
+- Ensuring `.github/workflows/atlas-build.yml`
+- Enabling GitHub Actions/workflows
+- Creating/updating Actions secrets:
+  - `ATLAS_HUB_URL`
+  - `ATLAS_PACK_DEPLOY_TOKEN` (managed pack-scoped deploy token)
 
 Legacy GitHub-release proxy download routes were removed in favor of distribution-native downloads:
 - Primary artifact redirects now resolve through `GET /api/v1/download/{downloadId}`.

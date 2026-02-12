@@ -17,6 +17,14 @@ components:
       type: apiKey
       in: header
       name: x-atlas-oidc-token
+    AppDeployTokenHeader:
+      type: apiKey
+      in: header
+      name: x-atlas-app-deploy-token
+    PackDeployTokenHeader:
+      type: apiKey
+      in: header
+      name: x-atlas-pack-deploy-token
   schemas:
     ErrorResponse:
       type: object
@@ -182,6 +190,35 @@ paths:
       responses:
         '200':
           description: Invite revoked
+
+  /api/v1/packs/{packId}/deploy-tokens:
+    parameters:
+      - name: packId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: List pack deploy tokens
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Pack deploy token list
+    post:
+      summary: Create pack deploy token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Pack deploy token created
+    delete:
+      summary: Revoke pack deploy token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Pack deploy token revoked
 
   /api/v1/invites/preview:
     get:
@@ -400,11 +437,35 @@ paths:
         '200':
           description: Runner whitelist
 
+  /api/v1/deploy/app-tokens:
+    get:
+      summary: List app deploy tokens
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: App deploy token list
+    post:
+      summary: Create app deploy token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: App deploy token created
+    delete:
+      summary: Revoke app deploy token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: App deploy token revoked
+
   /api/v1/ci/presign:
     post:
       summary: Generate CI upload target and build context (direct URL + optional upload headers)
       security:
         - OidcHeader: []
+        - PackDeployTokenHeader: []
         - BearerAuth: []
       responses:
         '200':
@@ -415,6 +476,7 @@ paths:
       summary: Complete CI build publish
       security:
         - OidcHeader: []
+        - PackDeployTokenHeader: []
         - BearerAuth: []
       responses:
         '200':
@@ -424,6 +486,7 @@ paths:
     post:
       summary: Presign storage operation (direct URL; upload may include provider headers)
       security:
+        - AppDeployTokenHeader: []
         - BearerAuth: []
       responses:
         '200':
@@ -607,9 +670,9 @@ paths:
           type: string
           enum: [launcher, cli, runner, runnerd]
     post:
-      summary: Register immutable release metadata and assets (admin only)
+      summary: Register immutable release metadata and assets (app deploy token or admin session)
       security:
-        - BearerAuth: []
+        - AppDeployTokenHeader: []
       responses:
         '201':
           description: Release registration created

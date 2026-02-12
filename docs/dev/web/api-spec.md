@@ -14,7 +14,8 @@ Use your Hub deployment URL (Vercel).
 
 - User session / bearer token.
 - Runner bearer token for runner-scoped endpoints.
-- CI auth via `x-atlas-oidc-token` or user bearer where allowed.
+- CI auth via `x-atlas-oidc-token`, `x-atlas-pack-deploy-token`, or user bearer where allowed.
+- App release auth via `x-atlas-app-deploy-token` (automation) or admin session (manual).
 
 ## 1) Auth and Identity
 
@@ -39,6 +40,9 @@ Use your Hub deployment URL (Vercel).
 | `GET` | `/api/v1/packs/{packId}/invites` | List invites. |
 | `POST` | `/api/v1/packs/{packId}/invites` | Create invite. |
 | `DELETE` | `/api/v1/packs/{packId}/invites` | Revoke invite. |
+| `GET` | `/api/v1/packs/{packId}/deploy-tokens` | List pack deploy tokens (creator/admin/admin). |
+| `POST` | `/api/v1/packs/{packId}/deploy-tokens` | Create pack deploy token (returns plaintext token once). |
+| `DELETE` | `/api/v1/packs/{packId}/deploy-tokens` | Revoke pack deploy token. |
 | `GET` | `/api/v1/invites/preview` | Preview invite. |
 | `POST` | `/api/v1/invites/accept` | Accept invite. |
 
@@ -75,14 +79,17 @@ Use your Hub deployment URL (Vercel).
 | `DELETE` | `/api/v1/runner/tokens` | Revoke runner service token. |
 | `GET` | `/api/v1/runner/packs/{packId}/metadata` | Runner metadata/runtime descriptor. |
 | `GET` | `/api/v1/runner/packs/{packId}/whitelist` | Runner whitelist payload. |
+| `GET` | `/api/v1/deploy/app-tokens` | List app deploy tokens (admin-only). |
+| `POST` | `/api/v1/deploy/app-tokens` | Create app deploy token (returns plaintext token once, admin-only). |
+| `DELETE` | `/api/v1/deploy/app-tokens` | Revoke app deploy token (admin-only). |
 
 ## 6) CI, Storage, Integrations, Admin
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v1/ci/presign` | Generate CI upload target/build context (returns direct upload URL plus optional provider headers). |
+| `POST` | `/api/v1/ci/presign` | Generate CI upload target/build context (auth: OIDC, pack deploy token, or user bearer; returns direct upload URL plus optional provider headers). |
 | `POST` | `/api/v1/ci/complete` | Complete CI build publish. |
-| `POST` | `/api/v1/storage/presign` | Presign storage operation (clients upload/download directly to provider URLs; upload response may include `uploadHeaders`; `download` supports optional `provider` when key is unencoded). Distribution-release keys under `artifacts/{launcher|cli|runner|runnerd}/...` are admin-only for upload presign. |
+| `POST` | `/api/v1/storage/presign` | Presign storage operation (clients upload/download directly to provider URLs; upload response may include `uploadHeaders`; `download` supports optional `provider` when key is unencoded). Distribution-release upload keys under `artifacts/{launcher|cli|runner|runnerd}/...` require admin session or `x-atlas-app-deploy-token`. |
 | `PUT` | `/api/v1/storage/upload` | Disabled (410): upload proxy traffic is not supported. |
 | `GET` | `/api/v1/storage/download` | Disabled (410): download proxy traffic is not supported. |
 | `GET` | `/api/v1/github/owners` | GitHub owners/orgs for linked user. |
@@ -112,7 +119,7 @@ Use your Hub deployment URL (Vercel).
 |---|---|---|
 | `GET` | `/api/v1/releases/{product}/latest/{os}/{arch}` | Resolve latest release metadata for a product/platform. |
 | `GET` | `/api/v1/releases/{product}/{version}/{os}/{arch}` | Resolve specific release metadata for a product/platform. |
-| `POST` | `/api/v1/releases/{product}/publish` | Register immutable artifacts for one product/version/platform release (admin-only). |
+| `POST` | `/api/v1/releases/{product}/publish` | Register immutable artifacts for one product/version/platform release (auth: `x-atlas-app-deploy-token` or admin session). |
 | `GET` | `/api/v1/launcher/updates/{os}/{arch}` | Stable launcher updater view projected from canonical release metadata. |
 | `GET` | `/api/v1/launcher/updates/{channel}/{os}/{arch}` | Channelized launcher updater view projected from canonical release metadata. |
 
