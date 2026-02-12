@@ -88,12 +88,12 @@ function onPrimaryAction(instance: InstanceConfig) {
 </script>
 
 <template>
-  <Card class="glass h-full min-h-0 rounded-2xl flex flex-col overflow-hidden">
+  <Card class="glass h-full min-h-0 rounded-2xl flex flex-col">
     <CardHeader class="pt-7">
       <CardTitle>Your profiles</CardTitle>
       <CardDescription>Pick a profile, install if needed, then play.</CardDescription>
     </CardHeader>
-    <CardContent class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-3 pb-5 pt-1">
+    <CardContent class="flex-1 min-h-0 flex flex-col space-y-6 pr-3 pb-5 pt-1">
       <div class="grid gap-3 md:grid-cols-[1fr_auto]">
         <Input
           :model-value="search"
@@ -105,42 +105,44 @@ function onPrimaryAction(instance: InstanceConfig) {
         </Button>
       </div>
 
-      <div v-if="filteredInstances.length === 0" class="text-sm text-muted-foreground">
-        No profiles available yet. Sync packs or create a local profile.
-      </div>
+      <div class="min-h-0 flex-1 overflow-y-auto snap-y snap-proximity pt-2 pb-2 pr-1 [scrollbar-gutter:stable]">
+        <div v-if="filteredInstances.length === 0" class="text-sm text-muted-foreground px-1">
+          No profiles available yet. Sync packs or create a local profile.
+        </div>
 
-      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <div
-          v-for="instance in filteredInstances"
-          :key="instance.id"
-          class="glass group rounded-2xl p-4"
-          :class="instance.id === props.activeInstanceId ? 'border-foreground/70 bg-foreground/5' : ''"
-        >
-          <button
-            class="flex w-full cursor-pointer items-center gap-3 text-left"
-            type="button"
-            @click="emit('select', instance.id)"
-            @keydown="(event) => onCardKeydown(event, instance.id)"
+        <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div
+            v-for="instance in filteredInstances"
+            :key="instance.id"
+            class="glass group rounded-2xl p-4 snap-start"
+            :class="instance.id === props.activeInstanceId ? 'border-foreground/70 bg-foreground/5' : ''"
           >
-            <div class="flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-muted">
-              <Box class="h-6 w-6 text-muted-foreground" />
-            </div>
-            <div class="flex-1">
-              <div class="font-semibold text-foreground">{{ instance.name }}</div>
-              <div class="text-xs text-muted-foreground">
-                {{ displayLoader(instance) }} {{ displayVersion(instance) ? ` · ${displayVersion(instance)}` : "" }}
-              </div>
-            </div>
-          </button>
-
-          <div class="mt-3 flex items-center justify-end">
-            <Button
-              size="sm"
-              :disabled="props.working || (!needsRemoteInstall(instance) && !props.canLaunch)"
-              @click="onPrimaryAction(instance)"
+            <button
+              class="flex w-full cursor-pointer items-center gap-3 text-left"
+              type="button"
+              @click="emit('select', instance.id)"
+              @keydown="(event) => onCardKeydown(event, instance.id)"
             >
-              {{ actionLabel(instance) }}
-            </Button>
+              <div class="flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-muted">
+                <Box class="h-6 w-6 text-muted-foreground" />
+              </div>
+              <div class="flex-1">
+                <div class="font-semibold text-foreground">{{ instance.name }}</div>
+                <div class="text-xs text-muted-foreground">
+                  {{ displayLoader(instance) }} {{ displayVersion(instance) ? ` · ${displayVersion(instance)}` : "" }}
+                </div>
+              </div>
+            </button>
+
+            <div class="mt-3 flex items-center justify-end">
+              <Button
+                size="sm"
+                :disabled="props.working || (!needsRemoteInstall(instance) && !props.canLaunch)"
+                @click="onPrimaryAction(instance)"
+              >
+                {{ actionLabel(instance) }}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
