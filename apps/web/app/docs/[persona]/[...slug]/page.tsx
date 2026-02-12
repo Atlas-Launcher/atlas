@@ -66,6 +66,11 @@ export default async function DocPage({ params }: DocPageProps) {
   }
 
   const html = renderMarkdown(doc.body);
+  const priorityPaths = [
+    doc.routePath,
+    adjacent.previous?.routePath ?? "",
+    adjacent.next?.routePath ?? "",
+  ].filter((path) => path.length > 0);
 
   return (
     <div className="grid gap-6 pb-4 pt-8 lg:grid-cols-[260px_1fr] xl:grid-cols-[280px_1fr_240px]">
@@ -79,7 +84,11 @@ export default async function DocPage({ params }: DocPageProps) {
       </aside>
 
       <section className="space-y-4">
-        <DocsSearch items={searchIndex} activePersona={personaId} />
+        <DocsSearch
+          items={searchIndex}
+          activePersona={personaId}
+          priorityPaths={priorityPaths}
+        />
 
         <article className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/80 p-6">
           <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-2 text-xs text-[var(--atlas-ink-muted)]">
@@ -93,7 +102,15 @@ export default async function DocPage({ params }: DocPageProps) {
             ))}
           </nav>
 
-          <h1 className="text-3xl font-semibold">{doc.title}</h1>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h1 className="text-3xl font-semibold">{doc.title}</h1>
+            <Link
+              href={`/docs/read/${personaId}/${doc.slug}`}
+              className="rounded-full border border-[var(--atlas-ink)]/20 bg-[var(--atlas-cream)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]/35"
+            >
+              Reader view
+            </Link>
+          </div>
           <p className="mt-2 text-sm text-[var(--atlas-ink-muted)]">{doc.summary}</p>
 
           <div className="docs-prose mt-6" dangerouslySetInnerHTML={{ __html: html }} />

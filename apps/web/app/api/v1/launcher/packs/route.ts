@@ -32,6 +32,23 @@ interface LauncherRemotePack {
   modloaderVersion: string | null;
 }
 
+function normalizeGithubRepoKey(repoUrl: string | null | undefined) {
+  if (!repoUrl) {
+    return null;
+  }
+
+  const trimmed = repoUrl.trim().replace(/\.git$/i, "");
+  const httpsMatch = trimmed.match(/github\.com\/([^/]+)\/([^/]+)/i);
+  if (httpsMatch) {
+    return `${httpsMatch[1].toLowerCase()}/${httpsMatch[2].toLowerCase()}`;
+  }
+  const sshMatch = trimmed.match(/github\.com:([^/]+)\/([^/]+)/i);
+  if (sshMatch) {
+    return `${sshMatch[1].toLowerCase()}/${sshMatch[2].toLowerCase()}`;
+  }
+  return null;
+}
+
 function rolePriority(role: MemberRole): number {
   if (role === "admin") {
     return 3;
@@ -126,6 +143,7 @@ export async function GET(request: Request) {
       packName: packs.name,
       packSlug: packs.slug,
       repoUrl: packs.repoUrl,
+      packUpdatedAt: packs.updatedAt,
       role: packMembers.role,
       accessLevel: packMembers.accessLevel,
     })
@@ -158,8 +176,37 @@ export async function GET(request: Request) {
     }
   }
   const uniqueMemberships = [...membershipsByPackId.values()];
+  const dedupedMemberships: typeof uniqueMemberships = [];
+  const membershipIndexByRepoKey = new Map<string, number>();
+  for (const membership of uniqueMemberships) {
+    const repoKey = normalizeGithubRepoKey(membership.repoUrl);
+    if (!repoKey) {
+      dedupedMemberships.push(membership);
+      continue;
+    }
 
-  const packIds = uniqueMemberships.map((membership) => membership.packId);
+    const existingIndex = membershipIndexByRepoKey.get(repoKey);
+    if (existingIndex == null) {
+      membershipIndexByRepoKey.set(repoKey, dedupedMemberships.length);
+      dedupedMemberships.push(membership);
+      continue;
+    }
+
+    const existing = dedupedMemberships[existingIndex];
+    const shouldReplace =
+      rolePriority(membership.role) > rolePriority(existing.role) ||
+      (rolePriority(membership.role) === rolePriority(existing.role) &&
+        accessPriority(membership.accessLevel) > accessPriority(existing.accessLevel)) ||
+      (rolePriority(membership.role) === rolePriority(existing.role) &&
+        accessPriority(membership.accessLevel) === accessPriority(existing.accessLevel) &&
+        membership.packUpdatedAt > existing.packUpdatedAt);
+
+    if (shouldReplace) {
+      dedupedMemberships[existingIndex] = membership;
+    }
+  }
+
+  const packIds = dedupedMemberships.map((membership) => membership.packId);
   const channelRows = await db
     .select({
       packId: channels.packId,
@@ -209,7 +256,7 @@ export async function GET(request: Request) {
     channelMap.set(row.packId, map);
   }
 
-  const remotePacks: LauncherRemotePack[] = uniqueMemberships
+  const remotePacks: LauncherRemotePack[] = dedupedMemberships
     .map((membership) => {
       const channelsForPack = channelMap.get(membership.packId) ?? new Map();
       const selected = selectChannel(membership.accessLevel, membership.role, channelsForPack);

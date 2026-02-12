@@ -20,11 +20,20 @@ export default function DocsSidebar({ section, activeSlug }: DocsSidebarProps) {
             href={href}
             className={
               isActive
-                ? "block rounded-2xl border border-[var(--atlas-ink)]/20 bg-[var(--atlas-ink)] px-3 py-2 text-sm font-semibold text-[var(--atlas-cream)]"
-                : "block rounded-2xl border border-[var(--atlas-ink)]/10 bg-white px-3 py-2 text-sm text-[var(--atlas-ink-muted)] transition hover:border-[var(--atlas-ink)]/20 hover:text-[var(--atlas-ink)]"
+                ? "block rounded-2xl border border-[var(--atlas-ink)]/20 bg-[var(--atlas-ink)] px-3 py-2 text-[var(--atlas-cream)]"
+                : "block rounded-2xl border border-[var(--atlas-ink)]/10 bg-white px-3 py-2 text-[var(--atlas-ink-muted)] transition hover:border-[var(--atlas-ink)]/20 hover:text-[var(--atlas-ink)]"
             }
           >
-            {item.title}
+            <span className="block text-sm font-semibold">{item.title}</span>
+            <span
+              className={
+                isActive
+                  ? "mt-1 block text-[10px] uppercase tracking-[0.15em] text-[var(--atlas-cream)]/70"
+                  : "mt-1 block text-[10px] uppercase tracking-[0.15em] text-[var(--atlas-ink-muted)]"
+              }
+            >
+              {item.intent}
+            </span>
           </Link>
         );
       })}

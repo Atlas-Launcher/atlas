@@ -31,7 +31,7 @@ export default async function DocsLandingPage() {
         </p>
       </section>
 
-      <DocsSearch items={searchIndex} activePersona="all" />
+      <DocsSearch items={searchIndex} activePersona="all" showResultsWhenEmpty />
 
       <section className="grid gap-4 md:grid-cols-3">
         {navigation.personas.map((section) => (

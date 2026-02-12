@@ -10,6 +10,8 @@ import type { PersonaId, SearchIndexItem } from "@/lib/docs/types";
 type DocsSearchProps = {
   items: SearchIndexItem[];
   activePersona?: PersonaId | "all";
+  showResultsWhenEmpty?: boolean;
+  priorityPaths?: string[];
 };
 
 const personaLabels: Record<PersonaId, string> = {
@@ -35,7 +37,12 @@ function highlight(text: string, query: string) {
   return `${before}<mark>${match}</mark>${after}`;
 }
 
-export default function DocsSearch({ items, activePersona = "all" }: DocsSearchProps) {
+export default function DocsSearch({
+  items,
+  activePersona = "all",
+  showResultsWhenEmpty = false,
+  priorityPaths = [],
+}: DocsSearchProps) {
   const [query, setQuery] = useState("");
   const [selectedPersona, setSelectedPersona] = useState<PersonaId | "all">(activePersona);
 
@@ -54,19 +61,48 @@ export default function DocsSearch({ items, activePersona = "all" }: DocsSearchP
 
   const results = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    const priority = new Set(priorityPaths);
 
     return items
       .filter((item) => selectedPersona === "all" || item.persona === selectedPersona)
       .map((item) => {
-        const searchable = [item.title, item.summary, ...item.headings, ...item.keywords].join(" ").toLowerCase();
-        const score = normalizedQuery.length === 0 ? 1 : searchable.includes(normalizedQuery) ? 2 : 0;
+        const title = item.title.toLowerCase();
+        const summary = item.summary.toLowerCase();
+        const headings = item.headings.join(" ").toLowerCase();
+        const keywords = item.keywords.join(" ").toLowerCase();
+        let score = 0;
+
+        if (normalizedQuery.length === 0) {
+          score = showResultsWhenEmpty ? 1 : 0;
+        } else {
+          if (title.includes(normalizedQuery)) {
+            score += 6;
+          }
+          if (summary.includes(normalizedQuery)) {
+            score += 4;
+          }
+          if (headings.includes(normalizedQuery)) {
+            score += 3;
+          }
+          if (keywords.includes(normalizedQuery)) {
+            score += 5;
+          }
+          if (item.path.toLowerCase().includes(normalizedQuery)) {
+            score += 2;
+          }
+        }
+
+        if (priority.has(item.path)) {
+          score += normalizedQuery.length === 0 ? 3 : 2;
+        }
+
         return { item, score };
       })
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score || a.item.title.localeCompare(b.item.title))
-      .slice(0, 12)
+      .slice(0, 10)
       .map((entry) => entry.item);
-  }, [items, query, selectedPersona]);
+  }, [items, priorityPaths, query, selectedPersona, showResultsWhenEmpty]);
 
   return (
     <section className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/75 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.08)]">
@@ -131,9 +167,22 @@ export default function DocsSearch({ items, activePersona = "all" }: DocsSearchP
         </div>
 
         <div className="space-y-2" aria-live="polite">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
+              {query.trim().length > 0 ? "Most relevant" : "Recommended"}
+            </p>
+            {results.length > 0 ? (
+              <p className="text-[10px] uppercase tracking-[0.15em] text-[var(--atlas-ink-muted)]">
+                {results.length} result{results.length === 1 ? "" : "s"}
+              </p>
+            ) : null}
+          </div>
+
           {results.length === 0 ? (
             <p className="rounded-2xl bg-[var(--atlas-cream)]/80 px-3 py-2 text-sm text-[var(--atlas-ink-muted)]">
-              No docs matched. Try a product name, command, or troubleshooting keyword.
+              {query.trim().length > 0
+                ? "No docs matched. Try a product name, command, or troubleshooting keyword."
+                : "Type to search docs by task, command, or error."}
             </p>
           ) : (
             results.map((result) => (
@@ -142,16 +191,21 @@ export default function DocsSearch({ items, activePersona = "all" }: DocsSearchP
                 href={result.path}
                 className="block rounded-2xl border border-[var(--atlas-ink)]/10 bg-white px-3 py-2 transition hover:-translate-y-0.5 hover:border-[var(--atlas-ink)]/25"
               >
-                <p
-                  className="text-sm font-semibold text-[var(--atlas-ink)]"
-                  dangerouslySetInnerHTML={{ __html: highlight(result.title, query) }}
-                />
+                <div className="flex items-start justify-between gap-3">
+                  <p
+                    className="text-sm font-semibold text-[var(--atlas-ink)]"
+                    dangerouslySetInnerHTML={{ __html: highlight(result.title, query) }}
+                  />
+                  <span className="rounded-full bg-[var(--atlas-cream)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--atlas-ink-muted)]">
+                    {personaLabels[result.persona]}
+                  </span>
+                </div>
                 <p
                   className="mt-1 text-xs text-[var(--atlas-ink-muted)]"
                   dangerouslySetInnerHTML={{ __html: highlight(result.summary, query) }}
                 />
                 <p className="mt-1 text-[10px] uppercase tracking-[0.15em] text-[var(--atlas-ink-muted)]">
-                  {personaLabels[result.persona]} · {result.path}
+                  {result.path}
                 </p>
               </Link>
             ))

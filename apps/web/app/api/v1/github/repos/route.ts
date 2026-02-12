@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike } from "drizzle-orm";
 
 import { auth } from "@/auth";
 import { hasRole } from "@/lib/auth/roles";
@@ -50,6 +50,50 @@ function getAtlasHubUrl(request: Request) {
     process.env.ATLAS_HUB_URL?.trim() ??
     process.env.BETTER_AUTH_URL?.trim() ??
     new URL(request.url).origin
+  );
+}
+
+function normalizeGithubRepoKey(repoUrl: string | null | undefined) {
+  if (!repoUrl) {
+    return null;
+  }
+
+  const trimmed = repoUrl.trim().replace(/\.git$/i, "");
+  const httpsMatch = trimmed.match(/github\.com\/([^/]+)\/([^/]+)/i);
+  if (httpsMatch) {
+    return `${httpsMatch[1].toLowerCase()}/${httpsMatch[2].toLowerCase()}`;
+  }
+  const sshMatch = trimmed.match(/github\.com:([^/]+)\/([^/]+)/i);
+  if (sshMatch) {
+    return `${sshMatch[1].toLowerCase()}/${sshMatch[2].toLowerCase()}`;
+  }
+  return null;
+}
+
+async function findExistingOwnedPackByRepoKey(ownerId: string, repoKey: string) {
+  const [owner, repo] = repoKey.split("/", 2);
+  if (!owner || !repo) {
+    return null;
+  }
+
+  const candidates = await db
+    .select({
+      id: packs.id,
+      name: packs.name,
+      slug: packs.slug,
+      description: packs.description,
+      repoUrl: packs.repoUrl,
+      ownerId: packs.ownerId,
+      createdAt: packs.createdAt,
+      updatedAt: packs.updatedAt,
+    })
+    .from(packs)
+    .where(and(eq(packs.ownerId, ownerId), ilike(packs.repoUrl, `%github.com/${owner}/${repo}%`)))
+    .limit(10);
+
+  return (
+    candidates.find((candidate) => normalizeGithubRepoKey(candidate.repoUrl) === repoKey) ??
+    null
   );
 }
 
@@ -274,6 +318,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Owner and repository name are required." },
       { status: 400 }
+    );
+  }
+
+  const repoKey = `${owner.toLowerCase()}/${name.toLowerCase()}`;
+  const existingPack = await findExistingOwnedPackByRepoKey(session.user.id, repoKey);
+  if (existingPack) {
+    return NextResponse.json(
+      {
+        pack: existingPack,
+        alreadyExists: true,
+      },
+      { status: 200 }
     );
   }
 
