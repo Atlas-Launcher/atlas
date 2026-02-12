@@ -1,3 +1,12 @@
+---
+title: Atlas Runner Install
+summary: VPS-first install guide for Atlas Runner and atlas-runnerd service setup.
+persona: host
+order: 4
+keywords: ["runner install", "vps", "systemd", "linux"]
+intent: getting-started
+---
+
 # Atlas Runner Install (VPS-first)
 
 This guide assumes you are installing on a Linux VPS or dedicated host.

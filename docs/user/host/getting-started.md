@@ -1,3 +1,12 @@
+---
+title: Server Host Getting Started
+summary: First-time Atlas Runner setup and operating flow for Linux VPS, macOS, and WSL.
+persona: host
+order: 1
+keywords: ["atlas-runner", "server start", "daemon", "install"]
+intent: getting-started
+---
+
 # Server Host Getting Started
 
 This guide covers first-time setup for Atlas Runner on Linux VPS, macOS, or WSL.

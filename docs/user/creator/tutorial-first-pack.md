@@ -1,3 +1,12 @@
+---
+title: Creator First Pack Tutorial
+summary: Step-by-step walkthrough from login and initialization through publish and promotion.
+persona: creator
+order: 2
+keywords: ["tutorial", "first pack", "publish", "promote"]
+intent: tutorial
+---
+
 # Tutorial: First Pack Release (Creator)
 
 This walkthrough takes you from repo setup to a production-ready channel promotion.

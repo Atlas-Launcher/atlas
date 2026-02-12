@@ -1,3 +1,12 @@
+---
+title: Player Docs
+summary: Audience, tone, and recommended reading order for Atlas Launcher players.
+persona: player
+order: 0
+keywords: ["player", "launcher", "overview"]
+intent: reference
+---
+
 # Player Docs
 
 Audience:

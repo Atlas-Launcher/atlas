@@ -1,3 +1,12 @@
+---
+title: Creator Docs
+summary: Audience, tone, and reading order for Atlas pack creators.
+persona: creator
+order: 0
+keywords: ["creator", "atlas cli", "release workflow"]
+intent: reference
+---
+
 # Creator Docs
 
 Audience:

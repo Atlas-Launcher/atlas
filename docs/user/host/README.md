@@ -1,3 +1,12 @@
+---
+title: Server Host Docs
+summary: Audience, tone, and reading order for operators running Atlas-backed servers.
+persona: host
+order: 0
+keywords: ["host", "runner", "server operations"]
+intent: reference
+---
+
 # Server Host Docs
 
 Audience:

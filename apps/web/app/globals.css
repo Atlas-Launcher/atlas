@@ -139,3 +139,91 @@
   background-size: 48px 48px;
   background-position: center;
 }
+
+.docs-prose {
+  color: var(--atlas-ink);
+  line-height: 1.65;
+}
+
+.docs-prose h1,
+.docs-prose h2,
+.docs-prose h3 {
+  color: var(--atlas-ink);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 1.35em;
+}
+
+.docs-prose h1 {
+  font-size: 1.85rem;
+}
+
+.docs-prose h2 {
+  font-size: 1.4rem;
+}
+
+.docs-prose h3 {
+  font-size: 1.15rem;
+}
+
+.docs-prose p {
+  margin-top: 0.8rem;
+}
+
+.docs-prose ul,
+.docs-prose ol {
+  margin-top: 0.8rem;
+  margin-left: 1.25rem;
+}
+
+.docs-prose li {
+  margin-top: 0.3rem;
+}
+
+.docs-prose ul {
+  list-style: disc;
+}
+
+.docs-prose ol {
+  list-style: decimal;
+}
+
+.docs-prose code {
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: color-mix(in oklab, var(--atlas-cream) 70%, white);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.08rem 0.35rem;
+}
+
+.docs-prose pre {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: #151922;
+  color: #f4f1ea;
+  font-family: var(--font-mono);
+  margin-top: 1rem;
+  overflow-x: auto;
+  padding: 0.9rem 1rem;
+}
+
+.docs-prose pre code {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.docs-prose a {
+  color: #1f6a52;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.docs-prose mark {
+  border-radius: 0.2rem;
+  background: rgba(244, 214, 160, 0.8);
+  color: inherit;
+  padding: 0 0.2rem;
+}

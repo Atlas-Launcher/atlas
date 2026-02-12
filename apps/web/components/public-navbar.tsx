@@ -3,6 +3,7 @@ import Link from "next/link";
 
 const navLinks = [
   { href: "/", label: "Overview" },
+  { href: "/docs", label: "Docs" },
   { href: "/download/app", label: "Launcher" },
   { href: "/download/cli", label: "CLI" },
   { href: "/download/runner", label: "Runner" },

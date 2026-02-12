@@ -1,3 +1,12 @@
+---
+title: Player Getting Started
+summary: End-to-end onboarding flow for players from invite acceptance to first successful launch.
+persona: player
+order: 1
+keywords: ["invite", "launch assist", "sign in", "first launch"]
+intent: getting-started
+---
+
 # Player Guide
 
 This guide is for players using Atlas Launcher.

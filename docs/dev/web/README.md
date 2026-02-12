@@ -87,6 +87,25 @@ Legacy GitHub-release proxy download routes were removed in favor of distributio
 
 If a target is not listed, it is unsupported.
 
+## User Docs Site
+
+User-facing docs now render directly in Hub under:
+- `/docs`
+- `/docs/{persona}`
+- `/docs/{persona}/{slug}`
+
+Implementation lives in:
+- `apps/web/app/docs`
+- `apps/web/components/docs`
+- `apps/web/lib/docs`
+
+Content source and nav control live outside the app package:
+- `docs/user/**/*.md` (frontmatter required)
+- `docs/user/navigation.json` (sidebar + prev/next order)
+
+Local search index is generated from user docs content at runtime/build using `apps/web/lib/docs/content.ts` and scoped to `docs/user` only.
+Developer docs under `docs/dev` are intentionally not exposed by the public docs routes.
+
 ## Lint Guardrails
 
 - Prefer `unknown` + narrowing over `any` in route handlers.

@@ -1,3 +1,12 @@
+---
+title: Creator Getting Started
+summary: Fastest path to initialize, build, publish, and promote your first Atlas pack release.
+persona: creator
+order: 1
+keywords: ["atlas init", "atlas build", "atlas publish", "atlas promote"]
+intent: getting-started
+---
+
 # Creator Getting Started
 
 This guide covers the fastest path to ship your first Atlas pack build.

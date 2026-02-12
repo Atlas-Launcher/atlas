@@ -1,3 +1,12 @@
+---
+title: Creator Quick Reference
+summary: Command cheatsheet and common release flows for the Atlas creator CLI.
+persona: creator
+order: 4
+keywords: ["atlas", "cli", "commands", "quick reference"]
+intent: reference
+---
+
 # Creator Quick Reference
 
 ## Command layout (`atlas`)

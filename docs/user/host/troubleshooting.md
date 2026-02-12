@@ -1,3 +1,12 @@
+---
+title: Server Host Troubleshooting
+summary: Diagnostics and recovery checklist for authentication, daemon, and startup issues.
+persona: host
+order: 3
+keywords: ["troubleshooting", "daemon", "systemd", "auth login"]
+intent: troubleshooting
+---
+
 # Server Host Troubleshooting
 
 ## `atlas-runner auth login` fails

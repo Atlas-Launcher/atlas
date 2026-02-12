@@ -1,3 +1,12 @@
+---
+title: Player Quick Reference
+summary: Day-to-day launcher checklist and recovery actions for players.
+persona: player
+order: 2
+keywords: ["checklist", "play", "launcher", "quick reference"]
+intent: reference
+---
+
 # Player Quick Reference
 
 ## Invite flow

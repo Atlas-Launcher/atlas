@@ -1,3 +1,12 @@
+---
+title: Player Troubleshooting
+summary: Launch Assist recovery modes, common failure signals, and support bundle guidance.
+persona: player
+order: 3
+keywords: ["troubleshooting", "launch assist", "support bundle", "retry"]
+intent: troubleshooting
+---
+
 # Player Troubleshooting
 
 ## Launch Assist Modes

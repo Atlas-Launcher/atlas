@@ -1,0 +1,109 @@
+{
+  "personas": [
+    {
+      "id": "player",
+      "title": "Player",
+      "description": "Install Atlas Launcher, join a pack, and recover quickly when launch issues happen.",
+      "startSlug": "getting-started",
+      "troubleshootingSlug": "troubleshooting",
+      "items": [
+        {
+          "slug": "",
+          "file": "player/README.md",
+          "title": "Overview",
+          "intent": "reference"
+        },
+        {
+          "slug": "getting-started",
+          "file": "player/getting-started.md",
+          "title": "Getting Started",
+          "intent": "getting-started"
+        },
+        {
+          "slug": "quick-reference",
+          "file": "player/quick-reference.md",
+          "title": "Quick Reference",
+          "intent": "reference"
+        },
+        {
+          "slug": "troubleshooting",
+          "file": "player/troubleshooting.md",
+          "title": "Troubleshooting",
+          "intent": "troubleshooting"
+        }
+      ]
+    },
+    {
+      "id": "creator",
+      "title": "Creator",
+      "description": "Build, publish, and promote modpack releases through Atlas Hub and CLI workflows.",
+      "startSlug": "getting-started",
+      "troubleshootingSlug": "quick-reference",
+      "items": [
+        {
+          "slug": "",
+          "file": "creator/README.md",
+          "title": "Overview",
+          "intent": "reference"
+        },
+        {
+          "slug": "getting-started",
+          "file": "creator/getting-started.md",
+          "title": "Getting Started",
+          "intent": "getting-started"
+        },
+        {
+          "slug": "tutorial-first-pack",
+          "file": "creator/tutorial-first-pack.md",
+          "title": "First Pack Tutorial",
+          "intent": "tutorial"
+        },
+        {
+          "slug": "pack-lifecycle",
+          "file": "creator/pack-lifecycle.md",
+          "title": "Pack Lifecycle",
+          "intent": "reference"
+        },
+        {
+          "slug": "quick-reference",
+          "file": "creator/quick-reference.md",
+          "title": "Quick Reference",
+          "intent": "reference"
+        }
+      ]
+    },
+    {
+      "id": "host",
+      "title": "Server Host",
+      "description": "Run Atlas Runner on Linux/macOS/WSL with safe defaults and practical operations guidance.",
+      "startSlug": "getting-started",
+      "troubleshootingSlug": "troubleshooting",
+      "items": [
+        {
+          "slug": "",
+          "file": "host/README.md",
+          "title": "Overview",
+          "intent": "reference"
+        },
+        {
+          "slug": "getting-started",
+          "file": "host/getting-started.md",
+          "title": "Getting Started",
+          "intent": "getting-started"
+        },
+        {
+          "slug": "quick-reference",
+          "file": "host/quick-reference.md",
+          "title": "Quick Reference",
+          "intent": "reference"
+        },
+        {
+          "slug": "troubleshooting",
+          "file": "host/troubleshooting.md",
+          "title": "Troubleshooting",
+          "intent": "troubleshooting"
+        }
+      ]
+    }
+  ]
+}

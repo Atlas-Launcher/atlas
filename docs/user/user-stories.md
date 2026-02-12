@@ -1,3 +1,12 @@
+---
+title: Atlas User Stories
+summary: Current user-facing stories for creators, server hosts, and players.
+persona: creator
+order: 91
+keywords: ["stories", "personas", "workflow"]
+intent: reference
+---
+
 # Atlas User Stories (Current)
 
 These stories reflect how the platform currently works.

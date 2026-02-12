@@ -1,3 +1,12 @@
+---
+title: Server Host Quick Reference
+summary: Common Atlas Runner commands and operational runbooks for server hosts.
+persona: host
+order: 2
+keywords: ["atlas-runner", "daemon", "backup", "console"]
+intent: reference
+---
+
 # Server Host Quick Reference
 
 ## Command layout (`atlas-runner`)

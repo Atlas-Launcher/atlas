@@ -1,3 +1,12 @@
+---
+title: Pack Lifecycle
+summary: Source-to-release lifecycle with immutable builds and channel-based promotion.
+persona: creator
+order: 3
+keywords: ["lifecycle", "immutable builds", "channels", "rollback"]
+intent: reference
+---
+
 # Pack Lifecycle (Creator)
 
 ## Author
