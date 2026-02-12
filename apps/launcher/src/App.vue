@@ -1385,7 +1385,7 @@ watch(
         />
         <section
           v-if="activeTab === 'library'"
-          class="flex-1 min-h-0 flex flex-col gap-6 overflow-visible"
+          class="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden"
         >
           <div
             v-if="showTroubleshooterFailurePrompt"
