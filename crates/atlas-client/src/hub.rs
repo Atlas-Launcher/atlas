@@ -15,6 +15,7 @@ pub struct HubClient {
     client: Client,
     base_url: Url,
     auth: Mutex<AuthState>,
+    pack_deploy_token: Mutex<Option<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -191,6 +192,7 @@ impl HubClient {
             client: Client::builder().timeout(Duration::from_secs(30)).build()?,
             base_url,
             auth: Mutex::new(AuthState::None),
+            pack_deploy_token: Mutex::new(None),
         })
     }
 
@@ -205,6 +207,21 @@ impl HubClient {
             service_token: token,
             access_token: None,
         });
+    }
+
+    pub fn set_pack_deploy_token(&mut self, token: String) {
+        let mut value = self
+            .pack_deploy_token
+            .lock()
+            .expect("pack_deploy_token lock poisoned");
+        *value = Some(token);
+    }
+
+    fn get_pack_deploy_token(&self) -> Option<String> {
+        self.pack_deploy_token
+            .lock()
+            .expect("pack_deploy_token lock poisoned")
+            .clone()
     }
 
     async fn get_auth_headers(&self) -> Result<header::HeaderMap> {
@@ -805,16 +822,17 @@ impl HubClient {
     /// Returns a `CiPresignResponse` containing the build ID, artifact key, and upload URL.
     pub async fn presign_ci_upload(&self, pack_id: &str) -> Result<CiPresignResponse> {
         let url = self.base_url.join("/api/v1/ci/presign")?;
-        let response = self
+        let mut request = self
             .client
             .post(url)
             .headers(self.get_auth_headers().await?)
             .json(&CiPresignRequest {
                 pack_id: pack_id.to_string(),
-            })
-            .send()
-            .await?
-            .error_for_status()?;
+            });
+        if let Some(token) = self.get_pack_deploy_token() {
+            request = request.header("x-atlas-pack-deploy-token", token);
+        }
+        let response = request.send().await?.error_for_status()?;
 
         response
             .json::<CiPresignResponse>()
@@ -837,13 +855,15 @@ impl HubClient {
     /// Returns `Ok(())` on successful completion.
     pub async fn complete_ci_build(&self, request: &CiCompleteRequest) -> Result<()> {
         let url = self.base_url.join("/api/v1/ci/complete")?;
-        self.client
+        let mut req = self
+            .client
             .post(url)
             .headers(self.get_auth_headers().await?)
-            .json(request)
-            .send()
-            .await?
-            .error_for_status()?;
+            .json(request);
+        if let Some(token) = self.get_pack_deploy_token() {
+            req = req.header("x-atlas-pack-deploy-token", token);
+        }
+        req.send().await?.error_for_status()?;
         Ok(())
     }
 
