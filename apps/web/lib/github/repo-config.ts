@@ -23,12 +23,65 @@ export type GithubWorkflowListResponse = {
     workflows?: GithubWorkflow[];
 };
 
+type GithubApiErrorPayload = {
+    message?: string;
+    documentation_url?: string;
+};
+
 type GithubActionsPublicKey = {
     key_id: string;
     key: string;
 };
 
 const MANAGED_PACK_DEPLOY_TOKEN_NAME = "github_actions_pack_deploy";
+
+export class GithubApiError extends Error {
+    status: number;
+    url: string;
+    payload: GithubApiErrorPayload;
+
+    constructor({
+        status,
+        url,
+        payload,
+    }: {
+        status: number;
+        url: string;
+        payload: GithubApiErrorPayload;
+    }) {
+        const details = payload.message ? `: ${payload.message}` : "";
+        super(`${url} returned ${status}${details}`);
+        this.name = "GithubApiError";
+        this.status = status;
+        this.url = url;
+        this.payload = payload;
+    }
+}
+
+function isGithubApiStatus(error: unknown, status: number) {
+    return error instanceof GithubApiError && error.status === status;
+}
+
+function encodeGithubContentPath(path: string) {
+    const normalized = path.trim().replace(/^\/+|\/+$/g, "");
+    if (!normalized) {
+        throw new Error("GitHub content path must not be empty.");
+    }
+
+    return normalized.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+}
+
+function buildGithubContentsUrl({
+    owner,
+    repo,
+    path,
+}: {
+    owner: string;
+    repo: string;
+    path: string;
+}) {
+    return `https://api.github.com/repos/${owner}/${repo}/contents/${encodeGithubContentPath(path)}`;
+}
 
 /**
  * Makes an authenticated request to the GitHub API.
@@ -50,8 +103,12 @@ export async function githubRequest<T>(
     });
 
     if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body?.message ?? "GitHub request failed");
+        const payload = (await response.json().catch(() => ({}))) as GithubApiErrorPayload;
+        throw new GithubApiError({
+            status: response.status,
+            url,
+            payload,
+        });
     }
 
     if (response.status === 204) {
@@ -166,12 +223,16 @@ export async function checkAtlasTomlExists({
     try {
         const file = await githubRequest<GithubContentFile>(
             token,
-            `https://api.github.com/repos/${owner}/${repo}/contents/atlas.toml`
+            buildGithubContentsUrl({
+                owner,
+                repo,
+                path: "atlas.toml",
+            })
         );
         return file;
     } catch (error) {
         // Check if it's a 404 (file doesn't exist)
-        if (error instanceof Error && error.message.includes("Not Found")) {
+        if (isGithubApiStatus(error, 404)) {
             return null;
         }
         throw error;
@@ -245,7 +306,11 @@ async function getWorkflowTemplate({
 
     const file = await githubRequest<GithubContentFile>(
         token,
-        `https://api.github.com/repos/${templateOwner}/${templateRepo}/contents/${encodeURIComponent(workflowPath)}`
+        buildGithubContentsUrl({
+            owner: templateOwner,
+            repo: templateRepo,
+            path: workflowPath,
+        })
     );
 
     if (file.encoding !== "base64") {
@@ -279,12 +344,16 @@ export async function ensureAtlasBuildWorkflow({
     try {
         const existing = await githubRequest<GithubContentFile>(
             token,
-            `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(targetPath)}`
+            buildGithubContentsUrl({
+                owner,
+                repo,
+                path: targetPath,
+            })
         );
         existingSha = existing.sha;
     } catch (error) {
         // File doesn't exist, that's fine
-        if (!(error instanceof Error && error.message.includes("Not Found"))) {
+        if (!isGithubApiStatus(error, 404)) {
             throw error;
         }
     }
@@ -292,7 +361,11 @@ export async function ensureAtlasBuildWorkflow({
     // Create or update the workflow file
     await githubRequest<null>(
         token,
-        `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(targetPath)}`,
+        buildGithubContentsUrl({
+            owner,
+            repo,
+            path: targetPath,
+        }),
         {
             method: "PUT",
             body: JSON.stringify({

@@ -48,6 +48,10 @@ When packs are imported/created with GitHub repo setup, Hub configures repositor
   - `ATLAS_HUB_URL`
   - `ATLAS_PACK_DEPLOY_TOKEN` (managed pack-scoped deploy token)
 
+Implementation notes:
+- GitHub Contents API paths must be encoded per path segment (not as a single `encodeURIComponent` call on the full path), otherwise nested paths like `.github/workflows/atlas-build.yml` can fail.
+- Writing workflow files requires GitHub App installation permissions that include workflow write access.
+
 Legacy GitHub-release proxy download routes were removed in favor of distribution-native downloads:
 - Primary artifact redirects now resolve through `GET /api/v1/download/{downloadId}`.
 - Install pages consume `GET /api/v1/releases/{product}/latest/{os}/{arch}` data.

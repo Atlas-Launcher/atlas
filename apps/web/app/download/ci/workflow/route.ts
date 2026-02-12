@@ -24,6 +24,15 @@ function getWorkflowPath() {
   return value && value.length > 0 ? value : ".github/workflows/atlas-build.yml";
 }
 
+function encodeGithubContentPath(path: string) {
+  const normalized = path.trim().replace(/^\/+|\/+$/g, "");
+  if (!normalized) {
+    throw new Error("ATLAS_CI_WORKFLOW_PATH must not be empty.");
+  }
+
+  return normalized.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+}
+
 function getGithubAuthHeaders(): HeadersInit {
   const token = process.env.ATLAS_GITHUB_TOKEN?.trim();
   if (!token) {
@@ -47,7 +56,7 @@ export async function GET() {
   }
 
   const workflowPath = getWorkflowPath();
-  const endpoint = `https://api.github.com/repos/${templateRepo.owner}/${templateRepo.repo}/contents/${encodeURIComponent(workflowPath)}`;
+  const endpoint = `https://api.github.com/repos/${templateRepo.owner}/${templateRepo.repo}/contents/${encodeGithubContentPath(workflowPath)}`;
 
   const response = await fetch(endpoint, {
     headers: {
