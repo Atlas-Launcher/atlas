@@ -68,11 +68,15 @@ Where:
 - `ATLAS_HUB_URL` may include a trailing slash; the release action normalizes it before calling Hub APIs.
 - The release action publishes artifact payloads using `key` (raw object key) + `provider` from presign responses.
 - Workspace release profile sets `debug = 0` at `Cargo.toml` (`[profile.release]`) so release binaries do not include debuginfo by default.
+- CI/release workflows export `CARGO_INCREMENTAL=0` to reduce incremental artifact overhead and improve `sccache` reuse.
 - Release/CI workflows export `CARGO_TARGET_*_WINDOWS_MSVC_LINKER=lld-link` to consistently use LLVM's `lld-link` on Windows runners.
 - Windows release jobs now verify `lld-link` availability and install LLVM via Chocolatey when missing before Rust builds run.
 - Rust build jobs enable `sccache` (`RUSTC_WRAPPER=sccache`, `SCCACHE_GHA_ENABLED=true`) to accelerate repeat CI/release compiles.
 - Rust build jobs set `SCCACHE_IGNORE_SERVER_IO_ERROR=1` so cache backend outages fall back to uncached compiler execution instead of failing the build.
 - Rust build cache keys are unified across workflows by OS (`atlas-rust-${runner.os}-workspace`) to improve cache reuse between CI and release jobs.
+- Linux Rust build jobs install and use `mold` (`-C link-arg=-fuse-ld=mold`) for faster linking.
+- LFS checkout is reserved for launcher build jobs that require icon/assets; other workflows use shallow non-LFS checkouts.
+- Runner release workflow now builds `runner-v2` and `runnerd-v2` in a single per-OS job to avoid duplicate setup overhead.
 - Launcher workflow kind mapping differentiates installables from updater payloads:
   - `installer`: `.dmg`, `.pkg`, `.exe`, `.msi`, `.deb`, `.rpm`, `.AppImage`
   - `binary`: `.app.tar.gz`, `.app.zip`, `.nsis.zip`, `.msi.zip`, `.AppImage.tar.gz`
