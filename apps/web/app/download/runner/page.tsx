@@ -178,10 +178,10 @@ export default async function RunnerDownloadPage() {
     {
       id: "windows",
       label: "Windows (WSL)",
-      detail: "Use WSL",
+      detail: "Install Atlas Runner inside the Windows Subsystem for Linux (WSL)",
       action: {
         type: "command",
-        label: "Install and Atlas Runner inside the Windows Subsystem for Linux (WSL).",
+        label: "Install with one command",
         command: wslCommand,
         note: "WSL installs do not start with your system by default. For always-on hosts, prefer Linux install.",
       },
