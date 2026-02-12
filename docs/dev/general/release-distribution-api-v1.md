@@ -70,3 +70,6 @@ Where:
   - `binary`: `.app.tar.gz`, `.app.zip`, `.nsis.zip`, `.msi.zip`, `.AppImage.tar.gz`
   - `signature`: `*.sig` files paired to the exact updater payload filename
 - Launcher workflow arch inference first uses explicit arch tokens in filenames (`arm64`, `aarch64`, `x64`, `x86_64`, `amd64`), then falls back to the unique arch already detected for the same OS in the current publish batch.
+- Launcher release CI now enforces updater signature completeness:
+  - After bundle build, it signs any missing updater payload signatures with `tauri signer sign`.
+  - Before publish, it fails the workflow if any `binary` payload in the manifest is missing its matching `.sig`.
