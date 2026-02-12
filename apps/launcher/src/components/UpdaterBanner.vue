@@ -4,9 +4,6 @@ import { X } from "lucide-vue-next";
 import Button from "./ui/button/Button.vue";
 import Card from "./ui/card/Card.vue";
 import CardContent from "./ui/card/CardContent.vue";
-import CardDescription from "./ui/card/CardDescription.vue";
-import CardHeader from "./ui/card/CardHeader.vue";
-import CardTitle from "./ui/card/CardTitle.vue";
 import Progress from "./ui/progress/Progress.vue";
 import type { ReleaseInfo } from "@/lib/useUpdater";
 
@@ -31,18 +28,6 @@ const emit = defineEmits<{
   (event: "restart"): void;
 }>();
 
-const releaseDate = computed(() => {
-  const value = props.updateInfo?.date;
-  if (!value) {
-    return null;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toLocaleString();
-});
-
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
     return "0 B";
@@ -60,64 +45,56 @@ function formatBytes(value: number) {
 
 <template>
   <div v-if="props.visible" class="pointer-events-auto">
-    <Card class="glass border-primary/40 bg-background/85 shadow-[0_24px_50px_-30px_rgba(0,0,0,0.75)] backdrop-blur-xl">
-      <CardHeader class="space-y-1 pb-2">
-        <div class="flex items-start justify-between gap-3">
-          <CardTitle class="text-sm">
-          <template v-if="props.installComplete">
-            Update installed
-          </template>
-          <template v-else>
-            Launcher update available
-          </template>
-          </CardTitle>
-          <Button
-            size="icon"
-            variant="ghost"
-            class="h-7 w-7 text-muted-foreground hover:text-foreground"
-            aria-label="Dismiss update banner"
-            @click="emit('dismiss')"
-          >
-            <X class="h-4 w-4" />
-          </Button>
+    <Card class="glass border-primary/40 bg-background/95">
+      <CardContent class="px-5 py-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-foreground">
+              <template v-if="props.installComplete">
+                Update ready
+              </template>
+              <template v-else>
+                Launcher update available
+              </template>
+            </p>
+            <p v-if="props.updateInfo" class="text-sm text-muted-foreground">
+              <template v-if="props.installComplete">
+                Restart Atlas Launcher to finish updating to {{ props.updateInfo.version }}.
+              </template>
+              <template v-else>
+                Version {{ props.updateInfo.version }} is ready (current {{ props.updateInfo.currentVersion }}).
+              </template>
+            </p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <Button
+              v-if="props.installComplete"
+              size="sm"
+              :disabled="props.checking || props.installing"
+              @click="emit('restart')"
+            >
+              Restart now
+            </Button>
+            <Button
+              v-else
+              size="sm"
+              :disabled="props.checking || props.installing"
+              @click="emit('install')"
+            >
+              {{ props.installing ? "Installing..." : "Install update" }}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              class="h-7 w-7 text-muted-foreground hover:text-foreground"
+              aria-label="Dismiss update banner"
+              @click="emit('dismiss')"
+            >
+              <X class="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        <CardDescription v-if="props.updateInfo">
-          <template v-if="props.installComplete">
-            Restart Atlas Launcher to apply version {{ props.updateInfo.version }}.
-          </template>
-          <template v-else>
-            Version {{ props.updateInfo.version }} is available (current {{ props.updateInfo.currentVersion }}).
-          </template>
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-3 pt-0">
-        <div class="flex flex-wrap items-center mt-2 gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            :disabled="props.checking || props.installing"
-            @click="emit('open')"
-          >
-            Details
-          </Button>
-          <Button
-            v-if="props.installComplete"
-            size="sm"
-            :disabled="props.checking || props.installing"
-            @click="emit('restart')"
-          >
-            Restart now
-          </Button>
-          <Button
-            v-else
-            size="sm"
-            :disabled="props.checking || props.installing"
-            @click="emit('install')"
-          >
-            {{ props.installing ? "Installing..." : "Install update" }}
-          </Button>
-        </div>
-        <div v-if="props.installing" class="w-full space-y-2 pt-1">
+        <div v-if="props.installing" class="mt-3 w-full space-y-2">
           <Progress :model-value="props.progressPercent" />
           <p class="text-xs text-muted-foreground">
             <template v-if="props.totalBytes">
@@ -138,22 +115,14 @@ function formatBytes(value: number) {
     class="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-[6px] p-4"
     @click.self="emit('close')"
   >
-    <Card class="glass w-full max-w-2xl max-h-[85vh] overflow-y-auto border-primary/40 bg-background/90">
-      <CardHeader class="space-y-1 pb-2">
-        <CardTitle>Launcher update</CardTitle>
-        <CardDescription v-if="props.updateInfo">
-          Atlas Launcher {{ props.updateInfo.currentVersion }} -> {{ props.updateInfo.version }}
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-5 pt-0">
-        <p v-if="releaseDate" class="text-xs text-muted-foreground">Published: {{ releaseDate }}</p>
-        <div
-          v-if="props.updateInfo?.body"
-          class="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground whitespace-pre-wrap"
-        >
-          {{ props.updateInfo.body }}
+    <Card class="glass relative w-full max-w-4xl max-h-[85vh] overflow-y-auto border-primary/40 bg-background/95">
+      <CardContent class="space-y-5 px-6 py-6">
+        <div class="space-y-1">
+          <p class="text-lg font-semibold text-foreground">Launcher update available</p>
+          <p v-if="props.updateInfo" class="text-sm text-muted-foreground">
+            Atlas Launcher {{ props.updateInfo.currentVersion }} -> {{ props.updateInfo.version }}
+          </p>
         </div>
-        <p v-else class="text-sm text-muted-foreground">No release notes were provided.</p>
 
         <div v-if="props.installing" class="space-y-2">
           <Progress :model-value="props.progressPercent" />
@@ -176,7 +145,6 @@ function formatBytes(value: number) {
         </p>
 
         <div class="flex flex-wrap gap-2">
-          <Button variant="outline" @click="emit('close')">Close</Button>
           <Button
             v-if="props.installComplete"
             :disabled="props.checking || props.installing"
