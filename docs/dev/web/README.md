@@ -31,6 +31,9 @@ See:
 `GET /api/v1/packs` now applies a server-side dedup pass by `pack.id` before responding.
 This protects dashboard views from legacy/invalid duplicate membership join results and keeps list ordering stable by newest `updatedAt`.
 
+`GET /api/v1/launcher/packs` now also applies a secondary dedup pass by normalized GitHub repo identity (`owner/repo`) after membership deduping by `packId`.
+This suppresses duplicate launcher pack cards caused by accidental duplicate pack records mapped to the same repository.
+
 ## Invite Onboarding Contract
 
 `POST /api/v1/invites/accept` now returns an onboarding handoff payload while keeping backward compatibility:
@@ -81,6 +84,10 @@ When packs are imported/created with GitHub repo setup, Hub configures repositor
 Implementation notes:
 - GitHub Contents API paths must be encoded per path segment (not as a single `encodeURIComponent` call on the full path), otherwise nested paths like `.github/workflows/atlas-build.yml` can fail.
 - Writing workflow files requires GitHub App installation permissions that include workflow write access.
+- Pack creation endpoints now include an idempotency guard by normalized GitHub repo identity for the same owner account:
+  - `POST /api/v1/packs` (repo import path)
+  - `POST /api/v1/github/repos` (template repo creation path)
+  If a matching owned pack already exists, the endpoint returns that pack instead of creating a duplicate.
 
 Legacy GitHub-release proxy download routes were removed in favor of distribution-native downloads:
 - Primary artifact redirects now resolve through `GET /api/v1/download/{downloadId}`.
@@ -98,6 +105,8 @@ User-facing docs now render directly in Hub under:
 - `/docs`
 - `/docs/{persona}`
 - `/docs/{persona}/{slug}`
+- `/docs/read/{persona}` (reader mode)
+- `/docs/read/{persona}/{slug}` (reader mode)
 
 Implementation lives in:
 - `apps/web/app/docs`
@@ -110,6 +119,15 @@ Content source and nav control live outside the app package:
 
 Local search index is generated from user docs content at runtime/build using `apps/web/lib/docs/content.ts` and scoped to `docs/user` only.
 Developer docs under `docs/dev` are intentionally not exposed by the public docs routes.
+
+### Docs readability focus (current UX)
+
+- Persona pages prioritize two essential guides first:
+  - `startSlug`
+  - `troubleshootingSlug`
+- Remaining guides are grouped under a lighter "Reference guides" section to reduce visual noise.
+- Search ranking now favors title/keywords and optional priority paths (current page + key next steps).
+- Persona and doc pages can suppress low-value default result floods by controlling whether empty-query results are shown.
 
 ## Lint Guardrails
 

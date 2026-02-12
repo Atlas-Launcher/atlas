@@ -41,6 +41,11 @@ Key backend modules:
 - Signature verification failures are surfaced with a targeted message to check release signing key and launcher updater pubkey alignment.
 - Launcher performs an automatic updater check on boot and then every hour while the app remains open.
 - Updater `Update` handles from `@tauri-apps/plugin-updater` are stored as raw/shallow refs to avoid Vue proxying class instances with private fields.
+- Atlas remote profile sync now applies deduping in both Tauri and Vue settings hydration:
+  - Tauri `fetch_atlas_remote_packs` suppresses duplicate `pack_id` rows.
+  - Vue settings normalization infers `source: "atlas"` when `atlasPack` metadata exists, normalizes remote pack identifiers, and collapses duplicate atlas instances by `packId` and duplicate IDs during load and remote sync.
+  - This prevents legacy settings payloads from showing duplicate pack cards in launcher.
+- Updater banner is rendered in an isolated high-z layer with an opaque card surface so underlying form labels do not bleed through while scrolling.
 - Task center progress maps launcher internals to player-facing stages:
   - Syncing pack
   - Preparing files
