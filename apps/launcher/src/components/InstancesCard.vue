@@ -88,7 +88,7 @@ function onPrimaryAction(instance: InstanceConfig) {
 </script>
 
 <template>
-  <Card class="glass h-full min-h-0 rounded-2xl border-none bg-transparent shadow-none flex flex-col overflow-hidden">
+  <Card class="h-full min-h-0 rounded-2xl border border-border/60 bg-card/70 shadow-none flex flex-col overflow-hidden">
     <CardHeader class="pt-6">
       <CardTitle>Your profiles</CardTitle>
       <CardDescription>Pick a profile, install if needed, then play.</CardDescription>
