@@ -32,7 +32,7 @@ Minimum deployment inputs:
 For release publishing workflows:
 
 - `ATLAS_HUB_URL`
-- `ATLAS_RELEASE_TOKEN` (user token with `admin` role)
+- `ATLAS_APP_DEPLOY_TOKEN` (app deploy token, issued by an admin)
 
 ## 4. CI/CD Paths
 
@@ -50,6 +50,10 @@ Release workflows use `.github/actions/atlas-release`:
 2. Upload artifacts via `/api/v1/storage/presign` using the returned direct URL and any returned `uploadHeaders` (required for providers such as Vercel Blob).
 3. For Vercel Blob, uploads should use short-lived, path-scoped client tokens generated per artifact (not the global read/write token in clients/CI).
 4. Publish release metadata via `/api/v1/releases/{product}/publish`.
+
+For pack deploy workflows:
+- Prefer GitHub OIDC (`x-atlas-oidc-token`) where available.
+- Optional fallback: `ATLAS_PACK_DEPLOY_TOKEN` (`x-atlas-pack-deploy-token`) scoped to one pack.
 
 Reference:
 - `docs/dev/general/release-distribution-api-v1.md`
@@ -92,6 +96,6 @@ After deploying Hub/API or release publishing changes:
 ## 8. Operational Risks to Watch
 
 - Mismatch between deployed web code and unapplied DB migrations.
-- Expired/invalid CI release token causing publish failures.
+- Missing/revoked app deploy token causing release publish failures.
 - Storage provider misconfiguration causing broken download indirection.
 - Channel pointer changes without validation on target platform artifacts.
