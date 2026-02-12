@@ -101,7 +101,7 @@ function formatBytes(value: number) {
 
   <div
     v-if="props.open"
-    class="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-[6px] p-4"
+    class="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-[6px] px-4 pb-4 pt-14 md:px-6 md:pb-6 md:pt-16"
     @click.self="emit('close')"
   >
     <Card class="glass relative w-full max-w-4xl max-h-[85vh] overflow-y-auto">

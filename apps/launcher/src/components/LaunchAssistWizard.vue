@@ -97,6 +97,9 @@ const blockingItems = computed(() => visibleChecklist.value.filter((item) => !it
 const activeBlocking = computed(() => blockingItems.value[0] ?? null);
 const allReady = computed(() => props.readiness?.readyToLaunch ?? false);
 const signedIn = computed(() => props.atlasSignedIn || props.microsoftSignedIn);
+const needsSignInFlow = computed(
+  () => !props.atlasSignedIn || !props.microsoftSignedIn || hasAuthBlockers.value
+);
 const canUseRecovery = computed(() => !hasAuthBlockers.value);
 
 const findings = computed(() =>
@@ -346,12 +349,21 @@ watch(
     }
   }
 );
+
+watch(
+  () => needsSignInFlow.value,
+  (needsSignIn) => {
+    if (needsSignIn && mode.value !== "readiness") {
+      mode.value = "readiness";
+    }
+  }
+);
 </script>
 
 <template>
   <div
     v-if="props.open"
-    class="fixed inset-0 z-[70] bg-black/55 backdrop-blur-[6px] p-4 md:p-6"
+    class="fixed inset-0 z-[70] bg-black/55 backdrop-blur-[6px] px-4 pb-4 pt-14 md:px-6 md:pb-6 md:pt-16"
     tabindex="-1"
     @keydown.esc.prevent="closeWizard"
   >
@@ -369,9 +381,15 @@ watch(
         </button>
 
         <CardHeader class="space-y-3 pr-14">
-          <CardTitle>Launch Assist</CardTitle>
-          <CardDescription>Check readiness, fix issues, and retry from one guided flow.</CardDescription>
-          <div class="flex gap-2 pt-1">
+          <CardTitle>{{ needsSignInFlow ? "Sign in to continue" : "Launch Assist" }}</CardTitle>
+          <CardDescription>
+            {{
+              needsSignInFlow
+                ? "Sign in to Atlas and Microsoft to continue setup."
+                : "Check readiness, fix issues, and retry from one guided flow."
+            }}
+          </CardDescription>
+          <div v-if="!needsSignInFlow" class="flex gap-2 pt-1">
             <Button
               size="sm"
               variant="outline"
@@ -476,7 +494,7 @@ watch(
                 <Wrench class="mr-1 h-3.5 w-3.5" />
                 {{
                   props.nextActionLabels[activeBlocking.key] ??
-                  (canUseRecovery ? "Open guided recovery" : "Continue setup")
+                  (canUseRecovery ? "Open guided recovery" : "Continue sign-in")
                 }}
               </Button>
               <Button v-else variant="secondary" :disabled="props.working" @click="emit('complete')">

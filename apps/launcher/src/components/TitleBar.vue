@@ -129,7 +129,7 @@ function handleReadinessClick() {
 
 <template>
   <div 
-    class="fixed top-0 left-0 right-0 h-11 z-50 flex items-center justify-between select-none px-3 transition-colors"
+    class="fixed top-0 left-0 right-0 h-11 z-[100] flex items-center justify-between select-none px-3 transition-colors"
     data-tauri-drag-region
   >
     <!-- Left Section: Compact spacer for traffic lights -->
@@ -153,7 +153,7 @@ function handleReadinessClick() {
     </div>
 
     <!-- Right Section: Launch Readiness & Controls (anchored to right-4 for a consistent gap) -->
-    <div class="absolute right-4 top-0 h-11 flex items-center z-50" data-tauri-no-drag>
+    <div class="absolute right-4 top-0 h-11 flex items-center z-[101]" data-tauri-no-drag>
       <div class="flex items-center gap-2.5 h-full pr-0.5">
         <button
           class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300"
