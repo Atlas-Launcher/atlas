@@ -10,6 +10,7 @@ use crate::net::http::{fetch_json_shared, shared_client};
 use crate::paths;
 use atlas_client::hub::HubClient;
 use error::LibraryError;
+use std::collections::HashSet;
 use std::fs;
 use std::path::Component;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -55,9 +56,13 @@ pub async fn fetch_atlas_remote_packs(
         .list_launcher_packs()
         .await
         .map_err(|err| LibraryError::Message(err.to_string()))?;
-    Ok(packs
-        .into_iter()
-        .map(|pack| AtlasRemotePack {
+    let mut seen_pack_ids = HashSet::new();
+    let mut remote_packs = Vec::new();
+    for pack in packs {
+        if !seen_pack_ids.insert(pack.pack_id.clone()) {
+            continue;
+        }
+        remote_packs.push(AtlasRemotePack {
             pack_id: pack.pack_id,
             pack_name: pack.pack_name,
             pack_slug: pack.pack_slug,
@@ -69,8 +74,9 @@ pub async fn fetch_atlas_remote_packs(
             minecraft_version: None,
             modloader: None,
             modloader_version: None,
-        })
-        .collect())
+        });
+    }
+    Ok(remote_packs)
 }
 
 pub async fn sync_atlas_pack(

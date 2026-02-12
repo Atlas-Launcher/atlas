@@ -200,8 +200,12 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     };
   }
 
+  function isAtlasBackedInstance(instance: InstanceConfig) {
+    return !!instance.atlasPack?.packId?.trim() || instance.source === "atlas";
+  }
+
   function normalizeInstance(instance: InstanceConfig, fallbackIndex: number): InstanceConfig {
-    const source = instance.source === "atlas" ? "atlas" : "local";
+    const source = isAtlasBackedInstance(instance) ? "atlas" : "local";
     const atlasPack =
       source === "atlas" && instance.atlasPack
         ? {
@@ -230,6 +234,34 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     };
   }
 
+  function dedupeInstances(input: InstanceConfig[]) {
+    const byInstanceId = new Map<string, InstanceConfig>();
+    const atlasByPackId = new Map<string, string>();
+    const output: InstanceConfig[] = [];
+
+    for (const instance of input) {
+      if (byInstanceId.has(instance.id)) {
+        continue;
+      }
+
+      if (instance.source === "atlas" && instance.atlasPack?.packId) {
+        const packId = instance.atlasPack.packId.trim();
+        if (!packId) {
+          continue;
+        }
+        if (atlasByPackId.has(packId)) {
+          continue;
+        }
+        atlasByPackId.set(packId, instance.id);
+      }
+
+      byInstanceId.set(instance.id, instance);
+      output.push(instance);
+    }
+
+    return output;
+  }
+
   async function loadSettings() {
     try {
       const loaded = await invoke<AppSettings>("get_settings");
@@ -241,8 +273,10 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
             ? Math.max(1024, Math.round(loaded.defaultMemoryMb))
             : 4096,
         defaultJvmArgs: (loaded.defaultJvmArgs ?? "").trim() || null,
-        instances: (loaded.instances ?? []).map((instance, index) =>
-          normalizeInstance(instance, index)
+        instances: dedupeInstances(
+          (loaded.instances ?? []).map((instance, index) =>
+            normalizeInstance(instance, index)
+          )
         ),
         selectedInstanceId: loaded.selectedInstanceId ?? null,
         themeMode: (loaded.themeMode as "light" | "dark" | "system") ?? null,
