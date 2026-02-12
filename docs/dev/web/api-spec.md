@@ -113,7 +113,7 @@ Use your Hub deployment URL (Vercel).
 | `GET` | `/download/app/installer/latest/{os}/{arch}` | Latest launcher installer by platform. |
 | `GET` | `/download/cli/installer/latest` | Latest CLI installer (generic). |
 | `GET` | `/download/cli/installer/latest/{os}/{arch}` | Latest CLI installer by platform. |
-| `GET` | `/download/runner/install` | Hosted Linux runner install script (`curl ... | sudo bash`). |
+| `GET` | `/download/runner/install` | Hosted Linux runner install script (`curl ... | sudo bash -s --`); pass `--no-daemon-install` to skip daemon setup (WSL). |
 | `GET` | `/download/runner/latest` | Latest runner binary (generic Linux auto-target). |
 | `GET` | `/download/runner/latest/{os}/{arch}` | Latest runner binary by platform (Linux only). |
 | `GET` | `/download/ci/workflow` | Download generated CI workflow template. |

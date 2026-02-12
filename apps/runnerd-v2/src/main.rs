@@ -7,6 +7,7 @@ mod backup;
 mod config;
 mod daemon;
 mod lock;
+mod self_update;
 mod supervisor;
 
 #[tokio::main]

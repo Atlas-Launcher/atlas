@@ -28,6 +28,13 @@ Major subsystems:
 - Applies launch plan with Java memory flags and normalization behavior.
 - Uses `runner-provision-v2` for apply/provision logic.
 - Update/whitelist watcher loops use `deploy.json` `hub_url` for runner token exchange and polling.
+- Self-update subsystem (Linux only) checks Distribution API stable releases for `runner` + `runnerd` at daemon startup and every 6 hours.
+- Self-update is active only when `ATLAS_SYSTEMD_MANAGED=1` and runnerd runs as root (uid 0).
+- Staged updates are applied after the daily midnight backup pass, with managed-key reconciliation for `/etc/systemd/system/atlas-runnerd.service` followed by `systemctl restart atlas-runnerd.service`.
+
+`atlas-runnerd` build-time version resolution:
+- compile-time env `ATLAS_BUILD_VERSION` (tag-derived in release CI)
+- fallback to Cargo package version for local/non-tag builds
 
 ## Platform Notes
 

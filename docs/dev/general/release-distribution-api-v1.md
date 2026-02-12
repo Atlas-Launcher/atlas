@@ -10,6 +10,8 @@ This action is used by:
 - `.github/workflows/cli-release.yml`
 - `.github/workflows/runner-release.yml`
 
+Runner release builds inject `ATLAS_BUILD_VERSION` from the `runner-vx.y.z` tag so both `atlas-runner` and `atlas-runnerd` binaries report the tag version at runtime.
+
 ## Purpose
 
 One reusable publish path for all distributable products (`launcher`, `cli`, `runner`, `runnerd`):

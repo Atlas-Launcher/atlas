@@ -341,7 +341,7 @@ pub async fn build_status(
     refresh_child_status(&mut guard).await;
 
     let daemon = DaemonStatus {
-        daemon_version: env!("CARGO_PKG_VERSION").to_string(),
+        daemon_version: env!("ATLAS_BUILD_VERSION").to_string(),
         protocol_version: runner_core_v2::PROTOCOL_VERSION,
         pid: std::process::id() as i32,
         uptime_ms: now_millis().saturating_sub(daemon_start_ms),

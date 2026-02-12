@@ -798,7 +798,7 @@ paths:
 
   /download/runner/install:
     get:
-      summary: Download hosted Linux runner install script
+      summary: Download hosted Linux runner install script (supports --no-daemon-install)
       responses:
         '200':
           description: Shell script payload

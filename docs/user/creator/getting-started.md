@@ -47,14 +47,14 @@ Typical cycle:
 4. Monitor logs and use backup operations.
 
 Quick Linux install path:
-- `curl -fsSL "${NEXT_PUBLIC_BETTER_AUTH_URL%/}/download/runner/install" | sudo bash`
+- `curl -fsSL "${NEXT_PUBLIC_BETTER_AUTH_URL%/}/download/runner/install" | sudo bash -s --`
 - Verify with `atlas-runner --version`.
 - See `docs/user/runner-install.md` for details.
 
 Platform notes:
 - Linux VPS/dedicated host is the recommended runner deployment target.
 - macOS is natively supported with manual `atlas-runner` + `atlas-runnerd` downloads.
-- Windows deployments should use WSL and follow the Linux install path there.
+- Windows deployments should use WSL and pass `--no-daemon-install` to the install script.
 
 ## 6. Troubleshooting
 

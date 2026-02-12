@@ -128,11 +128,16 @@ pub async fn run_daily_backup(server_root: std::path::PathBuf, state: SharedStat
             let root = server_root.clone();
             let st = state.clone();
             info!("daily backup: starting backup for date {}", today);
-            match ops::backup_world(&root, st).await {
+            match ops::backup_world(&root, st.clone()).await {
                 Ok(path) => {
                     info!("daily backup completed: {}", path.display());
                     write_last_backup_date(&root, today).await;
                     prune_old_backups(&root, 14).await;
+                    if let Err(err) =
+                        crate::self_update::maybe_apply_staged_update(&root, st.clone()).await
+                    {
+                        warn!("self-update apply after backup failed: {}", err);
+                    }
                     last_backup_date = Some(today);
                 }
                 Err(err) => {

@@ -97,7 +97,9 @@ fn read_hub_url_from_deploy_config() -> Result<Option<String>> {
     let value: Value = serde_json::from_str(&content)
         .context("Failed to parse existing runner deploy config while resolving hub URL")?;
     let hub_url = value.get("hub_url").and_then(|v| v.as_str()).map(str::trim);
-    Ok(hub_url.filter(|value| !value.is_empty()).map(ToString::to_string))
+    Ok(hub_url
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string))
 }
 
 async fn save_deploy_key(
