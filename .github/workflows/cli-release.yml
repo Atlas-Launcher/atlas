@@ -223,6 +223,8 @@ jobs:
           mkdir -p .atlas-release
           manifest=".atlas-release/cli-files.txt"
           : > "${manifest}"
+          binary_count=0
+          installer_count=0
 
           map_os() {
             local lower="$1"
@@ -252,15 +254,32 @@ jobs:
 
             os="$(map_os "${lower}")" || continue
             arch="$(map_arch "${lower}")"
-            kind="binary"
-            if [[ "${lower}" == atlas-cli-installer-* ]]; then
-              kind="installer"
-            fi
 
-            echo "${file}|${os}|${arch}|${kind}|${base}" >> "${manifest}"
-          done < <(find dist -type f \( -name 'atlas-*' -o -name 'atlas-cli-installer-*' \))
+            installer_count=$((installer_count + 1))
+            echo "${file}|${os}|${arch}|installer|${base}" >> "${manifest}"
+          done < <(find dist -type f -name 'atlas-cli-installer-*')
+
+          while IFS= read -r file; do
+            base="$(basename "${file}")"
+            lower="$(echo "${base}" | tr '[:upper:]' '[:lower:]')"
+
+            os="$(map_os "${lower}")" || continue
+            arch="$(map_arch "${lower}")"
+
+            binary_count=$((binary_count + 1))
+            echo "${file}|${os}|${arch}|binary|${base}" >> "${manifest}"
+          done < <(find dist -type f -name 'atlas-*' ! -name 'atlas-cli-installer-*')
 
           test -s "${manifest}"
+          if [[ "${binary_count}" -eq 0 ]]; then
+            echo "No raw CLI binaries were discovered for publishing." >&2
+            exit 1
+          fi
+          if [[ "${installer_count}" -eq 0 ]]; then
+            echo "No CLI installers were discovered for publishing." >&2
+            exit 1
+          fi
+          echo "Discovered ${binary_count} binary artifact(s) and ${installer_count} installer artifact(s)."
           cat "${manifest}"
 
       - name: Publish CLI to Atlas Distribution API
