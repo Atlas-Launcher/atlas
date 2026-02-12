@@ -71,6 +71,7 @@ Where:
 - Release/CI workflows export `CARGO_TARGET_*_WINDOWS_MSVC_LINKER=lld-link` to consistently use LLVM's `lld-link` on Windows runners.
 - Windows release jobs now verify `lld-link` availability and install LLVM via Chocolatey when missing before Rust builds run.
 - Rust build jobs enable `sccache` (`RUSTC_WRAPPER=sccache`, `SCCACHE_GHA_ENABLED=true`) to accelerate repeat CI/release compiles.
+- Rust build jobs set `SCCACHE_IGNORE_SERVER_IO_ERROR=1` so cache backend outages fall back to uncached compiler execution instead of failing the build.
 - Rust build cache keys are unified across workflows by OS (`atlas-rust-${runner.os}-workspace`) to improve cache reuse between CI and release jobs.
 - Launcher workflow kind mapping differentiates installables from updater payloads:
   - `installer`: `.dmg`, `.pkg`, `.exe`, `.msi`, `.deb`, `.rpm`, `.AppImage`
