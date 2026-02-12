@@ -106,14 +106,17 @@ export default function DashboardClient({ session }: DashboardClientProps) {
         return;
       }
 
-      setPacks(data.packs ?? []);
-      if (!selectedPackId && data.packs?.length) {
-        setSelectedPackId(data.packs[0].id);
-      }
+      const nextPacks = data.packs ?? [];
+      setPacks(nextPacks);
+      setSelectedPackId((current) =>
+        current && nextPacks.some((pack: Pack) => pack.id === current)
+          ? current
+          : nextPacks[0]?.id ?? null
+      );
     };
 
     loadPacks().catch(() => setError("Could not load packs."));
-  }, [selectedPackId]);
+  }, []);
 
   useEffect(() => {
     setTabValue(initialTab);

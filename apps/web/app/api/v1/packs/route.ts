@@ -8,6 +8,36 @@ import { hasRole } from "@/lib/auth/roles";
 import { createPackWithDefaults } from "@/lib/packs/create-pack";
 import type { GithubContentFile } from "@/lib/github/repo-config";
 
+type PackListItem = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  repoUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function dedupePacksById(items: PackListItem[]) {
+  const unique = new Map<string, PackListItem>();
+
+  for (const item of items) {
+    const existing = unique.get(item.id);
+    if (!existing) {
+      unique.set(item.id, item);
+      continue;
+    }
+
+    if (item.updatedAt > existing.updatedAt) {
+      unique.set(item.id, item);
+    }
+  }
+
+  return [...unique.values()].sort(
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+  );
+}
+
 function getAtlasHubUrl(request: Request) {
   return (
     process.env.ATLAS_HUB_URL?.trim() ??
@@ -26,7 +56,18 @@ export async function GET(request: Request) {
   const isAdmin = hasRole(session, ["admin"]);
 
   const result = isAdmin
-    ? await db.select().from(packs).orderBy(packs.createdAt)
+    ? await db
+      .select({
+        id: packs.id,
+        name: packs.name,
+        slug: packs.slug,
+        description: packs.description,
+        repoUrl: packs.repoUrl,
+        createdAt: packs.createdAt,
+        updatedAt: packs.updatedAt,
+      })
+      .from(packs)
+      .orderBy(desc(packs.updatedAt))
     : await db
       .select({
         id: packs.id,
@@ -39,9 +80,9 @@ export async function GET(request: Request) {
       })
       .from(packMembers)
       .innerJoin(packs, eq(packMembers.packId, packs.id))
-      .where(eq(packMembers.userId, session.user.id));
-
-  return NextResponse.json({ packs: result });
+      .where(eq(packMembers.userId, session.user.id))
+      .orderBy(desc(packs.updatedAt));
+  return NextResponse.json({ packs: dedupePacksById(result) });
 }
 
 export async function POST(request: Request) {

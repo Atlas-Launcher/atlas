@@ -26,6 +26,11 @@ See:
 - `api-spec.md`
 - `openapi.yaml`
 
+### Pack list dedup guard
+
+`GET /api/v1/packs` now applies a server-side dedup pass by `pack.id` before responding.
+This protects dashboard views from legacy/invalid duplicate membership join results and keeps list ordering stable by newest `updatedAt`.
+
 ## Invite Onboarding Contract
 
 `POST /api/v1/invites/accept` now returns an onboarding handoff payload while keeping backward compatibility:
