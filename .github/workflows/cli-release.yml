@@ -199,6 +199,9 @@ jobs:
     if: startsWith(github.ref_name, 'cli-v')
     needs: [build-cli, build-installers]
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Parse version
         id: tag
         run: echo "version=${GITHUB_REF_NAME#cli-v}" >> "$GITHUB_OUTPUT"
@@ -207,6 +210,63 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist
+
+      - name: Build Atlas publish manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .atlas-release
+          manifest=".atlas-release/cli-files.txt"
+          : > "${manifest}"
+
+          map_os() {
+            local lower="$1"
+            if [[ "${lower}" == *windows* ]]; then
+              echo "windows"
+            elif [[ "${lower}" == *darwin* || "${lower}" == *macos* ]]; then
+              echo "macos"
+            elif [[ "${lower}" == *linux* ]]; then
+              echo "linux"
+            else
+              return 1
+            fi
+          }
+
+          map_arch() {
+            local lower="$1"
+            if [[ "${lower}" == *arm64* || "${lower}" == *aarch64* ]]; then
+              echo "arm64"
+            else
+              echo "x64"
+            fi
+          }
+
+          while IFS= read -r file; do
+            base="$(basename "${file}")"
+            lower="$(echo "${base}" | tr '[:upper:]' '[:lower:]')"
+
+            os="$(map_os "${lower}")" || continue
+            arch="$(map_arch "${lower}")"
+            kind="binary"
+            if [[ "${lower}" == atlas-cli-installer-* ]]; then
+              kind="installer"
+            fi
+
+            echo "${file}|${os}|${arch}|${kind}|${base}" >> "${manifest}"
+          done < <(find dist -type f \( -name 'atlas-*' -o -name 'atlas-cli-installer-*' \))
+
+          test -s "${manifest}"
+          cat "${manifest}"
+
+      - name: Publish CLI to Atlas Distribution API
+        uses: ./.github/actions/atlas-release
+        with:
+          atlas_base_url: ${{ secrets.ATLAS_HUB_URL }}
+          atlas_token: ${{ secrets.ATLAS_RELEASE_TOKEN }}
+          product: cli
+          version: ${{ steps.tag.outputs.version }}
+          channel: stable
+          files_manifest: .atlas-release/cli-files.txt
 
       - name: Create release
         uses: softprops/action-gh-release@v2

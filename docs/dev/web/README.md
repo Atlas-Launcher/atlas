@@ -25,8 +25,28 @@ See:
 - `api-spec.md`
 - `openapi.yaml`
 
+## Distribution API v1
+
+The web app now exposes a unified distribution registry for launcher/cli/runner/runnerd:
+- `GET /api/v1/releases/{product}/latest/{os}/{arch}`
+- `GET /api/v1/releases/{product}/{version}/{os}/{arch}`
+- `GET /api/v1/download/{downloadId}`
+- `GET /api/v1/launcher/updates/{os}/{arch}`
+- `GET /api/v1/launcher/updates/{channel}/{os}/{arch}`
+- `POST /api/v1/releases/{product}/publish`
+
+Data is backed by `distribution_releases`, `distribution_release_platforms`, and `distribution_artifacts` (Drizzle migration `0011_distribution_api_v1.sql`).
+
 ## Deployment Target
 
 - Vercel
 
 If a target is not listed, it is unsupported.
+
+## Lint Guardrails
+
+- Prefer `unknown` + narrowing over `any` in route handlers.
+- In React components, avoid synchronous `setState` calls inside `useEffect` when the value can be derived during render/init.
+- Define callback functions before effects that reference them, and use `useCallback` when dependency tracking is required.
+- Use escaped apostrophes in JSX text where required by lint rules.
+- Use `next/link` for internal navigation paths instead of raw `<a href>` tags.

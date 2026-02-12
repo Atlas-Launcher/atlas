@@ -117,6 +117,9 @@ jobs:
     if: startsWith(github.ref_name, 'runner-v')
     needs: [build-runner, build-runnerd]
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Parse version
         id: tag
         run: echo "version=${GITHUB_REF_NAME#runner-v}" >> "$GITHUB_OUTPUT"
@@ -125,6 +128,92 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist
+
+      - name: Build runner Atlas publish manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .atlas-release
+          manifest=".atlas-release/runner-files.txt"
+          : > "${manifest}"
+
+          while IFS= read -r file; do
+            base="$(basename "${file}")"
+            lower="$(echo "${base}" | tr '[:upper:]' '[:lower:]')"
+            if [[ "${lower}" != atlas-runner-* ]]; then
+              continue
+            fi
+
+            if [[ "${lower}" == *darwin* || "${lower}" == *macos* ]]; then
+              os="macos"
+            else
+              os="linux"
+            fi
+
+            if [[ "${lower}" == *arm64* || "${lower}" == *aarch64* ]]; then
+              arch="arm64"
+            else
+              arch="x64"
+            fi
+
+            echo "${file}|${os}|${arch}|binary|${base}" >> "${manifest}"
+          done < <(find dist -type f -name 'atlas-runner-*')
+
+          test -s "${manifest}"
+          cat "${manifest}"
+
+      - name: Publish runner to Atlas Distribution API
+        uses: ./.github/actions/atlas-release
+        with:
+          atlas_base_url: ${{ secrets.ATLAS_HUB_URL }}
+          atlas_token: ${{ secrets.ATLAS_RELEASE_TOKEN }}
+          product: runner
+          version: ${{ steps.tag.outputs.version }}
+          channel: stable
+          files_manifest: .atlas-release/runner-files.txt
+
+      - name: Build runnerd Atlas publish manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .atlas-release
+          manifest=".atlas-release/runnerd-files.txt"
+          : > "${manifest}"
+
+          while IFS= read -r file; do
+            base="$(basename "${file}")"
+            lower="$(echo "${base}" | tr '[:upper:]' '[:lower:]')"
+            if [[ "${lower}" != atlas-runnerd-* ]]; then
+              continue
+            fi
+
+            if [[ "${lower}" == *darwin* || "${lower}" == *macos* ]]; then
+              os="macos"
+            else
+              os="linux"
+            fi
+
+            if [[ "${lower}" == *arm64* || "${lower}" == *aarch64* ]]; then
+              arch="arm64"
+            else
+              arch="x64"
+            fi
+
+            echo "${file}|${os}|${arch}|binary|${base}" >> "${manifest}"
+          done < <(find dist -type f -name 'atlas-runnerd-*')
+
+          test -s "${manifest}"
+          cat "${manifest}"
+
+      - name: Publish runnerd to Atlas Distribution API
+        uses: ./.github/actions/atlas-release
+        with:
+          atlas_base_url: ${{ secrets.ATLAS_HUB_URL }}
+          atlas_token: ${{ secrets.ATLAS_RELEASE_TOKEN }}
+          product: runnerd
+          version: ${{ steps.tag.outputs.version }}
+          channel: stable
+          files_manifest: .atlas-release/runnerd-files.txt
 
       - name: Create release
         uses: softprops/action-gh-release@v2
