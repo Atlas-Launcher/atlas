@@ -1406,7 +1406,7 @@ watch(
           </div>
           <div
             v-if="libraryView === 'grid'"
-            class="flex-1 min-h-0 overflow-y-auto"
+            class="flex-1 min-h-0 overflow-hidden"
           >
             <LibraryView
               :instances="instances"
