@@ -6,12 +6,11 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import ActivityCard from "./components/ActivityCard.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
 import InstanceView from "./components/InstanceView.vue";
+import LaunchAssistWizard from "./components/LaunchAssistWizard.vue";
 import LibraryView from "./components/LibraryView.vue";
-import LaunchReadinessWizard from "./components/LaunchReadinessWizard.vue";
 import SettingsCard from "./components/SettingsCard.vue";
 import SidebarNav from "./components/SidebarNav.vue";
 import TitleBar from "./components/TitleBar.vue";
-import TroubleshooterDialog from "./components/TroubleshooterDialog.vue";
 import UpdaterBanner from "./components/UpdaterBanner.vue";
 import Button from "./components/ui/button/Button.vue";
 import { parseOnboardingDeepLink, type OnboardingIntent } from "./lib/onboardingDeepLink";
@@ -137,8 +136,8 @@ const syncingRemotePacks = ref(false);
 const instanceInstallStateById = ref<Record<string, boolean>>({});
 const tasksPanelOpen = ref(false);
 const launchReadiness = ref<LaunchReadinessReport | null>(null);
-const readinessWizardOpen = ref(false);
-const troubleshooterOpen = ref(false);
+const launchAssistOpen = ref(false);
+const launchAssistMode = ref<"readiness" | "recovery">("readiness");
 // New flag: when we detect a connectivity error but required vars exist
 const cannotConnect = ref(false);
 const troubleshooterTrigger = ref<"settings" | "help" | "failure">("settings");
@@ -290,11 +289,13 @@ async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
     cannotConnect.value = false;
     const autoOpen = options?.autoOpen === true;
     if (autoOpen && launchReadiness.value && shouldAutoOpenReadinessWizard(launchReadiness.value)) {
-      readinessWizardOpen.value = true;
+      launchAssistMode.value = "readiness";
+      launchAssistOpen.value = true;
     }
     // If the report indicates we are not ready to launch (login/link blockers), ensure the wizard is open
     if (launchReadiness.value && hasLoginReadinessBlockers(launchReadiness.value)) {
-      readinessWizardOpen.value = true;
+      launchAssistMode.value = "readiness";
+      launchAssistOpen.value = true;
     }
   } catch (err) {
     const msg = String(err);
@@ -319,7 +320,8 @@ async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
     }
     // Clear any connectivity flag and open the readiness wizard to allow configuring missing vars
     cannotConnect.value = false;
-    readinessWizardOpen.value = true;
+    launchAssistMode.value = "readiness";
+    launchAssistOpen.value = true;
   }
 }
 
@@ -384,7 +386,8 @@ async function applyPendingOnboardingIntent() {
     libraryView.value = "detail";
     await refreshLaunchReadiness();
     if (launchReadiness.value && hasLoginReadinessBlockers(launchReadiness.value)) {
-      readinessWizardOpen.value = true;
+      launchAssistMode.value = "readiness";
+      launchAssistOpen.value = true;
     }
     setStatus(`Invite ready for ${matchedInstance.name}. Install files and press Play.`);
 
@@ -462,7 +465,8 @@ async function startUnifiedAuthFlow() {
 
 async function openReadinessWizard() {
   await refreshLaunchReadiness();
-  readinessWizardOpen.value = true;
+  launchAssistMode.value = "readiness";
+  launchAssistOpen.value = true;
 }
 
 function dismissTroubleshooterFailurePrompt() {
@@ -470,30 +474,32 @@ function dismissTroubleshooterFailurePrompt() {
 }
 
 async function openTroubleshooter(trigger: "settings" | "help" | "failure") {
-  pushLog(`[Troubleshooter] openTroubleshooter called (trigger=${trigger})`);
+  pushLog(`[LaunchAssist] open recovery requested (trigger=${trigger})`);
   await refreshLaunchReadiness();
-  pushLog(`[Troubleshooter] launchReadiness=${JSON.stringify(launchReadiness.value)}`);
+  pushLog(`[LaunchAssist] launchReadiness=${JSON.stringify(launchReadiness.value)}`);
   const readiness = launchReadiness.value;
-  // Only block opening the troubleshooter automatically for failure-triggered auto-open when readiness is not ready.
+  // Only block opening Launch Assist recovery automatically for failure-triggered auto-open when readiness is not ready.
   if (trigger === "failure" && (!readiness || !readiness.readyToLaunch)) {
     const blocker = readiness?.checklist.find((item) => !item.ready)?.label;
     setStatus(
       blocker
         ? `Complete readiness check first: ${blocker}.`
-        : "Complete launch readiness checks before opening Troubleshooter."
+        : "Complete launch readiness checks before opening Launch Assist."
     );
-    pushLog(`[Troubleshooter] blocked auto-open due to readiness; trigger=${trigger}; blocker=${blocker ?? "none"}`);
-    readinessWizardOpen.value = true;
+    pushLog(`[LaunchAssist] blocked auto-open due to readiness; trigger=${trigger}; blocker=${blocker ?? "none"}`);
+    launchAssistMode.value = "readiness";
+    launchAssistOpen.value = true;
     if (trigger === "failure") {
       dismissTroubleshooterFailurePrompt();
     }
     return;
   }
 
-  // For manual opens (help/settings) we allow showing the troubleshooter even if readiness isn't fully ready.
+  // For manual opens (help/settings) we allow recovery mode even if readiness isn't fully ready.
   troubleshooterTrigger.value = trigger;
-  troubleshooterOpen.value = true;
-  pushLog(`[Troubleshooter] opened (trigger=${trigger})`);
+  launchAssistMode.value = "recovery";
+  launchAssistOpen.value = true;
+  pushLog(`[LaunchAssist] opened recovery mode (trigger=${trigger})`);
   if (trigger === "failure") {
     dismissTroubleshooterFailurePrompt();
   }
@@ -504,7 +510,7 @@ function handleTroubleshooterStatus(message: string) {
 }
 
 function handleTroubleshooterLog(message: string) {
-  pushLog(`[Troubleshooter:${troubleshooterTrigger.value}] ${message}`);
+  pushLog(`[LaunchAssist:${troubleshooterTrigger.value}] ${message}`);
 }
 
 async function refreshFailurePromptEligibility() {
@@ -970,18 +976,30 @@ async function handleReadinessAction(key: string) {
 }
 
 async function dismissReadinessWizard() {
-  readinessWizardOpen.value = false;
+  launchAssistOpen.value = false;
   await persistReadinessWizardState({
     dismissedAt: new Date().toISOString()
   });
 }
 
 async function completeReadinessWizard() {
-  readinessWizardOpen.value = false;
+  launchAssistOpen.value = false;
   await persistReadinessWizardState({
     completedAt: new Date().toISOString(),
     dismissedAt: null
   });
+}
+
+async function closeLaunchAssist() {
+  if (launchReadiness.value?.readyToLaunch) {
+    launchAssistOpen.value = false;
+    return;
+  }
+  await dismissReadinessWizard();
+}
+
+async function retryLaunchFromAssist() {
+  await launchActiveInstance();
 }
 
 async function handleReadinessSignOut(scope: "microsoft" | "all") {
@@ -1022,7 +1040,8 @@ async function handleReadinessSignOut(scope: "microsoft" | "all") {
       });
       setStatus("Signed out of Microsoft.");
     }
-    readinessWizardOpen.value = true;
+    launchAssistMode.value = "readiness";
+    launchAssistOpen.value = true;
     await refreshLaunchReadiness({ autoOpen: true });
   });
 }
@@ -1163,7 +1182,7 @@ watch(
     logs.value[0] ?? ""
   ],
   async ([shouldPrompt, logTriggered, statusValue, firstLog]) => {
-    if (!shouldPrompt || !logTriggered || troubleshooterOpen.value) {
+    if (!shouldPrompt || !logTriggered || launchAssistOpen.value) {
       return;
     }
     const signal = `${statusValue ?? ""}|${firstLog ?? ""}`;
@@ -1283,7 +1302,7 @@ watch(
       :atlas-profile="atlasProfile"
       :is-signing-in="isSigningIn"
       :cannot-connect="cannotConnect"
-      :readiness-open="readinessWizardOpen"
+      :readiness-open="launchAssistOpen"
       @open-readiness-wizard="openReadinessWizard"
     />
     
@@ -1329,11 +1348,11 @@ watch(
               <div>
                 <p class="font-medium text-amber-700 dark:text-amber-300">Issue detected</p>
                 <p class="text-xs text-muted-foreground">
-                  Recent status suggests a launch/setup failure. Open Troubleshooter for guided fixes.
+                  Recent status suggests a launch/setup failure. Open Launch Assist for guided fixes.
                 </p>
               </div>
               <div class="flex items-center gap-2">
-                <Button size="sm" @click="openTroubleshooter('failure')">Open troubleshooter</Button>
+                <Button size="sm" @click="openTroubleshooter('failure')">Open Launch Assist</Button>
                 <Button size="sm" variant="outline" @click="dismissTroubleshooterFailurePrompt">Dismiss</Button>
               </div>
             </div>
@@ -1409,7 +1428,7 @@ watch(
             title="Recent activity"
             description="Helpful signals while tuning Atlas."
             :logs="logs"
-            action-label="Troubleshooter"
+            action-label="Launch Assist"
             @action="openTroubleshooter('help')"
           />
         </section>
@@ -1420,8 +1439,9 @@ watch(
       :tasks="tasks"
       :pack-name="activeInstance?.name ?? null"
     />
-    <LaunchReadinessWizard
-      :open="readinessWizardOpen"
+    <LaunchAssistWizard
+      :open="launchAssistOpen"
+      :mode="launchAssistMode"
       :readiness="launchReadiness"
       :atlas-signed-in="!!atlasProfile"
       :microsoft-signed-in="!!profile"
@@ -1430,22 +1450,19 @@ watch(
       :hub-url="hubUrl"
       :working="working"
       :next-action-labels="readinessNextActionLabels"
-      @action="handleReadinessAction"
-      @sign-out="handleReadinessSignOut"
-      @close="dismissReadinessWizard"
-      @complete="completeReadinessWizard"
-    />
-    <TroubleshooterDialog
-      :open="troubleshooterOpen"
       :game-dir="troubleshooterGameDir"
       :pack-id="troubleshooterPackId"
       :channel="troubleshooterChannel"
       :recent-status="status"
       :recent-logs="logs"
-      @update:open="troubleshooterOpen = $event"
+      @action="handleReadinessAction"
+      @sign-out="handleReadinessSignOut"
       @status="handleTroubleshooterStatus"
       @log="handleTroubleshooterLog"
       @relink-requested="handleTroubleshooterRelinkRequested"
+      @retry-launch="retryLaunchFromAssist"
+      @close="closeLaunchAssist"
+      @complete="completeReadinessWizard"
     />
   </div>
 </template>
