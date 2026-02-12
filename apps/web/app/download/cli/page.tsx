@@ -156,8 +156,8 @@ export default async function CliDownloadPage() {
           </p>
           <div className="mt-4 space-y-3 text-sm text-[var(--atlas-ink-muted)]">
             <p>CLI downloads resolve directly from distribution metadata.</p>
-            <p>Stable release lookup: `/api/v1/releases/cli/latest/{{os}}/{{arch}}`</p>
-            <p>Artifact redirect: `/api/v1/download/{{downloadId}}`</p>
+            <p>Stable release lookup: {`/api/v1/releases/cli/latest/{os}/{arch}`}</p>
+            <p>Artifact redirect: {`/api/v1/download/{downloadId}`}</p>
           </div>
         </div>
 
