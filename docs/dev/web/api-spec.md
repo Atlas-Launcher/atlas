@@ -80,11 +80,11 @@ Use your Hub deployment URL (Vercel).
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v1/ci/presign` | Generate CI upload target/build context. |
+| `POST` | `/api/v1/ci/presign` | Generate CI upload target/build context (returns direct upload URL plus optional provider headers). |
 | `POST` | `/api/v1/ci/complete` | Complete CI build publish. |
-| `POST` | `/api/v1/storage/presign` | Presign storage operation. |
-| `PUT` | `/api/v1/storage/upload` | Upload through storage token path. |
-| `GET` | `/api/v1/storage/download` | Download through storage token path. |
+| `POST` | `/api/v1/storage/presign` | Presign storage operation (clients upload/download directly to provider URLs; upload response may include `uploadHeaders`; `download` supports optional `provider` when key is unencoded). Distribution-release keys under `artifacts/{launcher|cli|runner|runnerd}/...` are admin-only for upload presign. |
+| `PUT` | `/api/v1/storage/upload` | Disabled (410): upload proxy traffic is not supported. |
+| `GET` | `/api/v1/storage/download` | Disabled (410): download proxy traffic is not supported. |
 | `GET` | `/api/v1/github/owners` | GitHub owners/orgs for linked user. |
 | `GET` | `/api/v1/github/repos` | List GitHub repos. |
 | `POST` | `/api/v1/github/repos` | Configure/import repo. |
@@ -112,7 +112,7 @@ Use your Hub deployment URL (Vercel).
 |---|---|---|
 | `GET` | `/api/v1/releases/{product}/latest/{os}/{arch}` | Resolve latest release metadata for a product/platform. |
 | `GET` | `/api/v1/releases/{product}/{version}/{os}/{arch}` | Resolve specific release metadata for a product/platform. |
-| `POST` | `/api/v1/releases/{product}/publish` | Register immutable artifacts for one product/version/platform release. |
+| `POST` | `/api/v1/releases/{product}/publish` | Register immutable artifacts for one product/version/platform release (admin-only). |
 | `GET` | `/api/v1/launcher/updates/{os}/{arch}` | Stable launcher updater view projected from canonical release metadata. |
 | `GET` | `/api/v1/launcher/updates/{channel}/{os}/{arch}` | Channelized launcher updater view projected from canonical release metadata. |
 

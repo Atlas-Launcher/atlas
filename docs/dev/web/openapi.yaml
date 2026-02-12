@@ -402,7 +402,7 @@ paths:
 
   /api/v1/ci/presign:
     post:
-      summary: Generate CI upload target and build context
+      summary: Generate CI upload target and build context (direct URL + optional upload headers)
       security:
         - OidcHeader: []
         - BearerAuth: []
@@ -422,7 +422,7 @@ paths:
 
   /api/v1/storage/presign:
     post:
-      summary: Presign storage operation
+      summary: Presign storage operation (direct URL; upload may include provider headers)
       security:
         - BearerAuth: []
       responses:
@@ -431,17 +431,17 @@ paths:
 
   /api/v1/storage/upload:
     put:
-      summary: Upload using storage token route
+      summary: Disabled upload proxy route
       responses:
-        '200':
-          description: Upload success
+        '410':
+          description: Proxy upload disabled; use presigned storage URL
 
   /api/v1/storage/download:
     get:
-      summary: Download using storage token route
+      summary: Disabled download proxy route
       responses:
-        '200':
-          description: Download response
+        '410':
+          description: Proxy download disabled; use presigned storage URL
 
   /api/v1/github/owners:
     get:
@@ -607,7 +607,7 @@ paths:
           type: string
           enum: [launcher, cli, runner, runnerd]
     post:
-      summary: Register immutable release metadata and assets
+      summary: Register immutable release metadata and assets (admin only)
       security:
         - BearerAuth: []
       responses:

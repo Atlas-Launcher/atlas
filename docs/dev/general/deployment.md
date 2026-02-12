@@ -17,6 +17,7 @@ This guide describes how Atlas is deployed across Hub, release pipelines, and ru
 - Build artifacts are immutable.
 - Release channels are mutable pointers (`stable`, `beta`, `dev` for distribution products; pack channels remain separate).
 - Storage access is mediated through presigned URLs or Hub download indirection.
+- Hub must not proxy artifact upload/download byte streams.
 - CI publish paths must be authenticated and scoped.
 
 ## 3. Environments and Inputs
@@ -31,7 +32,7 @@ Minimum deployment inputs:
 For release publishing workflows:
 
 - `ATLAS_HUB_URL`
-- `ATLAS_RELEASE_TOKEN` (user token with `admin` or `creator` role)
+- `ATLAS_RELEASE_TOKEN` (user token with `admin` role)
 
 ## 4. CI/CD Paths
 
@@ -46,8 +47,9 @@ For release publishing workflows:
 Release workflows use `.github/actions/atlas-release`:
 
 1. Compute artifact metadata (`sha256`, `size`).
-2. Upload artifacts via `/api/v1/storage/presign`.
-3. Publish release metadata via `/api/v1/releases/{product}/publish`.
+2. Upload artifacts via `/api/v1/storage/presign` using the returned direct URL and any returned `uploadHeaders` (required for providers such as Vercel Blob).
+3. For Vercel Blob, uploads should use short-lived, path-scoped client tokens generated per artifact (not the global read/write token in clients/CI).
+4. Publish release metadata via `/api/v1/releases/{product}/publish`.
 
 Reference:
 - `docs/dev/general/release-distribution-api-v1.md`
