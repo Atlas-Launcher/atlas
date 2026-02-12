@@ -74,3 +74,4 @@ Where:
   - After bundle build, it signs any missing updater payload signatures with `tauri signer sign`.
   - Before publish, it fails the workflow if any `binary` payload in the manifest is missing its matching `.sig`.
   - Signature generation uses `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` from env (via `tauri signer sign <file>`), avoiding direct CLI passing of multiline secrets.
+  - Signing now passes absolute payload paths because the signer runs in the launcher workspace (`apps/launcher`) while bundle discovery scans repo-root `target/**/release/bundle/**`.
