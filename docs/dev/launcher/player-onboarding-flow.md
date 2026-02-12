@@ -48,7 +48,8 @@ Launch Assist replaces split readiness + troubleshooter navigation.
   - Allows support bundle generation and log access.
 
 Modal layering behavior:
-- Launch Assist and updater dialogs use full-window blur backdrops.
+- Launch Assist uses a full-window blur backdrop.
+- Updater stays in-banner (no modal overlay) to avoid blocking onboarding flow.
 - macOS window controls and their control background remain visible above overlays.
 
 Entry points:

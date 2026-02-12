@@ -104,8 +104,8 @@ function updateNeoForgeVersion(value: string | number) {
 </script>
 
 <template>
-  <Card class="glass">
-    <CardHeader>
+  <Card class="glass rounded-2xl flex flex-col">
+    <CardHeader class="pt-7">
       <CardTitle>Game setup</CardTitle>
       <CardDescription>
         {{
@@ -282,7 +282,7 @@ function updateNeoForgeVersion(value: string | number) {
         </div>
       </div>
     </CardContent>
-    <CardFooter class="flex items-center justify-between">
+    <CardFooter class="flex items-center justify-between pt-0">
       <div class="text-xs text-muted-foreground">
         {{
           props.setupLocked

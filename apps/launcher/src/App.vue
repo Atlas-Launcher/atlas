@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, ProgressBarStatus, Window } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import ActivityCard from "./components/ActivityCard.vue";
 import FirstLaunchSuccessPanel from "./components/FirstLaunchSuccessPanel.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
 import InstanceView from "./components/InstanceView.vue";
@@ -115,7 +114,6 @@ const {
   checking: updaterChecking,
   installing: updaterInstalling,
   installComplete: updaterInstallComplete,
-  dialogOpen: updaterDialogOpen,
   showBanner: showUpdaterBanner,
   updaterBusy,
   updateInfo,
@@ -123,12 +121,12 @@ const {
   errorMessage: updaterErrorMessage,
   downloadedBytes: updaterDownloadedBytes,
   totalBytes: updaterTotalBytes,
+  speedBytesPerSecond: updaterSpeedBytesPerSecond,
+  etaSeconds: updaterEtaSeconds,
   progressPercent: updaterProgressPercent,
   checkForUpdates,
   installUpdate,
-  restartNow,
-  openDialog: openUpdaterDialog,
-  closeDialog: closeUpdaterDialog
+  restartNow
 } = useUpdater({ setStatus, pushLog });
 
 const activeTab = ref<"library" | "settings">("library");
@@ -940,10 +938,7 @@ async function checkForUpdatesFromSettings() {
 }
 
 async function installLauncherUpdate() {
-  const started = await installUpdate();
-  if (!started) {
-    openUpdaterDialog();
-  }
+  await installUpdate();
 }
 
 function stopHourlyUpdateChecks() {
@@ -1359,17 +1354,16 @@ watch(
         <div v-if="showUpdaterBanner" class="sticky top-0 z-[55]">
           <UpdaterBanner
             :visible="showUpdaterBanner"
-            :open="updaterDialogOpen"
             :checking="updaterChecking"
             :installing="updaterInstalling"
             :install-complete="updaterInstallComplete"
             :progress-percent="updaterProgressPercent"
             :downloaded-bytes="updaterDownloadedBytes"
             :total-bytes="updaterTotalBytes"
+            :speed-bytes-per-second="updaterSpeedBytesPerSecond"
+            :eta-seconds="updaterEtaSeconds"
             :update-info="updateInfo"
             :error-message="updaterErrorMessage"
-            @open="openUpdaterDialog"
-            @close="closeUpdaterDialog"
             @install="installLauncherUpdate"
             @restart="restartLauncherAfterUpdate"
           />
@@ -1383,7 +1377,8 @@ watch(
         />
         <section
           v-if="activeTab === 'library'"
-          class="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden"
+          class="flex-1 min-h-0 flex flex-col gap-6"
+          :class="libraryView === 'detail' ? 'overflow-visible' : 'overflow-hidden'"
         >
           <div
             v-if="showTroubleshooterFailurePrompt"
@@ -1453,8 +1448,9 @@ watch(
             @update-channel="updateAtlasChannel"
           />
         </section>
-        <section v-else class="flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-6">
+        <section v-else class="flex-1 min-h-0 overflow-hidden">
           <SettingsCard
+            class="h-full min-h-0"
             v-model:settingsClientId="settingsClientId"
             v-model:settingsAtlasHubUrl="settingsAtlasHubUrl"
             v-model:settingsDefaultMemoryMb="settingsDefaultMemoryMb"
@@ -1468,13 +1464,6 @@ watch(
             @save-settings="saveSettings"
             @check-updates="checkForUpdatesFromSettings"
             @open-readiness-wizard="openReadinessWizard"
-          />
-          <ActivityCard
-            title="Recent activity"
-            description="Helpful signals while tuning Atlas."
-            :logs="logs"
-            action-label="Launch Assist"
-            @action="openTroubleshooter('help')"
           />
         </section>
       </main>

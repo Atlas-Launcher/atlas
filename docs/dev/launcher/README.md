@@ -34,7 +34,7 @@ Key backend modules:
 - Launch Assist is unified:
   - Readiness phase for pre-launch blockers.
   - Recovery phase for post-readiness findings/fixes/support bundle.
-- Updater install clicks always open the updater dialog and surface actionable errors instead of silently no-oping.
+- Updater uses an in-banner flow (no separate overlay dialog) and surfaces actionable errors inline.
 - Signature verification failures are surfaced with a targeted message to check release signing key and launcher updater pubkey alignment.
 - Launcher performs an automatic updater check on boot and then every hour while the app remains open.
 - Updater `Update` handles from `@tauri-apps/plugin-updater` are stored as raw/shallow refs to avoid Vue proxying class instances with private fields.

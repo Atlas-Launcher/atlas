@@ -63,12 +63,12 @@ function formatDate(seconds: number) {
 </script>
 
 <template>
-  <Card class="glass">
-    <CardHeader>
+  <Card class="glass h-full min-h-0 rounded-2xl flex flex-col">
+    <CardHeader class="pt-7">
       <CardTitle>Mods</CardTitle>
       <CardDescription>Manage mods for the active profile.</CardDescription>
     </CardHeader>
-    <CardContent class="space-y-4">
+    <CardContent class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-3 pb-5 pt-1 [scrollbar-gutter:stable]">
       <div v-if="!props.instance" class="text-sm text-muted-foreground">
         Select a profile to manage mods.
       </div>
@@ -137,7 +137,7 @@ function formatDate(seconds: number) {
         </div>
       </div>
     </CardContent>
-    <CardFooter>
+    <CardFooter class="pt-0">
       <div class="text-xs text-muted-foreground">
         Mods need a compatible loader for the selected profile.
       </div>

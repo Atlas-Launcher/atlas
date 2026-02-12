@@ -22,12 +22,15 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
   const checking = ref(false);
   const installing = ref(false);
   const installComplete = ref(false);
-  const dialogOpen = ref(false);
   const bannerDismissed = ref(false);
   const errorMessage = ref<string | null>(null);
   const lastCheckedAt = ref<string | null>(null);
   const downloadedBytes = ref(0);
   const totalBytes = ref<number | null>(null);
+  const speedBytesPerSecond = ref<number | null>(null);
+  const etaSeconds = ref<number | null>(null);
+  const lastProgressAt = ref<number | null>(null);
+  const lastProgressBytes = ref(0);
   const updateHandle = shallowRef<Update | null>(null);
 
   const updateInfo = computed<ReleaseInfo | null>(() => {
@@ -81,19 +84,42 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
   });
 
   function handleDownloadEvent(event: DownloadEvent) {
+    const now = Date.now();
     if (event.event === "Started") {
       downloadedBytes.value = 0;
       totalBytes.value = event.data.contentLength ?? null;
+      speedBytesPerSecond.value = null;
+      etaSeconds.value = null;
+      lastProgressAt.value = now;
+      lastProgressBytes.value = 0;
       return;
     }
     if (event.event === "Progress") {
       downloadedBytes.value += event.data.chunkLength;
+      if (lastProgressAt.value) {
+        const elapsedMs = Math.max(1, now - lastProgressAt.value);
+        const deltaBytes = Math.max(0, downloadedBytes.value - lastProgressBytes.value);
+        const instantBps = (deltaBytes * 1000) / elapsedMs;
+        speedBytesPerSecond.value =
+          speedBytesPerSecond.value == null
+            ? instantBps
+            : speedBytesPerSecond.value * 0.7 + instantBps * 0.3;
+      }
+      if (totalBytes.value && speedBytesPerSecond.value && speedBytesPerSecond.value > 0) {
+        const remainingBytes = Math.max(0, totalBytes.value - downloadedBytes.value);
+        etaSeconds.value = Math.ceil(remainingBytes / speedBytesPerSecond.value);
+      } else {
+        etaSeconds.value = null;
+      }
+      lastProgressAt.value = now;
+      lastProgressBytes.value = downloadedBytes.value;
       return;
     }
     if (event.event === "Finished") {
       if (totalBytes.value) {
         downloadedBytes.value = totalBytes.value;
       }
+      etaSeconds.value = 0;
     }
   }
 
@@ -122,9 +148,9 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
         installComplete.value = false;
         await releaseCurrentHandle();
         if (options?.userInitiated) {
-          setStatus("Atlas Launcher is up to date.");
+          setStatus("App is up to date.");
         }
-        pushLog("No launcher update available.");
+        pushLog("No update available.");
         return false;
       }
 
@@ -133,10 +159,10 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
       installComplete.value = false;
       bannerDismissed.value = false;
       if (options?.userInitiated) {
-        dialogOpen.value = true;
+        setStatus(`Update ${result.version} is available.`);
       }
-      setStatus(`Launcher update ${result.version} is available.`);
-      pushLog(`Launcher update available: ${result.currentVersion} -> ${result.version}`);
+      setStatus(`Update ${result.version} is available.`);
+      pushLog(`Update available: ${result.currentVersion} -> ${result.version}`);
       return true;
     } catch (err) {
       const rawError = String(err);
@@ -160,9 +186,8 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
 
   async function installUpdate() {
     if (!updateHandle.value) {
-      const message = "No pending launcher update is available to install.";
+      const message = "No pending update is available to install.";
       errorMessage.value = message;
-      dialogOpen.value = true;
       setStatus(message);
       pushLog(message);
       return false;
@@ -170,31 +195,32 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
     if (updaterBusy.value) {
       const message = "Updater is already busy. Please wait for the current task to finish.";
       errorMessage.value = message;
-      dialogOpen.value = true;
       setStatus(message);
       pushLog(message);
       return false;
     }
     installing.value = true;
-    dialogOpen.value = true;
     errorMessage.value = null;
     downloadedBytes.value = 0;
     totalBytes.value = null;
-    setStatus(`Downloading launcher update ${updateHandle.value.version}...`);
+    speedBytesPerSecond.value = null;
+    etaSeconds.value = null;
+    lastProgressAt.value = null;
+    lastProgressBytes.value = 0;
+    setStatus(`Downloading update ${updateHandle.value.version}...`);
     try {
       await updateHandle.value.downloadAndInstall(handleDownloadEvent);
       installComplete.value = true;
       bannerDismissed.value = false;
-      dialogOpen.value = true;
-      setStatus("Update installed. Restart Atlas Launcher to finish.");
-      pushLog(`Launcher update installed: ${updateHandle.value.version}`);
+      setStatus("Update installed. Relaunch to finish.");
+      pushLog(`Update installed: ${updateHandle.value.version}`);
       return true;
     } catch (err) {
       const rawError = String(err);
       const hasSignatureError =
         rawError.toLowerCase().includes("signature") || rawError.toLowerCase().includes("verify");
       const message = hasSignatureError
-        ? "Failed to verify update signature. Ensure release signing keys match the launcher pubkey."
+        ? "Failed to verify update signature. Ensure release signing keys match the app public key."
         : `Failed to install update: ${rawError}`;
       errorMessage.value = message;
       setStatus(message);
@@ -207,24 +233,16 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
 
   async function restartNow() {
     try {
-      setStatus("Restarting Atlas Launcher...");
+      setStatus("Relaunching...");
       await invoke("restart_app");
       return true;
     } catch (err) {
-      const message = `Failed to restart launcher: ${String(err)}`;
+      const message = `Failed to relaunch app: ${String(err)}`;
       errorMessage.value = message;
       setStatus(message);
       pushLog(message);
       return false;
     }
-  }
-
-  function openDialog() {
-    dialogOpen.value = true;
-  }
-
-  function closeDialog() {
-    dialogOpen.value = false;
   }
 
   function dismissBanner() {
@@ -235,7 +253,6 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
     checking,
     installing,
     installComplete,
-    dialogOpen,
     showBanner,
     updaterBusy,
     hasUpdate,
@@ -245,12 +262,12 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
     lastCheckedAt,
     downloadedBytes,
     totalBytes,
+    speedBytesPerSecond,
+    etaSeconds,
     progressPercent,
     checkForUpdates,
     installUpdate,
     restartNow,
-    openDialog,
-    closeDialog,
     dismissBanner
   };
 }
