@@ -9,6 +9,8 @@ for name in "${required[@]}"; do
   fi
 done
 
+ATLAS_BASE_URL="${ATLAS_BASE_URL%/}"
+
 if ! command -v jq >/dev/null 2>&1; then
   echo "jq is required for atlas-release action." >&2
   exit 1
@@ -123,23 +125,33 @@ while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
   key="${ARTIFACT_PREFIX}/${PRODUCT}/${VERSION}/${os}/${arch}/${filename}"
 
   presign_payload="$(jq -n --arg action "upload" --arg key "${key}" '{action:$action,key:$key}')"
-  presign_response="$(curl -fsS -X POST "${ATLAS_BASE_URL}/api/v1/storage/presign" \
+  presign_response="$(curl -sS -X POST "${ATLAS_BASE_URL}/api/v1/storage/presign" \
+    -w $'\n%{http_code}' \
     -H "x-atlas-app-deploy-token: ${ATLAS_APP_DEPLOY_TOKEN}" \
     -H "content-type: application/json" \
     --data "${presign_payload}")"
 
-  upload_url="$(echo "${presign_response}" | jq -r '.url')"
-  artifact_ref="$(echo "${presign_response}" | jq -r '.key')"
-  mapfile -t upload_headers < <(
-    echo "${presign_response}" | jq -r '.uploadHeaders // {} | to_entries[] | "\(.key): \(.value)"'
-  )
-
-  if [[ -z "${upload_url}" || "${upload_url}" == "null" || -z "${artifact_ref}" || "${artifact_ref}" == "null" ]]; then
-    echo "Invalid presign response: ${presign_response}" >&2
+  presign_status="$(echo "${presign_response}" | tail -n 1)"
+  presign_body="$(echo "${presign_response}" | sed '$d')"
+  if [[ "${presign_status}" -lt 200 || "${presign_status}" -ge 300 ]]; then
+    echo "Presign failed (${presign_status}): ${presign_body}" >&2
     exit 1
   fi
 
-  curl_args=(-fsS -X PUT --data-binary @"${path}")
+  upload_url="$(echo "${presign_body}" | jq -r '.url')"
+  artifact_ref="$(echo "${presign_body}" | jq -r '.key')"
+  artifact_provider="$(echo "${presign_body}" | jq -r '.provider // empty')"
+  artifact_key="${artifact_ref#*::}"
+  mapfile -t upload_headers < <(
+    echo "${presign_body}" | jq -r '.uploadHeaders // {} | to_entries[] | "\(.key): \(.value)"'
+  )
+
+  if [[ -z "${upload_url}" || "${upload_url}" == "null" || -z "${artifact_key}" || "${artifact_key}" == "null" || -z "${artifact_provider}" ]]; then
+    echo "Invalid presign response: ${presign_body}" >&2
+    exit 1
+  fi
+
+  curl_args=(-sS -X PUT --data-binary @"${path}" -w $'\n%{http_code}')
   if [[ ${#upload_headers[@]} -gt 0 ]]; then
     for header in "${upload_headers[@]}"; do
       curl_args+=(-H "${header}")
@@ -148,17 +160,24 @@ while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
     curl_args+=(-H "content-type: application/octet-stream")
   fi
   curl_args+=("${upload_url}")
-  curl "${curl_args[@]}" >/dev/null
+  upload_response="$(curl "${curl_args[@]}")"
+  upload_status="$(echo "${upload_response}" | tail -n 1)"
+  upload_body="$(echo "${upload_response}" | sed '$d')"
+  if [[ "${upload_status}" -lt 200 || "${upload_status}" -ge 300 ]]; then
+    echo "Upload failed for ${path} (${upload_status}): ${upload_body}" >&2
+    exit 1
+  fi
 
   jq -n \
     --arg os "${os}" \
     --arg arch "${arch}" \
-    --arg key "${artifact_ref}" \
+    --arg key "${artifact_key}" \
+    --arg provider "${artifact_provider}" \
     --arg filename "${filename}" \
     --arg kind "${kind}" \
     --arg sha256 "${sha256}" \
     --argjson size "${size}" \
-    '{os:$os,arch:$arch,artifact:{key:$key,filename:$filename,size:$size,sha256:$sha256,kind:$kind}}' >> "${entries_file}"
+    '{os:$os,arch:$arch,artifact:{key:$key,provider:$provider,filename:$filename,size:$size,sha256:$sha256,kind:$kind}}' >> "${entries_file}"
 
   file_count=$((file_count + 1))
   echo "Uploaded ${path} -> ${key}"
@@ -189,10 +208,18 @@ for platform in "${platforms[@]}"; do
       + (if ($notes|length)>0 then {notes:$notes} else {} end)
       + (if ($published_at|length)>0 then {published_at:$published_at} else {} end))')"
 
-  curl -fsS -X POST "${ATLAS_BASE_URL}/api/v1/releases/${PRODUCT}/publish" \
+  publish_response="$(curl -sS -X POST "${ATLAS_BASE_URL}/api/v1/releases/${PRODUCT}/publish" \
+    -w $'\n%{http_code}' \
     -H "x-atlas-app-deploy-token: ${ATLAS_APP_DEPLOY_TOKEN}" \
     -H "content-type: application/json" \
-    --data "${publish_payload}" >/dev/null
+    --data "${publish_payload}")"
+
+  publish_status="$(echo "${publish_response}" | tail -n 1)"
+  publish_body="$(echo "${publish_response}" | sed '$d')"
+  if [[ "${publish_status}" -lt 200 || "${publish_status}" -ge 300 ]]; then
+    echo "Publish failed for ${PRODUCT} ${VERSION} ${os}/${arch} (${publish_status}): ${publish_body}" >&2
+    exit 1
+  fi
 
   echo "Published ${PRODUCT} ${VERSION} (${CHANNEL}) for ${os}/${arch}"
 done
