@@ -26,6 +26,9 @@ Key backend modules:
 - Java override validation rejects invalid paths early and enforces compatibility checks.
 - Download paths use retry/backoff with retry signal plumbing for user-visible progress.
 - Troubleshooter focuses on post-install/launch issues; readiness gates launch blockers.
+- Tauri updater endpoints should target Distribution API routes:
+- `/api/v1/launcher/updates/{os}/{arch}` (or channelized variant).
+- Release workflow stamps `apps/launcher/src-tauri/tauri.conf.json` version from `launcher-vx.x.x` tags before `tauri build`.
 
 ## Command Surface (Tauri)
 
