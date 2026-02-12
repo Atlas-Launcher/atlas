@@ -26,6 +26,10 @@ Key backend modules:
 - Java override validation rejects invalid paths early and enforces compatibility checks.
 - Download paths use retry/backoff with retry signal plumbing for user-visible progress.
 - Troubleshooter focuses on post-install/launch issues; readiness gates launch blockers.
+- Updater install clicks always open the updater dialog and surface actionable errors instead of silently no-oping.
+- Signature verification failures are surfaced with a targeted message to check release signing key and launcher updater pubkey alignment.
+- Launcher performs an automatic updater check on boot and then every hour while the app remains open.
+- Updater `Update` handles from `@tauri-apps/plugin-updater` are stored as raw/shallow refs to avoid Vue proxying class instances with private fields.
 - Tauri updater endpoints should target Distribution API routes:
 - `/api/v1/launcher/updates/{os}/{arch}` (or channelized variant).
 - Release workflow stamps `apps/launcher/src-tauri/tauri.conf.json` version from `launcher-vx.x.x` tags before `tauri build`.
