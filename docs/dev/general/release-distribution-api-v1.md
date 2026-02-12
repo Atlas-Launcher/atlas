@@ -65,3 +65,8 @@ Where:
 - Existing GitHub release publishing remains in place for public release assets.
 - `ATLAS_HUB_URL` may include a trailing slash; the release action normalizes it before calling Hub APIs.
 - The release action publishes artifact payloads using `key` (raw object key) + `provider` from presign responses.
+- Launcher workflow kind mapping differentiates installables from updater payloads:
+  - `installer`: `.dmg`, `.pkg`, `.exe`, `.msi`, `.deb`, `.rpm`, `.AppImage`
+  - `binary`: `.app.tar.gz`, `.app.zip`, `.nsis.zip`, `.msi.zip`, `.AppImage.tar.gz`
+  - `signature`: `*.sig` files paired to the exact updater payload filename
+- Launcher workflow arch inference first uses explicit arch tokens in filenames (`arm64`, `aarch64`, `x64`, `x86_64`, `amd64`), then falls back to the unique arch already detected for the same OS in the current publish batch.
