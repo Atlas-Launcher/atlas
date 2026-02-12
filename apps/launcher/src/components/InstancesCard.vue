@@ -88,12 +88,12 @@ function onPrimaryAction(instance: InstanceConfig) {
 </script>
 
 <template>
-  <Card class="glass h-full min-h-0 rounded-2xl border-none bg-transparent shadow-none">
+  <Card class="glass h-full min-h-0 rounded-2xl border-none bg-transparent shadow-none flex flex-col overflow-hidden">
     <CardHeader class="pt-6">
       <CardTitle>Your profiles</CardTitle>
       <CardDescription>Pick a profile, install if needed, then play.</CardDescription>
     </CardHeader>
-    <CardContent class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-3 pb-4">
+    <CardContent class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-2 pb-4">
       <div class="grid gap-3 md:grid-cols-[1fr_auto]">
         <Input
           :model-value="search"

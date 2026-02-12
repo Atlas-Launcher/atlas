@@ -21,7 +21,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="h-full min-h-0 overflow-hidden">
+  <div class="h-full min-h-0 overflow-hidden flex flex-col gap-4">
     <div
       v-if="props.statusMessage"
       class="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-sm text-muted-foreground"
