@@ -45,7 +45,9 @@ pub async fn ensure_watchers(state: SharedState) {
     };
 
     // We'll create HubClient instances inside each watcher task instead of capturing one here.
-    let hub_url = "https://atlas.nathanm.org";
+    // Always use the configured hub URL so service-token exchange happens against the same host
+    // that issued the deploy key.
+    let hub_url = config.hub_url.clone();
     let hub_deploy_key = config.deploy_key.clone();
 
     // Try to load persisted pack etag from disk (if present). This allows the watcher to send If-None-Match
@@ -87,7 +89,7 @@ pub async fn ensure_watchers(state: SharedState) {
 
             let worker_stop = watcher_stop_flag.clone();
             let worker_done = watcher_done_flag.clone();
-            let whub = hub_url;
+            let whub = hub_url.clone();
             let wdeploy = hub_deploy_key.clone();
             let w_whitelist_cfg = config.clone();
             let w_update_cfg = config.clone();
