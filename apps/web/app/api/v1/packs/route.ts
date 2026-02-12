@@ -69,6 +69,7 @@ export async function POST(request: Request) {
   let existingAtlasToml: GithubContentFile | null = null;
   let parsed: { owner: string; repo: string } | null = null;
   let account: { accessToken: string | null } | null = null;
+  let githubAccessToken: string | null = null;
 
   if (repoUrl) {
     const { parseGithubRepoUrl, checkAtlasTomlExists } = await import(
@@ -99,11 +100,12 @@ export async function POST(request: Request) {
         { status: 404 }
       );
     }
+    githubAccessToken = account.accessToken;
 
     try {
       const userResponse = await fetch("https://api.github.com/user", {
         headers: {
-          Authorization: `Bearer ${account.accessToken}`,
+          Authorization: `Bearer ${githubAccessToken}`,
         },
       });
 
@@ -124,7 +126,11 @@ export async function POST(request: Request) {
 
     // Check if atlas.toml exists
     try {
-      existingAtlasToml = await checkAtlasTomlExists({ token: account.accessToken, owner: parsed.owner, repo: parsed.repo });
+      existingAtlasToml = await checkAtlasTomlExists({
+        token: githubAccessToken,
+        owner: parsed.owner,
+        repo: parsed.repo,
+      });
       if (!existingAtlasToml) {
         return NextResponse.json(
           { error: "Repository does not contain atlas.toml configuration." },
@@ -150,13 +156,13 @@ export async function POST(request: Request) {
     });
 
     // If importing a repo, configure it for Atlas
-    if (repoUrl && parsed && account && existingAtlasToml) {
+    if (repoUrl && parsed && githubAccessToken && existingAtlasToml) {
       const { configureRepoForAtlas } = await import("@/lib/github/repo-config");
 
       // Configure the repo for Atlas
       try {
         await configureRepoForAtlas({
-          token: account.accessToken,
+          token: githubAccessToken,
           owner: parsed.owner,
           repo: parsed.repo,
           packId: pack.id,

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { resolveRelease, type DistributionProduct } from "@/lib/distribution";
+import { resolveRelease } from "@/lib/distribution";
+import type { DistributionProduct } from "@/lib/db/schema";
 
 export const metadata: Metadata = {
   title: "Downloads | Atlas Hub",

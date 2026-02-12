@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { normalizeDownloadArch, normalizeDownloadOs } from "@/lib/download-target";
-import { resolveRelease } from "@/lib/distribution";
+import { isDistributionArch, resolveRelease } from "@/lib/distribution";
 import { applyRateLimitHeaders, getClientIp, rateLimit } from "@/lib/rate-limit";
 
 export async function GET(
@@ -28,6 +28,10 @@ export async function GET(
   }
 
   const arch = normalizeDownloadArch(archInput);
+  if (!isDistributionArch(arch)) {
+    return NextResponse.json({ error: `Unsupported architecture: ${archInput}.` }, { status: 400 });
+  }
+
   const release = await resolveRelease({
     product: "cli",
     os,
