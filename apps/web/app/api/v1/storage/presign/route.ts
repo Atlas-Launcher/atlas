@@ -10,8 +10,11 @@ import {
   getPreferredStorageProvider,
   isStorageProviderEnabled,
 } from "@/lib/storage/harness";
-import { createStorageToken } from "@/lib/storage/token";
 import type { StorageProviderId } from "@/lib/storage/types";
+
+function isDistributionReleaseArtifactKey(key: string) {
+  return /^artifacts\/(launcher|cli|runner|runnerd)\//.test(key);
+}
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -36,7 +39,10 @@ export async function POST(request: Request) {
     }
 
     if (action === "download") {
-      const artifactRef = decodeArtifactRef(key);
+      const artifactRef =
+        providerFromBody && !key.includes("::")
+          ? { provider: providerFromBody, key }
+          : decodeArtifactRef(key);
       if (!isStorageProviderEnabled(artifactRef.provider)) {
         return NextResponse.json(
           {
@@ -70,26 +76,22 @@ export async function POST(request: Request) {
         );
       }
 
-      let url: string;
-      if (provider === "r2") {
-        url = await createUploadUrlForProvider({
-          provider,
-          key: objectKey,
-          contentType,
-        });
-      } else {
-        const token = createStorageToken({
-          action: "upload",
-          provider,
-          key: objectKey,
-          expiresInSeconds: 900,
-        });
-        const origin = new URL(request.url).origin;
-        url = `${origin}/api/v1/storage/upload?token=${encodeURIComponent(token)}`;
+      if (isDistributionReleaseArtifactKey(objectKey) && session.user.role !== "admin") {
+        return NextResponse.json(
+          { error: "Only admins can prepare distribution release uploads." },
+          { status: 403 }
+        );
       }
 
+      const uploadRequest = await createUploadUrlForProvider({
+        provider,
+        key: objectKey,
+        contentType,
+      });
+
       return NextResponse.json({
-        url,
+        url: uploadRequest.url,
+        uploadHeaders: uploadRequest.headers ?? {},
         key: encodeArtifactRef({ provider, key: objectKey }),
         provider,
       });

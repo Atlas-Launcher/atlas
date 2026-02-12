@@ -63,7 +63,7 @@ export async function POST(
     .where(eq(users.id, userId))
     .limit(1);
 
-  if (!user || (user.role !== "admin" && user.role !== "creator")) {
+  if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
