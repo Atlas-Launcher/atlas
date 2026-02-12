@@ -39,7 +39,7 @@ For release publishing workflows:
 ### Web (Hub)
 
 1. Push to branch / merge to target branch.
-2. Vercel builds and deploys `apps/web`.
+2. Vercel deploys `apps/web` manually only (Git-triggered deployments are disabled via `apps/web/vercel.json` with `git.deploymentEnabled: false`).
 3. Run required DB migrations before enabling features dependent on new schema.
 
 ### Distribution Releases
