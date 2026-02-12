@@ -5,7 +5,6 @@ use anyhow::{Context, Result, bail};
 use atlas_client::hub::HubClient;
 use base64::Engine;
 use clap::Args;
-use serde::Deserialize;
 
 use crate::auth_store;
 
@@ -23,12 +22,6 @@ pub struct PushArgs {
     set_upstream: bool,
     #[arg(long)]
     force_with_lease: bool,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GithubTokenResponse {
-    access_token: String,
 }
 
 pub fn run(args: PushArgs) -> Result<()> {

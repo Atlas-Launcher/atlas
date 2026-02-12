@@ -10,6 +10,7 @@ Binary name: `atlas-runner`
 - Auth/bootstrap commands.
 - Start/stop/log/exec control over local daemon via IPC.
 - Optional Linux systemd installer path for daemon service.
+  - If `--runnerd-path` is not passed, `install` resolves latest `runnerd` via Distribution API v1 and downloads through `/api/v1/download/{download_id}`.
 
 ## Command Surface (Current)
 

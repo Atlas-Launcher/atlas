@@ -159,6 +159,31 @@ struct LauncherPacksResponse {
     packs: Vec<LauncherPack>,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct DistributionReleasePlatform {
+    pub os: String,
+    pub arch: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct DistributionReleaseAsset {
+    pub kind: String,
+    pub filename: String,
+    pub size: u64,
+    pub sha256: String,
+    pub download_id: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct DistributionReleaseResponse {
+    pub product: String,
+    pub version: String,
+    pub channel: String,
+    pub published_at: String,
+    pub platform: DistributionReleasePlatform,
+    pub assets: Vec<DistributionReleaseAsset>,
+}
+
 impl HubClient {
     pub fn new(base_url: &str) -> Result<Self> {
         let base_url = Url::parse(base_url)?;
@@ -427,6 +452,37 @@ impl HubClient {
             .send()
             .await?
             .error_for_status()?;
+        Ok(response.bytes().await?.to_vec())
+    }
+
+    pub async fn get_latest_distribution_release(
+        &self,
+        product: &str,
+        os: &str,
+        arch: &str,
+    ) -> Result<DistributionReleaseResponse> {
+        let url = self
+            .base_url
+            .join(&format!("/api/v1/releases/{product}/latest/{os}/{arch}"))?;
+        let response = self
+            .client
+            .get(url)
+            .headers(self.get_auth_headers().await?)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        response
+            .json::<DistributionReleaseResponse>()
+            .await
+            .context("Failed to parse distribution release response")
+    }
+
+    pub async fn download_distribution_asset(&self, download_id: &str) -> Result<Vec<u8>> {
+        let url = self
+            .base_url
+            .join(&format!("/api/v1/download/{download_id}"))?;
+        let response = self.client.get(url).send().await?.error_for_status()?;
         Ok(response.bytes().await?.to_vec())
     }
 

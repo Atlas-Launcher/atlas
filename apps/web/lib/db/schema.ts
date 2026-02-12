@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -18,6 +19,30 @@ export const accessLevelEnum = pgEnum("access_level", [
   "beta",
   "production",
   "all",
+]);
+export const distributionProductEnum = pgEnum("distribution_product", [
+  "launcher",
+  "cli",
+  "runner",
+  "runnerd",
+]);
+export const distributionOsEnum = pgEnum("distribution_os", [
+  "windows",
+  "macos",
+  "linux",
+]);
+export const distributionArchEnum = pgEnum("distribution_arch", ["x64", "arm64"]);
+export const distributionChannelEnum = pgEnum("distribution_channel", [
+  "stable",
+  "beta",
+  "dev",
+]);
+export const distributionArtifactKindEnum = pgEnum("distribution_artifact_kind", [
+  "installer",
+  "binary",
+  "signature",
+  "updater-manifest",
+  "other",
 ]);
 
 export const users = pgTable(
@@ -361,3 +386,67 @@ export const launcherLinkSessions = pgTable(
     ),
   })
 );
+
+export const distributionReleases = pgTable(
+  "distribution_releases",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    product: distributionProductEnum("product").notNull(),
+    version: text("version").notNull(),
+    channel: distributionChannelEnum("channel").notNull().default("stable"),
+    publishedAt: timestamp("published_at", { withTimezone: true }).defaultNow().notNull(),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    productVersionChannelUnique: uniqueIndex("distribution_releases_product_version_channel_unique")
+      .on(table.product, table.version, table.channel),
+    productChannelPublishedAtIdx: index("distribution_releases_product_channel_published_at_idx")
+      .on(table.product, table.channel, table.publishedAt),
+  })
+);
+
+export const distributionReleasePlatforms = pgTable(
+  "distribution_release_platforms",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    releaseId: uuid("release_id")
+      .notNull()
+      .references(() => distributionReleases.id, { onDelete: "cascade" }),
+    os: distributionOsEnum("os").notNull(),
+    arch: distributionArchEnum("arch").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    releasePlatformUnique: uniqueIndex("distribution_release_platforms_release_os_arch_unique")
+      .on(table.releaseId, table.os, table.arch),
+  })
+);
+
+export const distributionArtifacts = pgTable(
+  "distribution_artifacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    platformId: uuid("platform_id")
+      .notNull()
+      .references(() => distributionReleasePlatforms.id, { onDelete: "cascade" }),
+    kind: distributionArtifactKindEnum("kind").notNull(),
+    filename: text("filename").notNull(),
+    size: bigint("size", { mode: "number" }).notNull(),
+    sha256: text("sha256").notNull(),
+    downloadId: text("download_id").notNull(),
+    artifactRef: text("artifact_ref").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    downloadIdUnique: uniqueIndex("distribution_artifacts_download_id_unique").on(table.downloadId),
+    platformFilenameUnique: uniqueIndex("distribution_artifacts_platform_filename_unique")
+      .on(table.platformId, table.filename),
+  })
+);
+
+export type DistributionProduct = typeof distributionProductEnum.enumValues[number];
+export type DistributionOs = typeof distributionOsEnum.enumValues[number];
+export type DistributionArch = typeof distributionArchEnum.enumValues[number];
+export type DistributionChannel = typeof distributionChannelEnum.enumValues[number];
+export type DistributionArtifactKind = typeof distributionArtifactKindEnum.enumValues[number];

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import PublicNavbar from "@/components/public-navbar";
 
 const workflowSteps = [
@@ -96,18 +97,18 @@ export default function Home() {
               and players in sync.
             </p>
             <div className="flex flex-wrap gap-4">
-              <a
+              <Link
                 href="/dashboard"
                 className="rounded-full bg-[var(--atlas-ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
               >
                 Create a Pack
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/download"
                 className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
               >
                 View Downloads
-              </a>
+              </Link>
             </div>
           </div>
 
