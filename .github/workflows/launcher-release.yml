@@ -108,10 +108,7 @@ jobs:
               continue
             fi
             echo "Generating missing updater signature for ${file}"
-            pnpm -C apps/launcher tauri signer sign \
-              -f "${file}" \
-              -k "${TAURI_SIGNING_PRIVATE_KEY}" \
-              -p "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}"
+            pnpm --filter atlas exec tauri signer sign "${file}"
           done
 
       - name: Collect launcher bundles
