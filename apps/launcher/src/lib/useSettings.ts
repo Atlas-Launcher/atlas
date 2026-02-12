@@ -455,6 +455,27 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     };
   }
 
+  function dedupeRemotePacks(remotePacks: AtlasRemotePack[]) {
+    const byPackId = new Map<string, AtlasRemotePack>();
+    for (const remote of remotePacks) {
+      const packId = remote.packId?.trim();
+      if (!packId) {
+        continue;
+      }
+      if (!byPackId.has(packId)) {
+        byPackId.set(packId, remote);
+        continue;
+      }
+      const existing = byPackId.get(packId)!;
+      const existingHasBuild = !!existing.buildId;
+      const nextHasBuild = !!remote.buildId;
+      if (!existingHasBuild && nextHasBuild) {
+        byPackId.set(packId, remote);
+      }
+    }
+    return [...byPackId.values()];
+  }
+
   async function syncAtlasRemotePacks(remotePacks: AtlasRemotePack[]) {
     const localInstances = instances.value.filter((instance) => instance.source !== "atlas");
     const existingRemoteByPackId = new Map<string, InstanceConfig>();
@@ -465,7 +486,8 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
       existingRemoteByPackId.set(instance.atlasPack.packId, instance);
     }
 
-    const normalizedRemotePacks = [...remotePacks].sort((a, b) =>
+    const uniqueRemotePacks = dedupeRemotePacks(remotePacks);
+    const normalizedRemotePacks = [...uniqueRemotePacks].sort((a, b) =>
       a.packName.localeCompare(b.packName)
     );
     const remoteInstances = normalizedRemotePacks.map((remote) =>
