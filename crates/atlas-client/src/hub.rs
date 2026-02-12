@@ -479,7 +479,9 @@ impl HubClient {
     }
 
     pub async fn download_distribution_asset(&self, download_id: &str) -> Result<Vec<u8>> {
-        let url = self.base_url.join(&format!("/api/v1/download/{download_id}"))?;
+        let url = self
+            .base_url
+            .join(&format!("/api/v1/download/{download_id}"))?;
         let response = self.client.get(url).send().await?.error_for_status()?;
         Ok(response.bytes().await?.to_vec())
     }

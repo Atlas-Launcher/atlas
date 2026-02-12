@@ -1,5 +1,5 @@
-use clap::{Parser, Subcommand};
 use atlas_client::hub::{DistributionReleaseAsset, DistributionReleaseResponse, HubClient};
+use clap::{Parser, Subcommand};
 use runner_core_v2::proto::{LogLine, LogStream};
 use runner_v2_utils::runtime_paths_v2;
 use std::path::{Path, PathBuf};
@@ -243,7 +243,10 @@ fn resolve_server_root(server_root: Option<PathBuf>) -> PathBuf {
     paths.runtime_dir.join("servers").join("default")
 }
 
-async fn install_systemd(user: Option<String>, runnerd_path: Option<PathBuf>) -> anyhow::Result<()> {
+async fn install_systemd(
+    user: Option<String>,
+    runnerd_path: Option<PathBuf>,
+) -> anyhow::Result<()> {
     if std::env::consts::OS != "linux" {
         anyhow::bail!("systemd install is only supported on Linux");
     }
@@ -308,25 +311,35 @@ async fn download_runnerd_via_distribution_api() -> anyhow::Result<PathBuf> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&install_path, std::fs::Permissions::from_mode(0o755))
-            .map_err(|err| {
+        std::fs::set_permissions(&install_path, std::fs::Permissions::from_mode(0o755)).map_err(
+            |err| {
                 anyhow::anyhow!(
                     "Failed to set executable permissions on {}: {err}",
                     install_path.display()
                 )
-            })?;
+            },
+        )?;
     }
 
     Ok(install_path)
 }
 
-fn select_runnerd_asset(release: &DistributionReleaseResponse) -> anyhow::Result<&DistributionReleaseAsset> {
+fn select_runnerd_asset(
+    release: &DistributionReleaseResponse,
+) -> anyhow::Result<&DistributionReleaseAsset> {
     release
         .assets
         .iter()
         .find(|asset| asset.kind == "binary")
-        .or_else(|| release.assets.iter().find(|asset| asset.kind == "installer"))
-        .ok_or_else(|| anyhow::anyhow!("No runnerd binary/installer asset found in distribution release"))
+        .or_else(|| {
+            release
+                .assets
+                .iter()
+                .find(|asset| asset.kind == "installer")
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!("No runnerd binary/installer asset found in distribution release")
+        })
 }
 
 fn resolve_install_hub_url() -> anyhow::Result<String> {
