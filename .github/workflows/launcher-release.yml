@@ -23,7 +23,7 @@ jobs:
           - platform: windows-latest
             tauri_args: --ci
           - platform: macos-latest
-            tauri_args: --ci
+            tauri_args: --ci --no-sign
 
     steps:
       - name: Checkout
@@ -75,3 +75,115 @@ jobs:
           uploadUpdaterJson: false
           uploadUpdaterSignatures: true
           args: ${{ matrix.tauri_args }}
+
+  publish-atlas:
+    name: Publish launcher to Atlas Distribution API
+    runs-on: ubuntu-latest
+    needs: [publish-launcher]
+    if: startsWith(github.ref_name, 'launcher-v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse version
+        id: tag
+        run: echo "version=${GITHUB_REF_NAME#launcher-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release
+          gh release download "${GITHUB_REF_NAME}" --dir dist/release --clobber
+          ls -lah dist/release
+
+      - name: Build Atlas publish manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .atlas-release
+          manifest=".atlas-release/launcher-files.txt"
+          : > "${manifest}"
+
+          map_arch() {
+            local lower="$1"
+            if [[ "${lower}" == *arm64* || "${lower}" == *aarch64* ]]; then
+              echo "arm64"
+            else
+              echo "x64"
+            fi
+          }
+
+          infer_os_kind() {
+            local lower="$1"
+            if [[ "${lower}" == *.sig ]]; then
+              infer_os_kind "${lower%.sig}"
+              return
+            fi
+
+            if [[ "${lower}" == *.exe || "${lower}" == *.msi || "${lower}" == *.nsis.zip || "${lower}" == *.msi.zip ]]; then
+              echo "windows|installer"
+              return
+            fi
+
+            if [[ "${lower}" == *.dmg || "${lower}" == *.pkg || "${lower}" == *.app.tar.gz || "${lower}" == *.app.zip ]]; then
+              echo "macos|installer"
+              return
+            fi
+
+            if [[ "${lower}" == *.deb || "${lower}" == *.rpm || "${lower}" == *.appimage || "${lower}" == *.appimage.tar.gz ]]; then
+              echo "linux|installer"
+              return
+            fi
+
+            if [[ "${lower}" == *windows* ]]; then
+              echo "windows|other"
+              return
+            fi
+
+            if [[ "${lower}" == *darwin* || "${lower}" == *macos* || "${lower}" == *osx* ]]; then
+              echo "macos|other"
+              return
+            fi
+
+            if [[ "${lower}" == *linux* ]]; then
+              echo "linux|other"
+              return
+            fi
+
+            return 1
+          }
+
+          while IFS= read -r file; do
+            base="$(basename "${file}")"
+            lower="$(echo "${base}" | tr '[:upper:]' '[:lower:]')"
+
+            os_kind="$(infer_os_kind "${lower}")" || continue
+            os="${os_kind%%|*}"
+            kind="${os_kind##*|}"
+            arch="$(map_arch "${lower}")"
+
+            if [[ "${lower}" == *.sig ]]; then
+              kind="signature"
+            fi
+
+            if [[ "${kind}" == "other" ]]; then
+              continue
+            fi
+
+            echo "${file}|${os}|${arch}|${kind}|${base}" >> "${manifest}"
+          done < <(find dist/release -type f)
+
+          test -s "${manifest}"
+          cat "${manifest}"
+
+      - name: Publish launcher to Atlas Distribution API
+        uses: ./.github/actions/atlas-release
+        with:
+          atlas_base_url: ${{ secrets.ATLAS_HUB_URL }}
+          atlas_token: ${{ secrets.ATLAS_RELEASE_TOKEN }}
+          product: launcher
+          version: ${{ steps.tag.outputs.version }}
+          channel: stable
+          files_manifest: .atlas-release/launcher-files.txt

@@ -124,7 +124,6 @@ pub fn build_launch_readiness(input: ReadinessContext) -> LaunchReadinessReport 
         },
     ];
 
-
     LaunchReadinessReport {
         atlas_logged_in,
         microsoft_logged_in,
@@ -212,8 +211,9 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
         findings.push(TroubleshooterFinding {
             code: "runtime_metadata_missing".to_string(),
             title: "Incomplete pack download".to_string(),
-            detail: "Some required runtime files didn’t download correctly. Try syncing the pack again."
-                .to_string(),
+            detail:
+                "Some required runtime files didn’t download correctly. Try syncing the pack again."
+                    .to_string(),
             confidence: 90,
             suggested_actions: vec![FixAction::ResyncPack, FixAction::FullRepair],
         });
