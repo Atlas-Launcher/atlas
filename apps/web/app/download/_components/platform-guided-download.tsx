@@ -60,8 +60,29 @@ export function PlatformGuidedDownload({
   defaultPlatformId: string;
 }) {
   const [selectedId, setSelectedId] = useState(defaultPlatformId);
+  const [copyState, setCopyState] = useState<"idle" | "ok" | "error">("idle");
   const selected =
     platforms.find((platform) => platform.id === selectedId) ?? platforms[0];
+
+  const copyWithFallback = (value: string) => {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "-9999px";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    document.body.removeChild(textarea);
+    return ok;
+  };
 
   const copyCommand = async () => {
     if (selected?.action.type !== "command") {
@@ -69,10 +90,17 @@ export function PlatformGuidedDownload({
     }
 
     try {
-      await navigator.clipboard.writeText(selected.action.command);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(selected.action.command);
+      } else if (!copyWithFallback(selected.action.command)) {
+        throw new Error("Clipboard API unavailable");
+      }
+      setCopyState("ok");
     } catch {
-      // Ignore clipboard failures (browser permissions / unsupported context).
+      setCopyState(copyWithFallback(selected.action.command) ? "ok" : "error");
     }
+
+    window.setTimeout(() => setCopyState("idle"), 1500);
   };
 
   return (
@@ -94,7 +122,10 @@ export function PlatformGuidedDownload({
               <button
                 key={platform.id}
                 type="button"
-                onClick={() => setSelectedId(platform.id)}
+                onClick={() => {
+                  setSelectedId(platform.id);
+                  setCopyState("idle");
+                }}
                 className={`rounded-2xl border px-4 py-4 text-left transition ${
                   isActive
                     ? "border-[var(--atlas-ink)] bg-[var(--atlas-ink)] text-[var(--atlas-cream)]"
@@ -135,11 +166,29 @@ export function PlatformGuidedDownload({
                 <button
                   type="button"
                   onClick={copyCommand}
-                  className="rounded-lg border border-[var(--atlas-ink)]/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--atlas-ink)]"
+                  className={`rounded-lg border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] ${
+                    copyState === "ok"
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
+                      : copyState === "error"
+                        ? "border-red-500/40 bg-red-500/10 text-red-700"
+                        : "border-[var(--atlas-ink)]/20 text-[var(--atlas-ink)]"
+                  }`}
                 >
-                  Copy
+                  {copyState === "ok" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy"}
                 </button>
               </div>
+              {copyState !== "idle" ? (
+                <p
+                  aria-live="polite"
+                  className={`mt-2 text-xs ${
+                    copyState === "ok" ? "text-emerald-700" : "text-red-700"
+                  }`}
+                >
+                  {copyState === "ok"
+                    ? "Command copied to clipboard."
+                    : "Could not copy automatically. Please copy the command manually."}
+                </p>
+              ) : null}
               {selected.action.note ? (
                 <p className="mt-3 text-sm text-[var(--atlas-ink-muted)]">{selected.action.note}</p>
               ) : null}
