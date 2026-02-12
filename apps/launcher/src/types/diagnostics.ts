@@ -46,3 +46,10 @@ export interface RepairResult {
   message: string;
   details: string[];
 }
+
+export interface SupportBundleResult {
+  bundleDir: string;
+  reportJsonPath: string;
+  summaryPath: string;
+  summary: string;
+}
