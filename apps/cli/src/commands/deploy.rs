@@ -21,6 +21,8 @@ pub struct DeployArgs {
     #[arg(long)]
     oidc_token: Option<String>,
     #[arg(long)]
+    deploy_token: Option<String>,
+    #[arg(long)]
     channel: Option<String>,
     #[arg(long)]
     commit_hash: Option<String>,
@@ -36,7 +38,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
         .canonicalize()
         .context("Failed to resolve input path")?;
     let settings = config::resolve_cli_settings(&root, args.pack_id, args.hub_url, args.channel)?;
-    let ci_auth = resolve_ci_auth(args.oidc_token, &settings.hub_url)?;
+    let ci_auth = resolve_ci_auth(args.oidc_token, args.deploy_token, &settings.hub_url)?;
     let commit_hash = resolve_commit_hash(&root, args.commit_hash)?;
     let commit_message = resolve_commit_message(&root, &commit_hash);
     let build_context = resolve_build_context(&root);
@@ -100,6 +102,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
 enum CiAuth {
     UserToken(String),
     OidcToken(String),
+    PackDeployToken(String),
 }
 
 fn upload_artifact(
@@ -127,15 +130,25 @@ fn upload_artifact(
     Ok(())
 }
 
-fn resolve_ci_auth(oidc_token_override: Option<String>, hub_url: &str) -> Result<CiAuth> {
+fn resolve_ci_auth(
+    oidc_token_override: Option<String>,
+    deploy_token_override: Option<String>,
+    hub_url: &str,
+) -> Result<CiAuth> {
     let oidc_token = normalize_optional(oidc_token_override)
         .or_else(|| normalize_optional(std::env::var("ATLAS_CI_OIDC_TOKEN").ok()));
     if let Some(token) = oidc_token {
         return Ok(CiAuth::OidcToken(token));
     }
 
+    let deploy_token = normalize_optional(deploy_token_override)
+        .or_else(|| normalize_optional(std::env::var("ATLAS_PACK_DEPLOY_TOKEN").ok()));
+    if let Some(token) = deploy_token {
+        return Ok(CiAuth::PackDeployToken(token));
+    }
+
     let user_token = auth_store::require_access_token_for_hub(hub_url).with_context(|| {
-        "No deploy credential provided. Use `--oidc-token` (or `ATLAS_CI_OIDC_TOKEN`) for CI, or sign in locally with `atlas auth signin`."
+        "No deploy credential provided. Use `--oidc-token` (`ATLAS_CI_OIDC_TOKEN`), `--deploy-token` (`ATLAS_PACK_DEPLOY_TOKEN`), or sign in locally with `atlas auth signin`."
     })?;
     Ok(CiAuth::UserToken(user_token))
 }
@@ -144,6 +157,7 @@ fn apply_ci_auth_to_client(client: &mut HubClient, ci_auth: &CiAuth) -> Result<(
     match ci_auth {
         CiAuth::UserToken(token) => client.set_token(token.clone()),
         CiAuth::OidcToken(token) => client.set_service_token(token.clone()),
+        CiAuth::PackDeployToken(token) => client.set_pack_deploy_token(token.clone()),
     }
     Ok(())
 }
