@@ -37,6 +37,10 @@ The web app now exposes a unified distribution registry for launcher/cli/runner/
 
 Data is backed by `distribution_releases`, `distribution_release_platforms`, and `distribution_artifacts` (Drizzle migration `0011_distribution_api_v1.sql`).
 
+Legacy GitHub-release proxy download routes were removed in favor of distribution-native downloads:
+- Primary artifact redirects now resolve through `GET /api/v1/download/{downloadId}`.
+- Install pages consume `GET /api/v1/releases/{product}/latest/{os}/{arch}` data.
+
 ## Deployment Target
 
 - Vercel

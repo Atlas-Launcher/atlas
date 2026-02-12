@@ -100,17 +100,10 @@ Use your Hub deployment URL (Vercel).
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/v1/download/{downloadId}` | Universal immutable artifact resolver (302 redirect to storage). |
-| `GET` | `/download/app/latest` | Latest launcher artifact descriptor/redirect. |
-| `GET` | `/download/app/file/{tag}/{asset}` | Download launcher artifact by tag/asset. |
 | `GET` | `/download/app/installer/latest` | Latest launcher installer (generic). |
 | `GET` | `/download/app/installer/latest/{os}/{arch}` | Latest launcher installer by platform. |
-| `GET` | `/download/app/installer/file/{tag}/{asset}` | Launcher installer by tag/asset. |
-| `GET` | `/download/app/update/{target}/{arch}/{version}` | Tauri updater release JSON. |
 | `GET` | `/download/cli/installer/latest` | Latest CLI installer (generic). |
 | `GET` | `/download/cli/installer/latest/{os}/{arch}` | Latest CLI installer by platform. |
-| `GET` | `/download/cli/installer/file/{tag}/{asset}` | CLI installer by tag/asset. |
-| `GET` | `/download/cli/latest/{os}/{arch}` | Latest CLI binary by platform. |
-| `GET` | `/download/cli/file/{tag}/{asset}` | CLI binary by tag/asset. |
 | `GET` | `/download/ci/workflow` | Download generated CI workflow template. |
 
 ## 8) Distribution API v1

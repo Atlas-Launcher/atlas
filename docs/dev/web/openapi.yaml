@@ -683,31 +683,6 @@ paths:
         '404':
           description: Updater release not found
 
-  /download/app/latest:
-    get:
-      summary: Resolve latest launcher artifact
-      responses:
-        '200':
-          description: Release payload/redirect
-
-  /download/app/file/{tag}/{asset}:
-    parameters:
-      - name: tag
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: asset
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      summary: Download launcher asset by tag and asset name
-      responses:
-        '200':
-          description: File stream/redirect
-
   /download/app/installer/latest:
     get:
       summary: Resolve latest launcher installer
@@ -733,47 +708,6 @@ paths:
         '200':
           description: Installer payload/redirect
 
-  /download/app/installer/file/{tag}/{asset}:
-    parameters:
-      - name: tag
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: asset
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      summary: Download launcher installer asset by tag and asset name
-      responses:
-        '200':
-          description: File stream/redirect
-
-  /download/app/update/{target}/{arch}/{version}:
-    parameters:
-      - name: target
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: arch
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: version
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      summary: Tauri updater release JSON
-      responses:
-        '200':
-          description: Release metadata JSON
-
   /download/cli/installer/latest:
     get:
       summary: Resolve latest CLI installer
@@ -798,60 +732,6 @@ paths:
       responses:
         '200':
           description: Installer payload/redirect
-
-  /download/cli/installer/file/{tag}/{asset}:
-    parameters:
-      - name: tag
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: asset
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      summary: Download CLI installer asset by tag and asset name
-      responses:
-        '200':
-          description: File stream/redirect
-
-  /download/cli/latest/{os}/{arch}:
-    parameters:
-      - name: os
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: arch
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      summary: Resolve latest CLI binary by platform
-      responses:
-        '200':
-          description: Binary payload/redirect
-
-  /download/cli/file/{tag}/{asset}:
-    parameters:
-      - name: tag
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: asset
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      summary: Download CLI asset by tag and asset name
-      responses:
-        '200':
-          description: File stream/redirect
 
   /download/ci/workflow:
     get:
