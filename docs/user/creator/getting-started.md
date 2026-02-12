@@ -46,6 +46,16 @@ Typical cycle:
 3. Apply/start with `up` flow.
 4. Monitor logs and use backup operations.
 
+Quick Linux install path:
+- `curl -fsSL "${NEXT_PUBLIC_BETTER_AUTH_URL%/}/download/runner/install" | sudo bash`
+- Verify with `atlas-runner --version`.
+- See `docs/user/runner-install.md` for details.
+
+Platform notes:
+- Linux VPS/dedicated host is the recommended runner deployment target.
+- macOS is natively supported with manual `atlas-runner` + `atlas-runnerd` downloads.
+- Windows deployments should use WSL and follow the Linux install path there.
+
 ## 6. Troubleshooting
 
 - If CI upload fails: verify CI auth mode (OIDC or valid user token).

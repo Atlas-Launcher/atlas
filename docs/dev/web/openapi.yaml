@@ -796,6 +796,40 @@ paths:
         '200':
           description: Installer payload/redirect
 
+  /download/runner/install:
+    get:
+      summary: Download hosted Linux runner install script
+      responses:
+        '200':
+          description: Shell script payload
+
+  /download/runner/latest:
+    get:
+      summary: Resolve latest runner binary (auto-target Linux)
+      responses:
+        '302':
+          description: Redirect to platform-specific latest runner route
+
+  /download/runner/latest/{os}/{arch}:
+    parameters:
+      - name: os
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Resolve latest runner binary by platform
+      responses:
+        '302':
+          description: Redirect to immutable runner download URL
+        '404':
+          description: Runner release not found
+
   /download/ci/workflow:
     get:
       summary: Download generated CI workflow template

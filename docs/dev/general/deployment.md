@@ -85,6 +85,7 @@ After deploying Hub/API or release publishing changes:
 2. Verify distribution API lookups:
 - `GET /api/v1/releases/{product}/latest/{os}/{arch}`
 - `GET /api/v1/download/{downloadId}` redirect behavior
+ - `GET /download/runner/latest/linux/{arch}` and `GET /download/runner/install`
 3. Verify launcher updater endpoints for target channels/platforms.
 4. Confirm runner install/update flows can fetch expected artifacts.
 5. Check logs for 4xx/5xx spikes around auth, storage presign, and release publish routes.
