@@ -59,6 +59,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Stamp Tauri version from tag
+        if: startsWith(github.ref_name, 'launcher-v')
+        shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${VERSION#launcher-v}"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$ ]]; then
+            echo "Invalid launcher tag version: ${VERSION}" >&2
+            exit 1
+          fi
+          export VERSION
+          node -e 'const fs=require("fs"); const path="apps/launcher/src-tauri/tauri.conf.json"; const cfg=JSON.parse(fs.readFileSync(path,"utf8")); cfg.version=process.env.VERSION; fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + "\n");'
+          grep -n '"version"' apps/launcher/src-tauri/tauri.conf.json
+
       - name: Build and upload launcher bundles
         uses: tauri-apps/tauri-action@5c73698991aa26946b2d232c344ea4d54b880ff7
         env:
