@@ -1,42 +1,61 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { getLatestRelease } from "@/lib/releases";
+import { resolveRelease, type DistributionProduct } from "@/lib/distribution";
 
 export const metadata: Metadata = {
   title: "Downloads | Atlas Hub",
-  description: "Get the Atlas Launcher and CLI with the latest releases and update feeds.",
+  description: "Get the Atlas Launcher and CLI with the latest release metadata.",
 };
 
 const downloadHighlights = [
   {
     title: "Release-ready builds",
-    detail: "Each tag publishes a signed, versioned binary you can trust.",
+    detail: "Each release is published as immutable, versioned artifacts.",
   },
   {
     title: "Fast, incremental updates",
-    detail: "Launcher builds are ready for Tauri auto-updates when enabled.",
+    detail: "Launcher updates resolve through channel and platform aware endpoints.",
   },
   {
     title: "Platform coverage",
-    detail: "Windows, macOS, and Linux builds ship together.",
+    detail: "Windows, macOS, and Linux builds ship through one distribution API.",
   },
 ];
 
+const releaseTargets = [
+  { os: "windows", arch: "x64" },
+  { os: "macos", arch: "arm64" },
+  { os: "macos", arch: "x64" },
+  { os: "linux", arch: "x64" },
+  { os: "linux", arch: "arm64" },
+] as const;
+
 function formatDate(value?: string) {
-  if (!value) return "—";
+  if (!value) return "-";
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
 }
 
-function formatTag(tag: string | undefined, prefix: string) {
-  if (!tag) return "—";
-  return tag.startsWith(prefix) ? `v${tag.slice(prefix.length)}` : tag;
+async function resolveLatestForProduct(product: DistributionProduct) {
+  for (const target of releaseTargets) {
+    const release = await resolveRelease({
+      product,
+      os: target.os,
+      arch: target.arch,
+      channel: "stable",
+    });
+    if (release) {
+      return release;
+    }
+  }
+
+  return null;
 }
 
 export default async function DownloadPage() {
   const [launcherRelease, cliRelease] = await Promise.all([
-    getLatestRelease("launcher-v"),
-    getLatestRelease("cli-v"),
+    resolveLatestForProduct("launcher"),
+    resolveLatestForProduct("cli"),
   ]);
 
   return (
@@ -75,8 +94,7 @@ export default async function DownloadPage() {
           <div className="rounded-2xl bg-[var(--atlas-cream)]/70 p-4">
             <p className="text-sm font-semibold text-[var(--atlas-ink)]">Launcher</p>
             <p className="text-xs text-[var(--atlas-ink-muted)]">
-              {formatTag(launcherRelease?.tag_name, "launcher-v")} ·{" "}
-              {formatDate(launcherRelease?.published_at)}
+              {launcherRelease ? `v${launcherRelease.version}` : "-"} · {formatDate(launcherRelease?.published_at)}
             </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <Link
@@ -85,22 +103,12 @@ export default async function DownloadPage() {
               >
                 View downloads
               </Link>
-              {launcherRelease?.html_url ? (
-                <a
-                  href={launcherRelease.html_url}
-                  className="rounded-full border border-[var(--atlas-ink)]/20 px-3 py-1 text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  Release notes
-                </a>
-              ) : null}
             </div>
           </div>
           <div className="rounded-2xl bg-[var(--atlas-cream)]/70 p-4">
             <p className="text-sm font-semibold text-[var(--atlas-ink)]">CLI</p>
             <p className="text-xs text-[var(--atlas-ink-muted)]">
-              {formatTag(cliRelease?.tag_name, "cli-v")} · {formatDate(cliRelease?.published_at)}
+              {cliRelease ? `v${cliRelease.version}` : "-"} · {formatDate(cliRelease?.published_at)}
             </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <Link
@@ -109,23 +117,8 @@ export default async function DownloadPage() {
               >
                 View downloads
               </Link>
-              {cliRelease?.html_url ? (
-                <a
-                  href={cliRelease.html_url}
-                  className="rounded-full border border-[var(--atlas-ink)]/20 px-3 py-1 text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  Release notes
-                </a>
-              ) : null}
             </div>
           </div>
-          {!launcherRelease && !cliRelease ? (
-            <p className="text-xs text-[var(--atlas-ink-muted)]">
-              Set `ATLAS_RELEASE_REPO` to show the latest releases here.
-            </p>
-          ) : null}
         </div>
       </section>
 
@@ -142,22 +135,22 @@ export default async function DownloadPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-accent-light)]">
           Need something else?
         </p>
-        <h2 className="mt-3 text-2xl font-semibold">Looking for older builds or CI artifacts?</h2>
+        <h2 className="mt-3 text-2xl font-semibold">Looking for product-specific installers?</h2>
         <p className="mt-3 text-sm text-[var(--atlas-cream)]/70">
-          Visit the GitHub releases page for a complete version history and checksums.
+          Use the dedicated launcher and CLI download pages for platform-specific artifacts.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
           <Link
             href="/download/app"
             className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] transition hover:border-white/60"
           >
-            Launcher history
+            Launcher downloads
           </Link>
           <Link
             href="/download/cli"
             className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] transition hover:border-white/60"
           >
-            CLI history
+            CLI downloads
           </Link>
         </div>
       </section>
