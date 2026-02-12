@@ -6,7 +6,7 @@ on:
       - "cli-v*"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: cli-release-${{ github.ref }}
@@ -272,13 +272,3 @@ jobs:
           version: ${{ steps.tag.outputs.version }}
           channel: stable
           files_manifest: .atlas-release/cli-files.txt
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Atlas CLI v${{ steps.tag.outputs.version }}
-          tag_name: ${{ github.ref_name }}
-          files: |
-            dist/**/atlas-*
-            dist/**/atlas-cli-installer-*
-          fail_on_unmatched_files: true
