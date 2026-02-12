@@ -82,3 +82,13 @@ export interface RunnerServiceToken {
   revokedAt?: string | null;
   expiresAt?: string | null;
 }
+
+export interface AppDeployToken {
+  id: string;
+  name?: string | null;
+  tokenPrefix: string;
+  createdAt?: string | null;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+  expiresAt?: string | null;
+}

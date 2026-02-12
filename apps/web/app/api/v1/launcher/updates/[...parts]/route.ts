@@ -49,17 +49,28 @@ function buildTauriResponse(release: NonNullable<Awaited<ReturnType<typeof resol
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ channel: string; os: string; arch: string }> }
+  { params }: { params: Promise<{ parts: string[] }> }
 ) {
-  const { channel: channelParam, os: osInput, arch: archInput } = await params;
+  const { parts } = await params;
+  let channel = "stable";
+  let osInput = "";
+  let archInput = "";
+
+  if (parts.length === 2) {
+    [osInput, archInput] = parts;
+  } else if (parts.length === 3) {
+    [channel, osInput, archInput] = parts;
+  } else {
+    return NextResponse.json({ error: "Invalid updater path." }, { status: 400 });
+  }
+
   const os = normalizeUpdaterOs(osInput);
   const arch = normalizeUpdaterArch(archInput);
-
   if (!isDistributionOs(os) || !isDistributionArch(arch)) {
     return NextResponse.json({ error: "Invalid platform." }, { status: 400 });
   }
 
-  const channel = channelParam.trim().toLowerCase();
+  channel = channel.trim().toLowerCase();
   if (!isDistributionChannel(channel)) {
     return NextResponse.json({ error: "Invalid channel." }, { status: 400 });
   }
@@ -70,7 +81,6 @@ export async function GET(
     arch,
     channel,
   });
-
   if (!release) {
     return NextResponse.json({ error: "Release not found." }, { status: 404 });
   }
@@ -79,7 +89,7 @@ export async function GET(
   if (!response) {
     return NextResponse.json(
       { error: "Release is missing updater-compatible assets." },
-      { status: 404 },
+      { status: 404 }
     );
   }
 
