@@ -537,6 +537,152 @@ paths:
         '200':
           description: User updated
 
+  /api/v1/releases/{product}/latest/{os}/{arch}:
+    parameters:
+      - name: product
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [launcher, cli, runner, runnerd]
+      - name: os
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [windows, macos, linux]
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [x64, arm64]
+    get:
+      summary: Resolve latest distribution release metadata
+      responses:
+        '200':
+          description: Release metadata with asset download IDs
+        '404':
+          description: Release not found
+
+  /api/v1/releases/{product}/{version}/{os}/{arch}:
+    parameters:
+      - name: product
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [launcher, cli, runner, runnerd]
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: os
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [windows, macos, linux]
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [x64, arm64]
+    get:
+      summary: Resolve specific distribution release metadata
+      responses:
+        '200':
+          description: Release metadata with asset download IDs
+        '404':
+          description: Release not found
+
+  /api/v1/releases/{product}/publish:
+    parameters:
+      - name: product
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [launcher, cli, runner, runnerd]
+    post:
+      summary: Register immutable release metadata and assets
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Release registration created
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /api/v1/download/{downloadId}:
+    parameters:
+      - name: downloadId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Universal download resolver for immutable artifacts
+      responses:
+        '302':
+          description: Redirect to object storage URL
+        '404':
+          description: Download ID not found
+
+  /api/v1/launcher/updates/{os}/{arch}:
+    parameters:
+      - name: os
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [windows, macos, linux]
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [x64, arm64]
+    get:
+      summary: Stable launcher updater view from release registry
+      responses:
+        '200':
+          description: Tauri updater response
+        '404':
+          description: Updater release not found
+
+  /api/v1/launcher/updates/{channel}/{os}/{arch}:
+    parameters:
+      - name: channel
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [stable, beta, dev]
+      - name: os
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [windows, macos, linux]
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [x64, arm64]
+    get:
+      summary: Channelized launcher updater view from release registry
+      responses:
+        '200':
+          description: Tauri updater response
+        '404':
+          description: Updater release not found
+
   /download/app/latest:
     get:
       summary: Resolve latest launcher artifact

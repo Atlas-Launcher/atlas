@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { accounts, packMembers, packs } from "@/lib/db/schema";
 import { hasRole } from "@/lib/auth/roles";
 import { createPackWithDefaults } from "@/lib/packs/create-pack";
+import type { GithubContentFile } from "@/lib/github/repo-config";
 
 function getAtlasHubUrl(request: Request) {
   return (
@@ -65,18 +66,13 @@ export async function POST(request: Request) {
   }
 
   // If importing a repo, validate it has atlas.toml and configure it
-  let existingAtlasToml: any = null;
+  let existingAtlasToml: GithubContentFile | null = null;
   let parsed: { owner: string; repo: string } | null = null;
-  let account: any = null;
+  let account: { accessToken: string | null } | null = null;
 
   if (repoUrl) {
-    const {
-      parseGithubRepoUrl,
-      checkAtlasTomlExists,
-      configureRepoForAtlas,
-    } = await import("@/lib/github/repo-config");
-    const { getInstallationTokenForUser, GitHubAppNotInstalledError } = await import(
-      "@/lib/github/app"
+    const { parseGithubRepoUrl, checkAtlasTomlExists } = await import(
+      "@/lib/github/repo-config"
     );
 
     parsed = parseGithubRepoUrl(repoUrl);
@@ -89,7 +85,7 @@ export async function POST(request: Request) {
 
     // Get the user's GitHub account
     [account] = await db
-      .select()
+      .select({ accessToken: accounts.accessToken })
       .from(accounts)
       .where(
         and(eq(accounts.userId, session.user.id), eq(accounts.providerId, "github"))
@@ -104,8 +100,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get the username from the user's token
-    let githubUsername: string;
     try {
       const userResponse = await fetch("https://api.github.com/user", {
         headers: {
@@ -120,9 +114,8 @@ export async function POST(request: Request) {
         );
       }
 
-      const userData = await userResponse.json();
-      githubUsername = userData.login;
-    } catch (error) {
+      await userResponse.json();
+    } catch {
       return NextResponse.json(
         { error: "Failed to get GitHub user info." },
         { status: 500 }
@@ -138,7 +131,7 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: "Repository does not contain atlas.toml configuration." },
         { status: 400 }
@@ -170,7 +163,7 @@ export async function POST(request: Request) {
           hubUrl: getAtlasHubUrl(request),
           existingAtlasToml,
         });
-      } catch (error) {
+      } catch {
         return NextResponse.json(
           { error: "Failed to configure repository for Atlas." },
           { status: 500 }

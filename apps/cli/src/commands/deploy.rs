@@ -4,8 +4,7 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use atlas_client::hub::{CiCompleteRequest, HubClient};
 use clap::Args;
-use reqwest::blocking::{Client, RequestBuilder};
-use serde::{Deserialize, Serialize};
+use reqwest::blocking::Client;
 
 use crate::auth_store;
 use crate::config;
@@ -98,46 +97,6 @@ enum CiAuth {
     OidcToken(String),
 }
 
-#[derive(Serialize)]
-struct PresignRequest<'a> {
-    #[serde(rename = "packId")]
-    pack_id: &'a str,
-}
-
-#[derive(Deserialize)]
-struct PresignResponse {
-    #[serde(rename = "buildId")]
-    build_id: String,
-    #[serde(rename = "artifactKey")]
-    artifact_key: String,
-    #[serde(rename = "uploadUrl")]
-    upload_url: String,
-}
-
-#[derive(Serialize)]
-struct CompleteRequest<'a> {
-    #[serde(rename = "packId")]
-    pack_id: &'a str,
-    #[serde(rename = "buildId")]
-    build_id: &'a str,
-    #[serde(rename = "artifactKey")]
-    artifact_key: &'a str,
-    version: &'a str,
-    #[serde(rename = "commitHash", skip_serializing_if = "Option::is_none")]
-    commit_hash: Option<&'a str>,
-    #[serde(rename = "commitMessage", skip_serializing_if = "Option::is_none")]
-    commit_message: Option<&'a str>,
-    #[serde(rename = "minecraftVersion", skip_serializing_if = "Option::is_none")]
-    minecraft_version: Option<&'a str>,
-    #[serde(rename = "modloader", skip_serializing_if = "Option::is_none")]
-    modloader: Option<&'a str>,
-    #[serde(rename = "modloaderVersion", skip_serializing_if = "Option::is_none")]
-    modloader_version: Option<&'a str>,
-    #[serde(rename = "artifactSize")]
-    artifact_size: u64,
-    channel: &'a str,
-}
-
 fn upload_artifact(client: &Client, upload_url: &str, bytes: Vec<u8>) -> Result<()> {
     client
         .put(upload_url)
@@ -169,13 +128,6 @@ fn apply_ci_auth_to_client(client: &mut HubClient, ci_auth: &CiAuth) -> Result<(
         CiAuth::OidcToken(token) => client.set_service_token(token.clone()),
     }
     Ok(())
-}
-
-fn apply_ci_auth(builder: RequestBuilder, ci_auth: &CiAuth) -> RequestBuilder {
-    match ci_auth {
-        CiAuth::UserToken(token) => builder.bearer_auth(token),
-        CiAuth::OidcToken(token) => builder.header("x-atlas-oidc-token", token),
-    }
 }
 
 fn resolve_commit_hash(root: &std::path::Path, commit_hash_arg: Option<String>) -> Result<String> {

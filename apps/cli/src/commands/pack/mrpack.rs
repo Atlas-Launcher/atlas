@@ -652,6 +652,15 @@ fn override_query_for_path(path: &str) -> String {
         .split(|ch: char| !ch.is_ascii_alphanumeric())
         .filter(|token| !token.is_empty())
     {
+        let normalized = token.to_ascii_lowercase();
+        if normalized == "mc" {
+            continue;
+        }
+        if let Some(version_token) = normalized.strip_prefix("mc") {
+            if !version_token.is_empty() && version_token.chars().all(|ch| ch.is_ascii_digit()) {
+                continue;
+            }
+        }
         if token.chars().all(|ch| ch.is_ascii_digit()) {
             continue;
         }
