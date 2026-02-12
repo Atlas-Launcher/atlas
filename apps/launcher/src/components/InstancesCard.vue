@@ -88,12 +88,12 @@ function onPrimaryAction(instance: InstanceConfig) {
 </script>
 
 <template>
-  <Card class="h-full min-h-0 rounded-2xl border border-border/60 bg-card/70 shadow-none flex flex-col overflow-hidden">
-    <CardHeader class="pt-6">
+  <Card class="glass h-full min-h-0 rounded-2xl flex flex-col overflow-hidden">
+    <CardHeader class="pt-7">
       <CardTitle>Your profiles</CardTitle>
       <CardDescription>Pick a profile, install if needed, then play.</CardDescription>
     </CardHeader>
-    <CardContent class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-2 pb-4">
+    <CardContent class="flex-1 min-h-0 overflow-y-auto space-y-6 pr-3 pb-5 pt-1">
       <div class="grid gap-3 md:grid-cols-[1fr_auto]">
         <Input
           :model-value="search"
@@ -113,7 +113,7 @@ function onPrimaryAction(instance: InstanceConfig) {
         <div
           v-for="instance in filteredInstances"
           :key="instance.id"
-          class="group rounded-2xl border border-border/60 bg-card/70 p-4"
+          class="glass group rounded-2xl p-4"
           :class="instance.id === props.activeInstanceId ? 'border-foreground/70 bg-foreground/5' : ''"
         >
           <button
