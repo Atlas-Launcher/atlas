@@ -69,9 +69,9 @@ export default function SignUpClient() {
         <Card>
           <CardHeader>
             <Badge variant="secondary">Atlas Hub</Badge>
-            <CardTitle>Create account</CardTitle>
+            <CardTitle>Create Atlas account</CardTitle>
             <CardDescription>
-              Join via invite or start a new pack in the Hub.
+              Create your account and continue onboarding in Atlas Launcher.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -93,6 +93,7 @@ export default function SignUpClient() {
                   onChange={(event) => setEmail(event.target.value)}
                   type="email"
                   autoComplete="email"
+                  autoFocus
                   required
                   className="mt-2"
                 />
@@ -110,13 +111,17 @@ export default function SignUpClient() {
               </label>
 
               {error ? (
-                <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+                <p
+                  className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700"
+                  role="alert"
+                  aria-live="polite"
+                >
                   {error}
                 </p>
               ) : null}
 
               <Button type="submit" disabled={loading} size="lg" className="w-full">
-                {loading ? "Creating" : "Create account"}
+                {loading ? "Creating" : "Create Atlas account"}
               </Button>
             </form>
 
@@ -124,7 +129,7 @@ export default function SignUpClient() {
               className="block text-center text-xs text-[var(--atlas-ink-muted)] underline"
               href={signInHref}
             >
-              Already have an account? Sign in
+              Already have an Atlas account? Sign in
             </a>
           </CardContent>
         </Card>

@@ -5,8 +5,9 @@ Project: `apps/launcher` (+ `apps/launcher/src-tauri`)
 ## Responsibilities
 
 - User auth UX and account-linking orchestration.
-- Launch readiness evaluation.
-- Troubleshooter UI and fix command integration.
+- Invite onboarding deep-link intake and pack preselection.
+- Launch readiness evaluation and recovery orchestration.
+- Launch Assist UI and fix command integration.
 - Minecraft runtime hydration and launch process management.
 - Launcher self-update UX (Tauri updater plugin).
 
@@ -22,14 +23,26 @@ Key backend modules:
 
 ## Notable Current Behaviors
 
+- Launcher supports onboarding protocol URLs:
+  - `atlas://auth`
+  - `atlas://signin`
+  - `atlas://onboarding?source=invite&packId=<id>&channel=<dev|beta|production>`
+- Onboarding handoff persists pending intent and applies it after pack sync by selecting matching Atlas instance.
 - Readiness and launch Java checks use shared logic to reduce drift.
 - Java override validation rejects invalid paths early and enforces compatibility checks.
 - Download paths use retry/backoff with retry signal plumbing for user-visible progress.
-- Troubleshooter focuses on post-install/launch issues; readiness gates launch blockers.
+- Launch Assist is unified:
+  - Readiness phase for pre-launch blockers.
+  - Recovery phase for post-readiness findings/fixes/support bundle.
 - Updater install clicks always open the updater dialog and surface actionable errors instead of silently no-oping.
 - Signature verification failures are surfaced with a targeted message to check release signing key and launcher updater pubkey alignment.
 - Launcher performs an automatic updater check on boot and then every hour while the app remains open.
 - Updater `Update` handles from `@tauri-apps/plugin-updater` are stored as raw/shallow refs to avoid Vue proxying class instances with private fields.
+- Task center progress maps launcher internals to player-facing stages:
+  - Syncing pack
+  - Preparing files
+  - Starting Minecraft
+- First confirmed launch success is persisted and shown via a compact first-run success panel.
 - Tauri updater endpoints should target Distribution API routes:
 - `/api/v1/launcher/updates/{os}/{arch}` (or channelized variant).
 - Release workflow stamps `apps/launcher/src-tauri/tauri.conf.json` version from `launcher-vx.x.x` tags before `tauri build`.

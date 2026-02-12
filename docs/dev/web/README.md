@@ -26,6 +26,23 @@ See:
 - `api-spec.md`
 - `openapi.yaml`
 
+## Invite Onboarding Contract
+
+`POST /api/v1/invites/accept` now returns an onboarding handoff payload while keeping backward compatibility:
+
+- Existing fields retained:
+  - `success`
+  - `packId`
+- Added fields:
+  - `pack: { id, name, slug }`
+  - `onboarding: { deepLink, recommendedChannel }`
+
+`deepLink` targets launcher onboarding:
+- `atlas://onboarding?source=invite&packId=<packId>&channel=<dev|beta|production>`
+
+Invite web flow uses this deep link as primary CTA and falls back to:
+- `/download/app/installer/latest`
+
 ## Distribution API v1
 
 The web app now exposes a unified distribution registry for launcher/cli/runner/runnerd:
