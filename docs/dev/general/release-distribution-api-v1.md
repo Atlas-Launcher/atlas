@@ -77,6 +77,7 @@ Where:
 - Linux Rust build jobs install and use `mold` (`-C link-arg=-fuse-ld=mold`) for faster linking.
 - LFS checkout is reserved for launcher build jobs that require icon/assets; other workflows use shallow non-LFS checkouts.
 - Runner release workflow now builds `runner-v2` and `runnerd-v2` in a single per-OS job to avoid duplicate setup overhead.
+- GitHub Actions intermediate build artifacts are configured with `retention-days: 1` (minimum supported by `actions/upload-artifact`; hourly retention is not supported).
 - Launcher workflow kind mapping differentiates installables from updater payloads:
   - `installer`: `.dmg`, `.pkg`, `.exe`, `.msi`, `.deb`, `.rpm`, `.AppImage`
   - `binary`: `.app.tar.gz`, `.app.zip`, `.nsis.zip`, `.msi.zip`, `.AppImage.tar.gz`
