@@ -5,7 +5,6 @@ import {
   encodeArtifactRef,
   getPreferredStorageProvider,
 } from "@/lib/storage/harness";
-import { createStorageToken } from "@/lib/storage/token";
 import { resolveCiAuthContext } from "@/lib/ci/auth";
 
 export async function POST(request: Request) {
@@ -27,28 +26,17 @@ export async function POST(request: Request) {
     const provider = getPreferredStorageProvider();
     const artifactKey = encodeArtifactRef({ provider, key: objectKey });
 
-    let uploadUrl: string;
-    if (provider === "r2") {
-      uploadUrl = await createUploadUrlForProvider({
-        provider,
-        key: objectKey,
-        contentType: "application/octet-stream",
-      });
-    } else {
-      const token = createStorageToken({
-        action: "upload",
-        provider,
-        key: objectKey,
-        expiresInSeconds: 900,
-      });
-      const origin = new URL(request.url).origin;
-      uploadUrl = `${origin}/api/v1/storage/upload?token=${encodeURIComponent(token)}`;
-    }
+    const uploadRequest = await createUploadUrlForProvider({
+      provider,
+      key: objectKey,
+      contentType: "application/octet-stream",
+    });
 
     return NextResponse.json({
       buildId,
       artifactKey,
-      uploadUrl,
+      uploadUrl: uploadRequest.url,
+      uploadHeaders: uploadRequest.headers ?? {},
       artifactProvider: provider,
     });
   } catch (error) {
