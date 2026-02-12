@@ -3,9 +3,21 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { invites, packMembers } from "@/lib/db/schema";
+import { invites, packMembers, packs } from "@/lib/db/schema";
 import { emitWhitelistUpdate } from "@/lib/whitelist-events";
 import { recomputeWhitelist } from "@/lib/packs/whitelist";
+
+type RecommendedChannel = "dev" | "beta" | "production";
+
+function toRecommendedChannel(accessLevel: "dev" | "beta" | "production" | "all"): RecommendedChannel {
+  if (accessLevel === "dev") {
+    return "dev";
+  }
+  if (accessLevel === "beta") {
+    return "beta";
+  }
+  return "production";
+}
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -38,6 +50,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invite missing pack" }, { status: 400 });
   }
 
+  const [pack] = await db
+    .select({
+      id: packs.id,
+      name: packs.name,
+      slug: packs.slug,
+    })
+    .from(packs)
+    .where(eq(packs.id, invite.packId))
+    .limit(1);
+
+  if (!pack) {
+    return NextResponse.json({ error: "Invite pack not found" }, { status: 404 });
+  }
+
   await db
     .insert(packMembers)
     .values({
@@ -57,5 +83,18 @@ export async function POST(request: Request) {
 
   emitWhitelistUpdate({ packId: invite.packId, source: "invite" });
 
-  return NextResponse.json({ success: true, packId: invite.packId });
+  const recommendedChannel = toRecommendedChannel(invite.accessLevel);
+  const deepLink = `atlas://onboarding?source=invite&packId=${encodeURIComponent(
+    invite.packId
+  )}&channel=${recommendedChannel}`;
+
+  return NextResponse.json({
+    success: true,
+    packId: invite.packId,
+    pack,
+    onboarding: {
+      deepLink,
+      recommendedChannel,
+    },
+  });
 }

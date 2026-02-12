@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-type InviteStep = "account" | "setup" | "done";
+type InviteStep = "account" | "launcher" | "done";
 
 interface InviteClientProps {
   code: string | null;
@@ -34,7 +34,22 @@ type InvitePreview = {
   };
 };
 
-type InviteStatus = "idle" | "loading" | "accepted" | "warning" | "error";
+type InviteStatus = "idle" | "loading" | "accepted" | "warning";
+type RecommendedChannel = "dev" | "beta" | "production";
+
+type InviteAcceptResponse = {
+  success: boolean;
+  packId: string;
+  pack?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  onboarding?: {
+    deepLink: string;
+    recommendedChannel: RecommendedChannel;
+  };
+};
 
 const steps: { id: InviteStep; label: string; detail: string }[] = [
   {
@@ -43,29 +58,40 @@ const steps: { id: InviteStep; label: string; detail: string }[] = [
     detail: "Set up your Atlas login.",
   },
   {
-    id: "setup",
-    label: "Download launcher",
-    detail: "Get the Atlas Launcher app.",
+    id: "launcher",
+    label: "Open launcher",
+    detail: "Open Atlas Launcher and land on your invited pack.",
   },
   {
     id: "done",
-    label: "You're ready to go!",
-    detail: "Open the launcher and start playing.",
+    label: "Ready to play",
+    detail: "Continue in Atlas Launcher.",
   },
 ];
 
-function isInviteStep(value: string | null): value is InviteStep {
-  return value === "account" || value === "setup" || value === "done";
+function resolveInviteStep(value: string | null): InviteStep | null {
+  if (value === "account" || value === "launcher" || value === "done") {
+    return value;
+  }
+  if (value === "setup") {
+    return "launcher";
+  }
+  return null;
 }
 
 export default function InviteClient({ code, signedIn }: InviteClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const launcherFallbackTimer = useRef<number | null>(null);
+
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [signedInState, setSignedInState] = useState(signedIn);
   const [inviteStatus, setInviteStatus] = useState<InviteStatus>("idle");
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteAcceptResponse, setInviteAcceptResponse] = useState<InviteAcceptResponse | null>(null);
+  const [launcherFallbackVisible, setLauncherFallbackVisible] = useState(false);
+  const [launcherAttempted, setLauncherAttempted] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -74,15 +100,39 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
 
   const stepParam = searchParams.get("step");
   const initialStep = useMemo<InviteStep>(() => {
-    if (isInviteStep(stepParam)) return stepParam;
+    const resolved = resolveInviteStep(stepParam);
+    if (resolved) return resolved;
     if (!signedIn) return "account";
-    return "setup";
+    return "launcher";
   }, [signedIn, stepParam]);
+
   const [manualStep, setManualStep] = useState<InviteStep>(initialStep);
+
   const resolvedStep = useMemo<InviteStep>(() => {
-    if (isInviteStep(stepParam)) return stepParam;
-    return manualStep;
+    return resolveInviteStep(stepParam) ?? manualStep;
   }, [manualStep, stepParam]);
+
+  const deepLink = useMemo(() => {
+    const fromAccept = inviteAcceptResponse?.onboarding?.deepLink;
+    if (fromAccept) {
+      return fromAccept;
+    }
+
+    const packId = inviteAcceptResponse?.packId ?? preview?.pack.id;
+    if (!packId) {
+      return null;
+    }
+
+    return `atlas://onboarding?source=invite&packId=${encodeURIComponent(packId)}&channel=production`;
+  }, [inviteAcceptResponse, preview?.pack.id]);
+
+  useEffect(() => {
+    return () => {
+      if (launcherFallbackTimer.current) {
+        window.clearTimeout(launcherFallbackTimer.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!code) {
@@ -101,7 +151,6 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
     loadPreview().catch(() => setPreviewError("Unable to load invite details."));
   }, [code]);
 
-
   useEffect(() => {
     if (!signedInState || !code || inviteStatus !== "idle") {
       return;
@@ -115,7 +164,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       });
-      const data = await response.json();
+      const data = (await response.json()) as InviteAcceptResponse & { error?: string };
 
       if (!response.ok) {
         setInviteStatus("warning");
@@ -129,6 +178,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
         return;
       }
 
+      setInviteAcceptResponse(data);
       setInviteStatus("accepted");
     };
 
@@ -154,12 +204,13 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
   );
 
   useEffect(() => {
-    if (inviteStatus === "accepted" && resolvedStep === "account" && code) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("code", code);
-      params.set("step", "setup");
-      router.replace(`/invite?${params.toString()}`);
+    if (inviteStatus !== "accepted" || resolvedStep !== "account" || !code) {
+      return;
     }
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("code", code);
+    params.set("step", "launcher");
+    router.replace(`/invite?${params.toString()}`);
   }, [code, inviteStatus, resolvedStep, router, searchParams]);
 
   const accountComplete = signedInState;
@@ -189,6 +240,24 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
     setInviteStatus("idle");
   };
 
+  const handleOpenLauncher = () => {
+    if (!deepLink) {
+      setLauncherFallbackVisible(true);
+      return;
+    }
+
+    setLauncherAttempted(true);
+    setLauncherFallbackVisible(false);
+    if (launcherFallbackTimer.current) {
+      window.clearTimeout(launcherFallbackTimer.current);
+    }
+
+    window.location.href = deepLink;
+
+    launcherFallbackTimer.current = window.setTimeout(() => {
+      setLauncherFallbackVisible(true);
+    }, 1500);
+  };
 
   if (!code) {
     return (
@@ -235,16 +304,14 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
           <h2 className="mt-4 text-3xl font-semibold">Welcome to Atlas.</h2>
           <p className="mt-3 text-sm text-[var(--atlas-ink-muted)]">
             {preview?.pack?.name
-              ? `You're joining ${preview.pack.name}. We'll set up your account and get you the launcher.`
-              : "We will set up your account and get you the launcher."}
+              ? `You're joining ${preview.pack.name}. We'll connect your account and send you to Atlas Launcher.`
+              : "We'll connect your account and send you to Atlas Launcher."}
           </p>
           {preview?.pack?.name ? (
             <div className="mt-5 rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
               <p className="text-sm font-semibold text-[var(--atlas-ink)]">{preview.pack.name}</p>
               <p className="mt-1">
-                {preview.creator?.name
-                  ? `Created by ${preview.creator.name}`
-                  : "Pack creator"}
+                {preview.creator?.name ? `Created by ${preview.creator.name}` : "Pack creator"}
               </p>
             </div>
           ) : null}
@@ -283,9 +350,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                       {index + 1}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-[var(--atlas-ink)]">
-                        {item.label}
-                      </p>
+                      <p className="text-sm font-semibold text-[var(--atlas-ink)]">{item.label}</p>
                       <p className="text-xs text-[var(--atlas-ink-muted)]">{item.detail}</p>
                     </div>
                   </div>
@@ -301,20 +366,20 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
           <Card>
             <CardHeader>
               <CardTitle>Create your Atlas account</CardTitle>
-              <CardDescription>We will auto-accept the invite as soon as you are in.</CardDescription>
+              <CardDescription>We&apos;ll auto-accept the invite as soon as you&apos;re signed in.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {accountComplete ? (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-                    Account ready. We are connecting your invite now.
+                    Account ready. We&apos;re connecting your invite now.
                   </div>
                   {inviteStatus === "loading" ? (
                     <p className="text-xs text-[var(--atlas-ink-muted)]">Accepting invite…</p>
                   ) : null}
                   {inviteStatus === "accepted" ? (
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-                      Invite accepted. You are in the pack.
+                      Invite accepted. You&apos;re in the pack.
                     </div>
                   ) : null}
                   {inviteStatus === "warning" ? (
@@ -322,12 +387,17 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                       {inviteError ?? "Invite acceptance needs attention."}
                     </div>
                   ) : null}
-                  <Button
-                    onClick={() => setStepAndUrl("setup")}
-                    disabled={inviteStatus === "loading"}
-                  >
-                    Continue
-                  </Button>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      onClick={() => setStepAndUrl("launcher")}
+                      disabled={inviteStatus === "loading"}
+                    >
+                      Continue to launcher
+                    </Button>
+                    {inviteStatus === "warning" ? (
+                      <Button variant="outline" onClick={() => setInviteStatus("idle")}>Retry invite acceptance</Button>
+                    ) : null}
+                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleSignUp} className="space-y-4">
@@ -370,7 +440,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                   ) : null}
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit" disabled={accountLoading} size="lg">
-                      {accountLoading ? "Creating" : "Create Account"}
+                      {accountLoading ? "Creating" : "Create account"}
                     </Button>
                     <Link
                       href={`/sign-in?redirect=${encodeURIComponent(`/invite?code=${code}`)}`}
@@ -385,38 +455,55 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
           </Card>
         ) : null}
 
-        {resolvedStep === "setup" ? (
+        {resolvedStep === "launcher" ? (
           <Card>
             <CardHeader>
-              <CardTitle>Download Atlas Launcher</CardTitle>
-              <CardDescription>Get the Atlas Launcher app to play.</CardDescription>
+              <CardTitle>Open Atlas Launcher</CardTitle>
+              <CardDescription>
+                Use the handoff button to open Atlas Launcher and preselect your invited pack.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-4 text-sm text-[var(--atlas-ink-muted)]">
-                Download and install the Atlas Launcher to access your packs and play Minecraft.
+                Atlas Launcher will open on your invited pack so you can install and play.
               </div>
+
               <div className="flex flex-wrap gap-3">
+                <Button size="lg" onClick={handleOpenLauncher}>
+                  Open Atlas Launcher
+                </Button>
                 <a
                   href="/download/app/installer/latest"
-                  className="rounded-full bg-[var(--atlas-ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
+                  className="inline-flex items-center rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
                   rel="noreferrer"
                   target="_blank"
-                  onClick={() => setStepAndUrl("done")}
                 >
-                  Download Launcher
+                  Download launcher
                 </a>
-                <Link
-                  href="/download/app"
-                  className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
-                  onClick={() => setStepAndUrl("done")}
-                >
-                  View all downloads
-                </Link>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={() => setStepAndUrl("account")}>Back</Button>
-                <Button onClick={() => setStepAndUrl("done")}>I already have the launcher</Button>
-              </div>
+
+              {launcherFallbackVisible ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                  Launcher didn&apos;t open automatically. Install it with the download button, then retry.
+                </div>
+              ) : null}
+
+              {launcherAttempted ? (
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="outline" onClick={() => setStepAndUrl("done")}>I opened launcher</Button>
+                  {deepLink ? (
+                    <button
+                      type="button"
+                      className="text-xs text-[var(--atlas-ink-muted)] underline"
+                      onClick={handleOpenLauncher}
+                    >
+                      Try opening again
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <Button variant="outline" onClick={() => setStepAndUrl("done")}>I already have launcher open</Button>
+              )}
             </CardContent>
           </Card>
         ) : null}
@@ -424,18 +511,18 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
         {resolvedStep === "done" ? (
           <Card>
             <CardHeader>
-              <CardTitle>You&apos;re ready to go!</CardTitle>
-              <CardDescription>Open the Atlas Launcher to start playing.</CardDescription>
+              <CardTitle>You&apos;re ready to play</CardTitle>
+              <CardDescription>Continue in Atlas Launcher.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <ol className="list-decimal space-y-2 pl-4 text-sm text-[var(--atlas-ink-muted)]">
-                <li>Open the Atlas Launcher app.</li>
-                <li>Sign in with your account (if you haven&apos;t already).</li>
-                <li>Connect your Microsoft account for Minecraft.</li>
-                <li>Choose your pack and hit play!</li>
+                <li>Open Atlas Launcher.</li>
+                <li>Sign in to Atlas Hub if prompted.</li>
+                <li>Sign in to Microsoft and complete account linking.</li>
+                <li>Install the invited pack and press play.</li>
               </ol>
               <div className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={() => setStepAndUrl("setup")}>Back</Button>
+                <Button variant="outline" onClick={() => setStepAndUrl("launcher")}>Back</Button>
                 <Link href="/dashboard">
                   <Button>Go to dashboard</Button>
                 </Link>
