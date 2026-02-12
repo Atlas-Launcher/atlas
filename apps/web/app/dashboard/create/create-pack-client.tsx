@@ -215,9 +215,9 @@ export default function CreatePackClient() {
           </Button>
         </Link>
         <div>
-          <h2 className="text-2xl font-semibold">Let&apos;s build something new</h2>
+          <h2 className="text-2xl font-semibold">Create a new pack</h2>
           <p className="text-sm text-[var(--atlas-ink-muted)]">
-            Import a GitHub repository or create a new one.
+            Import an existing GitHub repository or create a new one.
           </p>
         </div>
       </div>
@@ -248,19 +248,19 @@ export default function CreatePackClient() {
         className="space-y-6"
       >
         <TabsList className="inline-flex justify-start">
-          <TabsTrigger value="import">Import From GitHub Repository</TabsTrigger>
-          <TabsTrigger value="initialize">New GitHub Repository</TabsTrigger>
+          <TabsTrigger value="import">Import GitHub repo</TabsTrigger>
+          <TabsTrigger value="initialize">Create GitHub repo</TabsTrigger>
         </TabsList>
 
         <TabsContent value="import" className="space-y-4">
           <p className="text-xs text-[var(--atlas-ink-muted)]">
-            Link a repo and Atlas will keep builds flowing into your channels.
+            Link a repository and Atlas will manage build and release flow.
           </p>
 
           <Card>
             <CardHeader>
               <CardTitle>Repository details</CardTitle>
-              <CardDescription>Paste a repo URL and set the pack name.</CardDescription>
+              <CardDescription>Select a repository and set the pack name.</CardDescription>
             </CardHeader>
             <CardContent>
               <Form
@@ -284,7 +284,7 @@ export default function CreatePackClient() {
                             <Input
                               value={field.state.value}
                               readOnly
-                              placeholder="Select a repository..."
+                              placeholder="Select a repository"
                               className="pl-9 cursor-pointer"
                               onClick={() => setRepoSelectorOpen(true)}
                             />
@@ -294,7 +294,7 @@ export default function CreatePackClient() {
                             variant="secondary"
                             onClick={() => setRepoSelectorOpen(true)}
                           >
-                            Select
+                            Choose
                           </Button>
                         </div>
                         <FormMessage />
@@ -348,7 +348,7 @@ export default function CreatePackClient() {
 
                 <div className="flex flex-wrap gap-3">
                   <Button type="submit" disabled={loading}>
-                    Import
+                    Import repository
                   </Button>
                 </div>
               </Form>
@@ -358,7 +358,7 @@ export default function CreatePackClient() {
 
         <TabsContent value="initialize" className="space-y-4">
           <p className="text-xs text-[var(--atlas-ink-muted)]">
-            Create a brand new GitHub repository with a default Atlas-ready setup.
+            Create a new GitHub repository with an Atlas-ready starting setup.
           </p>
 
           {githubError ? (
@@ -384,9 +384,7 @@ export default function CreatePackClient() {
             <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700">
               <div className="flex flex-col space-y-2">
                 <p>
-                  Atlas Launcher has not been installed on any GitHub accounts you have
-                  access to. You need to install the app to create or import
-                  repositories.
+                  Atlas is not installed on any GitHub account you can access yet. Install the app to create or import repositories.
                 </p>
                 <div>
                   <a
@@ -395,7 +393,7 @@ export default function CreatePackClient() {
                     rel="noopener noreferrer"
                   >
                     <Button variant="outline" size="sm" className="h-8 text-[10px]">
-                      Install Atlas Launcher
+                      Install Atlas GitHub app
                     </Button>
                   </a>
                 </div>
@@ -406,7 +404,7 @@ export default function CreatePackClient() {
           <Card>
             <CardHeader>
               <CardTitle>Repository details</CardTitle>
-              <CardDescription>Pick an owner and configure the repo.</CardDescription>
+              <CardDescription>Pick an owner, name, and visibility.</CardDescription>
             </CardHeader>
             <CardContent>
               <Form
@@ -521,7 +519,7 @@ export default function CreatePackClient() {
                   type="submit"
                   disabled={loading || githubLoading || ownerOptions.length === 0}
                 >
-                  Create Pack Repository
+                  Create repository
                 </Button>
               </Form>
             </CardContent>

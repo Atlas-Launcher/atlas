@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { playerWebCopy } from "@/app/_copy/player";
 
 function isPasskeyAbortError(error: unknown) {
   if (!error) {
@@ -165,9 +166,9 @@ export default function SignInClient() {
         <Card>
           <CardHeader>
             <Badge variant="secondary">Atlas Hub</Badge>
-            <CardTitle>Sign in</CardTitle>
+            <CardTitle>{playerWebCopy.auth.signInTitle}</CardTitle>
             <CardDescription>
-              Continue onboarding and open Atlas Launcher.
+              {playerWebCopy.auth.continueInLauncher}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -207,7 +208,7 @@ export default function SignInClient() {
               ) : null}
 
               <Button type="submit" disabled={loading} size="lg" className="w-full">
-                {loading ? "Signing in" : "Sign in"}
+                {loading ? "Signing in..." : "Sign in"}
               </Button>
             </form>
 
@@ -226,7 +227,7 @@ export default function SignInClient() {
                 className="block text-center text-xs text-[var(--atlas-ink-muted)] underline"
                 href={signUpHref}
               >
-                Need an account? Create Atlas account
+                Need an account? Create one
               </a>
             </div>
           </CardContent>

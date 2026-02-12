@@ -31,14 +31,14 @@ export default function PacksTab({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Input
-          placeholder="Search packs..."
+          placeholder="Search packs"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="min-w-[220px] flex-1"
         />
         {canCreatePack ? (
           <Link href="/dashboard/create">
-            <Button size="sm">Create Pack</Button>
+            <Button size="sm">Create pack</Button>
           </Link>
         ) : null}
       </div>
@@ -65,7 +65,7 @@ export default function PacksTab({
         </div>
       ) : (
         <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-white/70 p-8 text-sm text-[var(--atlas-ink-muted)]">
-          No packs match that search.
+          No packs match your search.
         </div>
       )}
     </div>

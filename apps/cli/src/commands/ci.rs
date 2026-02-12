@@ -78,7 +78,7 @@ fn run_sync(action: &str, args: CiSyncArgs) -> Result<()> {
     println!("Workflow path: {}", target_path.display());
     println!("Workflow updated: {}", updated);
     println!(
-        "Next: run `atlas pack commit \"{} Atlas CI workflow\"` and `atlas pack push`.",
+        "Next: run `atlas commit \"{} Atlas CI workflow\"` and `atlas push`.",
         action_label
     );
     Ok(())
@@ -126,7 +126,7 @@ fn enable_github_workflows_if_needed(client: &HubClient, root: &Path, hub_url: &
     })?;
 
     let _hub_token = auth_store::require_access_token_for_hub(hub_url).with_context(
-        || "Atlas auth is required to enable workflows. Run `atlas auth signin` and retry.",
+        || "Atlas auth is required to enable workflows. Run `atlas login` and retry.",
     )?;
     let github_token = request_linked_github_access_token(client)?.context(
         "No linked GitHub token found. Link your GitHub account in Atlas Hub and retry.",
@@ -137,7 +137,7 @@ fn enable_github_workflows_if_needed(client: &HubClient, root: &Path, hub_url: &
     let workflows = list_repository_workflows(&github_client, &github_token, &owner, &repo)?;
     if workflows.is_empty() {
         println!(
-            "No GitHub workflows found for {}/{}. Push this repository, then run `atlas ci init` again to auto-enable workflows if needed.",
+            "No GitHub workflows found for {}/{}. Push this repository, then run `atlas workflow init` again to auto-enable workflows if needed.",
             owner, repo
         );
         return Ok(());
@@ -179,7 +179,7 @@ fn resolve_origin_remote_url(root: &Path) -> Result<String> {
         .context("Failed to run `git remote get-url origin`")?;
     if !output.status.success() {
         bail!(
-            "Unable to resolve git remote 'origin'. Set a GitHub origin before running `atlas ci init`."
+            "Unable to resolve git remote 'origin'. Set a GitHub origin before running `atlas workflow init`."
         );
     }
 

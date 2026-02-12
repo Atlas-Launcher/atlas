@@ -32,7 +32,7 @@ export function useStatus() {
 
   function normalizeMessage(message: string | null | undefined) {
     const value = (message ?? "").trim();
-    return value || "Working...";
+    return value || "Working on setup...";
   }
 
   function mapLaunchStage(event: LaunchEvent) {

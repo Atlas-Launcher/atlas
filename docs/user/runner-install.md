@@ -2,6 +2,11 @@
 
 This guide assumes you are installing on a Linux VPS or dedicated host.
 
+For full day-two operations, see:
+- `host/getting-started.md`
+- `host/quick-reference.md`
+- `host/troubleshooting.md`
+
 ## Quick Install
 
 ```bash
@@ -12,7 +17,7 @@ What this does:
 - Detects Linux architecture (`x64` or `arm64`)
 - Downloads the latest stable runner build
 - Installs to `/usr/local/bin/atlas-runner`
-- Runs `atlas-runner install` to install/update `atlas-runnerd` systemd service
+- Runs `atlas-runner host install` to install/update `atlas-runnerd` systemd service
 
 WSL install (skip daemon install):
 
@@ -24,6 +29,13 @@ curl -fsSL "${NEXT_PUBLIC_BETTER_AUTH_URL%/}/download/runner/install" | sudo bas
 
 ```bash
 atlas-runner --version
+```
+
+## First Run
+
+```bash
+atlas-runner auth login
+atlas-runner server start
 ```
 
 ## Manual Download Links

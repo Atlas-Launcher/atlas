@@ -11,8 +11,8 @@ These stories reflect how the platform currently works.
 
 ## Server Host Stories
 
-1. As a server host, I run `atlas-runner` to control lifecycle while `atlas-runnerd` manages process state.
-2. As a server host, I can start/stop/log/backup without manually scripting Java launch commands.
+1. As a server host, I run `atlas-runner` grouped commands while `atlas-runnerd` manages process state.
+2. As a server host, I can use `server start|stop|logs|backup` without manually scripting Java launch commands.
 3. As a server host, I can trust runtime apply to verify dependencies and Java runtime integrity.
 
 ## Player Stories

@@ -28,7 +28,7 @@ export default function PackCard({ pack, selected, onSelect }: PackCardProps) {
             <p className="mt-1 text-xs text-[var(--atlas-ink-muted)]">{pack.slug}</p>
           </div>
           <span className="rounded-full border border-[var(--atlas-ink)]/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--atlas-ink-muted)]">
-            View
+            Open
           </span>
         </div>
       </button>

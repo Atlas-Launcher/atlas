@@ -121,7 +121,7 @@ const tasksBadge = computed(() => (props.tasksCount > 9 ? "9+" : String(props.ta
             </Button>
           </TooltipTrigger>
           <TooltipContent side="right">
-            {{ props.tasksOpen ? "Hide Task Center" : "Open Task Center" }}
+            {{ props.tasksOpen ? "Hide tasks" : "Show tasks" }}
           </TooltipContent>
         </Tooltip>
 

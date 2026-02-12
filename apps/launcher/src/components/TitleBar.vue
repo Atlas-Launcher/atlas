@@ -82,8 +82,8 @@ const statusText = computed(() => {
   if (props.isSigningIn) return "Signing in";
   if (!atlasSignedIn.value) return "Sign in to Atlas";
   if (!mojangSignedIn.value) return "Sign in with Microsoft";
-  if (needsSetup.value) return "Get ready";
-  if (!isLaunchReady.value) return "Get ready";
+  if (needsSetup.value) return "Finish setup";
+  if (!isLaunchReady.value) return "Finish setup";
   return "Ready";
 });
 
@@ -111,7 +111,7 @@ const showNoInternet = computed(() => props.cannotConnect || !isOnline.value);
 const displayText = computed(() => {
   if (showNoInternet.value) return "No Internet";
   if (isLaunchReady.value) return statusText.value || "Ready";
-  return "Not Ready";
+  return "Needs setup";
 });
 
 const iconVariant = computed(() => {

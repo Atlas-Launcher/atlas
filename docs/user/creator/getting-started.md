@@ -1,63 +1,57 @@
-# Creator and Server Host Guide
+# Creator Getting Started
 
-This guide is for users who author packs, publish builds, and/or host servers.
+This guide covers the fastest path to ship your first Atlas pack build.
 
-## 1. What You Manage
+## What you need
 
-As a creator/server host, you manage:
-- pack source in Git,
-- build/release through Atlas Hub APIs and CLI/CI,
-- channel promotion (`dev`, `beta`, `production`),
-- server runtime consumption through runner-v2 + runnerd-v2.
+- A Git repository for your pack.
+- Atlas CLI installed (`atlas --version`).
+- Atlas account access to your pack in Hub.
 
-## 2. Recommended Flow
+## Core workflow
 
-1. Keep pack content/config in Git.
-2. Build artifact from source (`atlas pack build` or CI deploy path).
-3. Publish through CI/Hub endpoints.
-4. Promote channels by moving channel pointers.
-5. Server hosts pull/apply via runner tooling.
+1. Initialize pack config:
 
-## 3. CLI Tooling
+```bash
+atlas init
+```
 
-- Pack/deploy tool: `atlas` (apps/cli)
-- Server operator CLI: `atlas-runner` (apps/runner-v2)
-- Server daemon: `atlas-runnerd` (apps/runnerd-v2)
+2. Build from source:
 
-Legacy note:
-- `apps/runner` (runner v1) is legacy and unsupported.
+```bash
+atlas build
+```
 
-## 4. Channel Model
+3. Publish the build to Hub:
 
-- Builds are immutable.
-- Channels are mutable pointers.
-- Promote by changing channel pointer, not by editing old artifacts.
+```bash
+atlas publish
+```
 
-## 5. Server Host Basics
+4. Promote a build to another channel when ready:
 
-Runner-v2 + runnerd-v2 target:
-- macOS
-- Linux
-- WSL
+```bash
+atlas promote
+```
 
-Typical cycle:
-1. Authenticate/configure runner CLI.
-2. Start daemon if not running.
-3. Apply/start with `up` flow.
-4. Monitor logs and use backup operations.
+## Day-to-day command groups
 
-Quick Linux install path:
-- `curl -fsSL "${NEXT_PUBLIC_BETTER_AUTH_URL%/}/download/runner/install" | sudo bash -s --`
-- Verify with `atlas-runner --version`.
-- See `docs/user/runner-install.md` for details.
+- Auth: `atlas login`, `atlas logout`, `atlas status`
+- Pack setup: `atlas init`, `atlas reinit`, `atlas validate`, `atlas commit`
+- Source sync: `atlas pull`, `atlas push`
+- Releases: `atlas build`, `atlas publish`, `atlas promote`
+- Mod pointers: `atlas mod add|remove|list|import`
+- CI workflow: `atlas workflow init|update`
 
-Platform notes:
-- Linux VPS/dedicated host is the recommended runner deployment target.
-- macOS is natively supported with manual `atlas-runner` + `atlas-runnerd` downloads.
-- Windows deployments should use WSL and pass `--no-daemon-install` to the install script.
+## Recommended release sequence
 
-## 6. Troubleshooting
+1. Publish to `dev`.
+2. Validate in testing.
+3. Promote to `beta`.
+4. Promote to `production` once stable.
 
-- If CI upload fails: verify CI auth mode (OIDC or valid user token).
-- If runner cannot apply: verify daemon connectivity and pack/build availability.
-- If Java/runtime issues occur: current provisioning verifies runtime integrity and reinstalls on mismatch.
+## Next docs
+
+- Hands-on tutorial: `tutorial-first-pack.md`
+- Lifecycle model: `pack-lifecycle.md`
+- Command cheat sheet: `quick-reference.md`

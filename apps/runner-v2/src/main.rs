@@ -1,11 +1,11 @@
 use atlas_client::hub::{DistributionReleaseAsset, DistributionReleaseResponse, HubClient};
-use clap::{Parser, Subcommand};
+use clap::{Args as ClapArgs, Parser, Subcommand};
 use runner_core_v2::proto::{LogLine, LogStream};
 use runner_v2_utils::runtime_paths_v2;
 use semver::Version;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 mod client;
 
@@ -13,114 +13,159 @@ mod client;
 #[command(version = env!("ATLAS_BUILD_VERSION"))]
 struct Args {
     #[command(subcommand)]
-    cmd: Cmd,
+    cmd: RootCommand,
 }
 
 #[derive(Subcommand)]
-enum Cmd {
+enum RootCommand {
     Auth {
-        #[arg(long, value_name = "HUB_URL")]
-        hub_url: Option<String>,
-
-        #[arg(long, value_name = "PACK_ID")]
-        pack_id: Option<String>,
-
-        #[arg(long, value_name = "TOKEN_NAME")]
-        token_name: Option<String>,
-
-        #[arg(long, value_name = "CHANNEL", default_value = "production")]
-        channel: String,
+        #[command(subcommand)]
+        command: AuthCommand,
     },
-    Ping,
-    Shutdown,
-    Down {
-        #[arg(long)]
-        force: bool,
+    Server {
+        #[command(subcommand)]
+        command: ServerCommand,
     },
-    Up {
-        #[arg(long, value_name = "PROFILE", default_value = "default")]
-        profile: String,
-
-        #[arg(long, value_name = "PACK_BLOB")]
-        pack_blob: Option<PathBuf>,
-
-        #[arg(long, value_name = "SERVER_ROOT")]
-        server_root: Option<PathBuf>,
-
-        #[arg(long, value_name = "MAX_RAM_MB")]
-        max_ram: Option<u32>,
-
-        #[arg(long, default_value_t = false)]
-        accept_eula: bool,
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommand,
     },
-    Exec {
-        #[arg(short = 'i', long = "interactive")]
-        interactive: bool,
-
-        command: Option<String>,
+    Host {
+        #[command(subcommand)]
+        command: HostCommand,
     },
-    Logs {
-        #[arg(short = 'n', long = "lines", default_value_t = 200)]
-        lines: usize,
+}
 
-        #[arg(short = 'f', long = "follow")]
-        follow: bool,
+#[derive(Subcommand)]
+enum AuthCommand {
+    Login(AuthLoginArgs),
+}
 
-        #[arg(long = "daemon-logs")]
-        daemon_logs: bool,
-    },
-    Cd {
-        #[arg(long, value_name = "SERVER_ROOT")]
-        server_root: Option<PathBuf>,
-    },
-    Install {
-        #[arg(long, value_name = "USER")]
-        user: Option<String>,
+#[derive(ClapArgs)]
+struct AuthLoginArgs {
+    #[arg(long, value_name = "HUB_URL")]
+    hub_url: Option<String>,
 
-        #[arg(long, value_name = "RUNNERD_PATH")]
-        runnerd_path: Option<PathBuf>,
-    },
+    #[arg(long, value_name = "PACK_ID")]
+    pack_id: Option<String>,
+
+    #[arg(long, value_name = "TOKEN_NAME")]
+    token_name: Option<String>,
+
+    #[arg(long, value_name = "CHANNEL", default_value = "production")]
+    channel: String,
+}
+
+#[derive(Subcommand)]
+enum ServerCommand {
+    Start(ServerStartArgs),
+    Stop(ServerStopArgs),
+    Logs(ServerLogsArgs),
+    Command(ServerCommandArgs),
+    Console,
     Backup,
+}
+
+#[derive(ClapArgs)]
+struct ServerStartArgs {
+    #[arg(long, value_name = "PROFILE", default_value = "default")]
+    profile: String,
+
+    #[arg(long, value_name = "PACK_BLOB")]
+    pack_blob: Option<PathBuf>,
+
+    #[arg(long, value_name = "SERVER_ROOT")]
+    server_root: Option<PathBuf>,
+
+    #[arg(long, value_name = "MAX_RAM_MB")]
+    max_ram: Option<u32>,
+
+    #[arg(long, default_value_t = false)]
+    accept_eula: bool,
+}
+
+#[derive(ClapArgs)]
+struct ServerStopArgs {
+    #[arg(long)]
+    force: bool,
+}
+
+#[derive(ClapArgs)]
+struct ServerLogsArgs {
+    #[arg(short = 'n', long = "lines", default_value_t = 200)]
+    lines: usize,
+
+    #[arg(short = 'f', long = "follow")]
+    follow: bool,
+}
+
+#[derive(ClapArgs)]
+struct ServerCommandArgs {
+    command: String,
+}
+
+#[derive(Subcommand)]
+enum DaemonCommand {
+    Status,
+    Stop,
+    Logs(DaemonLogsArgs),
+}
+
+#[derive(ClapArgs)]
+struct DaemonLogsArgs {
+    #[arg(short = 'n', long = "lines", default_value_t = 200)]
+    lines: usize,
+
+    #[arg(short = 'f', long = "follow")]
+    follow: bool,
+}
+
+#[derive(Subcommand)]
+enum HostCommand {
+    Install(HostInstallArgs),
+    Path(HostPathArgs),
+}
+
+#[derive(ClapArgs)]
+struct HostInstallArgs {
+    #[arg(long, value_name = "USER")]
+    user: Option<String>,
+
+    #[arg(long, value_name = "RUNNERD_PATH")]
+    runnerd_path: Option<PathBuf>,
+}
+
+#[derive(ClapArgs)]
+struct HostPathArgs {
+    #[arg(long, value_name = "SERVER_ROOT")]
+    server_root: Option<PathBuf>,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     match args.cmd {
-        Cmd::Auth {
-            hub_url,
-            pack_id,
-            token_name,
-            channel,
+        RootCommand::Auth {
+            command:
+                AuthCommand::Login(AuthLoginArgs {
+                    hub_url,
+                    pack_id,
+                    token_name,
+                    channel,
+                }),
         } => {
             let resp = client::auth(hub_url, pack_id, token_name, Some(channel)).await?;
             println!("{resp}");
         }
-        Cmd::Ping => {
-            let resp = client::ping().await?;
-            println!("{resp}");
-        }
-        Cmd::Shutdown => {
-            let resp = client::shutdown().await?;
-            println!("{resp}");
-        }
-        Cmd::Down { force } => {
-            let resp = client::stop(force).await?;
-            if let Some(exit) = resp.exit {
-                println!(
-                    "stopped at {} (exit code: {:?})",
-                    resp.stopped_at_ms, exit.code
-                );
-            } else {
-                println!("stopped at {}", resp.stopped_at_ms);
-            }
-        }
-        Cmd::Up {
-            profile,
-            pack_blob,
-            server_root,
-            max_ram,
-            accept_eula,
+        RootCommand::Server {
+            command:
+                ServerCommand::Start(ServerStartArgs {
+                    profile,
+                    pack_blob,
+                    server_root,
+                    max_ram,
+                    accept_eula,
+                }),
         } => {
             if profile != "default" {
                 eprintln!("Ignoring --profile; runner uses a single profile: default");
@@ -135,34 +180,26 @@ async fn main() -> anyhow::Result<()> {
             .await?;
             println!("{resp}");
         }
-        Cmd::Exec {
-            interactive,
-            command,
+        RootCommand::Server {
+            command: ServerCommand::Stop(ServerStopArgs { force }),
         } => {
-            let framed = client::connect_or_start().await?;
-            if interactive {
-                client::rcon_interactive(framed)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("interactive rcon failed: {e}"))?;
+            let resp = client::stop(force).await?;
+            if let Some(exit) = resp.exit {
+                println!(
+                    "stopped at {} (exit code: {:?})",
+                    resp.stopped_at_ms, exit.code
+                );
             } else {
-                let cmd = command
-                    .ok_or_else(|| anyhow::anyhow!("command required for non-interactive exec"))?;
-                client::rcon_exec(framed, cmd).await?;
+                println!("stopped at {}", resp.stopped_at_ms);
             }
         }
-        Cmd::Logs {
-            lines,
-            follow,
-            daemon_logs,
+        RootCommand::Server {
+            command: ServerCommand::Logs(ServerLogsArgs { lines, follow }),
         } => {
             if follow {
-                follow_logs(lines, daemon_logs).await?;
+                follow_logs(lines, false).await?;
             } else {
-                let resp = if daemon_logs {
-                    client::daemon_logs_tail(lines).await?
-                } else {
-                    client::logs_tail(lines).await?
-                };
+                let resp = client::logs_tail(lines).await?;
                 for line in resp.lines {
                     print_log_line(&line);
                 }
@@ -171,22 +208,68 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Cmd::Cd { server_root } => {
+        RootCommand::Server {
+            command: ServerCommand::Command(ServerCommandArgs { command }),
+        } => {
+            let framed = client::connect_or_start().await?;
+            client::rcon_exec(framed, command).await?;
+        }
+        RootCommand::Server {
+            command: ServerCommand::Console,
+        } => {
+            let framed = client::connect_or_start().await?;
+            client::rcon_interactive(framed)
+                .await
+                .map_err(|e| anyhow::anyhow!("interactive rcon failed: {e}"))?;
+        }
+        RootCommand::Server {
+            command: ServerCommand::Backup,
+        } => {
+            let path = client::backup::backup_now().await?;
+            println!("backup created: {}", path);
+        }
+        RootCommand::Daemon {
+            command: DaemonCommand::Status,
+        } => {
+            let resp = client::ping().await?;
+            println!("{resp}");
+        }
+        RootCommand::Daemon {
+            command: DaemonCommand::Stop,
+        } => {
+            let resp = client::shutdown().await?;
+            println!("{resp}");
+        }
+        RootCommand::Daemon {
+            command: DaemonCommand::Logs(DaemonLogsArgs { lines, follow }),
+        } => {
+            if follow {
+                follow_logs(lines, true).await?;
+            } else {
+                let resp = client::daemon_logs_tail(lines).await?;
+                for line in resp.lines {
+                    print_log_line(&line);
+                }
+                if resp.truncated {
+                    eprintln!("log output was truncated; use --lines or --follow for more output");
+                }
+            }
+        }
+        RootCommand::Host {
+            command: HostCommand::Path(HostPathArgs { server_root }),
+        } => {
             let root = resolve_server_root(server_root);
             println!("{}", root.display());
         }
-        Cmd::Install { user, runnerd_path } => {
+        RootCommand::Host {
+            command: HostCommand::Install(HostInstallArgs { user, runnerd_path }),
+        } => {
             install_systemd(user, runnerd_path).await?;
             println!("atlas-runnerd systemd service enabled and started.");
-        }
-        Cmd::Backup => {
-            let path = client::backup::backup_now().await?;
-            println!("backup created: {}", path);
         }
     }
     Ok(())
 }
-
 async fn follow_logs(lines: usize, daemon_logs: bool) -> anyhow::Result<()> {
     let mut last_at_ms = 0u64;
     let mut last_lines: Vec<String> = Vec::new();

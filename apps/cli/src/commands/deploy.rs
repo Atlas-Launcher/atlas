@@ -93,7 +93,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
     })?;
 
     println!(
-        "Deployed {} (version {}) to {}",
+        "Published {} (version {}) to {}",
         pack_id, version, settings.channel
     );
     Ok(())
@@ -148,7 +148,7 @@ fn resolve_ci_auth(
     }
 
     let user_token = auth_store::require_access_token_for_hub(hub_url).with_context(|| {
-        "No deploy credential provided. Use `--oidc-token` (`ATLAS_CI_OIDC_TOKEN`), `--deploy-token` (`ATLAS_PACK_DEPLOY_TOKEN`), or sign in locally with `atlas auth signin`."
+        "No publish credential provided. Use `--oidc-token` (`ATLAS_CI_OIDC_TOKEN`), `--deploy-token` (`ATLAS_PACK_DEPLOY_TOKEN`), or sign in locally with `atlas login`."
     })?;
     Ok(CiAuth::UserToken(user_token))
 }

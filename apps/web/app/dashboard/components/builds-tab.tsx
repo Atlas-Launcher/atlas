@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,11 +44,13 @@ export default function BuildsTab({
   onToggleForceReinstall,
   loading,
 }: BuildsTabProps) {
+  const [targetByBuild, setTargetByBuild] = useState<Record<string, Channel["name"]>>({});
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Builds</CardTitle>
-        <CardDescription>Immutable builds received from CI and promoted to channels.</CardDescription>
+        <CardDescription>Review builds and promote channels.</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
@@ -56,7 +60,7 @@ export default function BuildsTab({
               <TableHead>Version</TableHead>
               <TableHead>Deployed</TableHead>
               <TableHead>Live Channels</TableHead>
-              <TableHead className="w-[340px]">Actions</TableHead>
+              <TableHead className="w-[320px]">Promotion</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -122,7 +126,33 @@ export default function BuildsTab({
                     </TableCell>
                     <TableCell>
                       {canPromoteBuilds ? (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            value={targetByBuild[build.id] ?? "production"}
+                            onChange={(event) =>
+                              setTargetByBuild((prev) => ({
+                                ...prev,
+                                [build.id]: event.target.value as Channel["name"],
+                              }))
+                            }
+                            disabled={loading}
+                          >
+                            {channelOrder.map((channelName) => (
+                              <option key={channelName} value={channelName}>
+                                {channelLabel(channelName)}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            size="sm"
+                            disabled={loading}
+                            onClick={() =>
+                              onPromote(targetByBuild[build.id] ?? "production", build.id)
+                            }
+                          >
+                            Promote
+                          </Button>
                           <Button
                             size="sm"
                             variant={build.forceReinstall ? "secondary" : "outline"}
@@ -131,33 +161,12 @@ export default function BuildsTab({
                               onToggleForceReinstall(build.id, !Boolean(build.forceReinstall))
                             }
                           >
-                            {build.forceReinstall
-                              ? "Force Reinstall On"
-                              : "Force Reinstall Off"}
+                            {build.forceReinstall ? "Force reinstall: on" : "Force reinstall: off"}
                           </Button>
-                          {channelOrder.map((channelName) => {
-                            const isLive = liveChannels.some(
-                              (channel) => channel.name === channelName
-                            );
-
-                            return (
-                              <Button
-                                key={channelName}
-                                size="sm"
-                                variant={isLive ? "secondary" : "outline"}
-                                disabled={loading || isLive}
-                                onClick={() => onPromote(channelName, build.id)}
-                              >
-                                {isLive
-                                  ? `${channelLabel(channelName)} live`
-                                  : `Set ${channelLabel(channelName)}`}
-                              </Button>
-                            );
-                          })}
                         </div>
                       ) : (
                         <span className="text-xs text-[var(--atlas-ink-muted)]">
-                          No promotion permissions
+                          You do not have permission to promote builds.
                         </span>
                       )}
                     </TableCell>

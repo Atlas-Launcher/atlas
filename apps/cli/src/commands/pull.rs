@@ -4,7 +4,6 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use atlas_client::hub::HubClient;
-use base64::Engine;
 use clap::Args;
 use dialoguer::{FuzzySelect, theme::ColorfulTheme};
 use serde::Deserialize;
@@ -61,21 +60,11 @@ pub fn run(args: PullArgs) -> Result<()> {
         .filter(|value| !value.is_empty())
         .context("Selected pack does not have an associated repository.")?;
 
-    let github_token = if is_github_https_url(repo_url) {
-        request_linked_github_access_token(&client)?
-    } else {
-        None
-    };
-
-    if github_token.is_none() && is_github_https_url(repo_url) {
-        println!("No linked GitHub token found. Trying local git credentials.");
-    }
-
     println!(
         "Cloning {} ({}) from {}",
         selected.pack_name, selected.pack_id, repo_url
     );
-    run_git_clone(repo_url, args.output.as_ref(), github_token.as_deref())?;
+    run_git_clone(repo_url, args.output.as_ref())?;
     Ok(())
 }
 
@@ -90,10 +79,6 @@ fn fetch_remote_packs(client: &HubClient) -> Result<Vec<RemotePack>> {
             repo_url: pack.repo_url,
         })
         .collect())
-}
-
-fn request_linked_github_access_token(client: &HubClient) -> Result<Option<String>> {
-    client.blocking_get_github_token()
 }
 
 fn select_pack(packs: &[RemotePack], args: &PullArgs) -> Result<RemotePack> {
@@ -162,21 +147,8 @@ fn format_pack_label(pack: &RemotePack) -> String {
     format!("{} ({}) [{}]", pack.pack_name, pack.pack_slug, pack.pack_id)
 }
 
-fn run_git_clone(
-    repo_url: &str,
-    output: Option<&PathBuf>,
-    github_token: Option<&str>,
-) -> Result<()> {
+fn run_git_clone(repo_url: &str, output: Option<&PathBuf>) -> Result<()> {
     let mut command = Command::new("git");
-
-    if let Some(token) = github_token.filter(|_| is_github_https_url(repo_url)) {
-        let basic =
-            base64::engine::general_purpose::STANDARD.encode(format!("x-access-token:{token}"));
-        command.arg("-c").arg(format!(
-            "http.https://github.com/.extraheader=AUTHORIZATION: basic {basic}"
-        ));
-    }
-
     command.arg("clone").arg(repo_url);
     if let Some(path) = output {
         command.arg(path);
@@ -187,10 +159,4 @@ fn run_git_clone(
         bail!("git clone failed.");
     }
     Ok(())
-}
-
-fn is_github_https_url(repo_url: &str) -> bool {
-    repo_url
-        .to_ascii_lowercase()
-        .starts_with("https://github.com/")
 }

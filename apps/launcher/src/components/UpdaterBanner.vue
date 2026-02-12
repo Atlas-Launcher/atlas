@@ -74,7 +74,7 @@ function formatBytes(value: number) {
             Restart Atlas Launcher to apply version {{ props.updateInfo.version }}.
           </template>
           <template v-else>
-            Version {{ props.updateInfo.version }} is ready (current {{ props.updateInfo.currentVersion }}).
+            Version {{ props.updateInfo.version }} is available (current {{ props.updateInfo.currentVersion }}).
           </template>
         </CardDescription>
       </CardHeader>
@@ -105,7 +105,7 @@ function formatBytes(value: number) {
               ({{ props.progressPercent }}%)
             </template>
             <template v-else>
-              Downloading update package...
+              Downloading update...
             </template>
           </p>
         </div>
@@ -120,7 +120,7 @@ function formatBytes(value: number) {
   >
     <Card class="w-full max-w-2xl max-h-[85vh] overflow-y-auto border-primary/40">
       <CardHeader class="space-y-1 pb-2">
-        <CardTitle>Application Update</CardTitle>
+        <CardTitle>Launcher update</CardTitle>
         <CardDescription v-if="props.updateInfo">
           Atlas Launcher {{ props.updateInfo.currentVersion }} -> {{ props.updateInfo.version }}
         </CardDescription>

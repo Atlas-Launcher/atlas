@@ -68,11 +68,11 @@ pub fn remove_cli_auth_session() -> Result<()> {
 pub fn require_access_token_for_hub(hub_url: &str) -> Result<String> {
     let requested_hub = normalize_hub_url(hub_url);
     let session = load_cli_auth_session()?
-        .context("No CLI auth session found. Run `atlas auth signin` first.")?;
+        .context("No CLI auth session found. Run `atlas login` first.")?;
 
     if normalize_hub_url(&session.hub_url) != requested_hub {
         bail!(
-            "CLI auth session is for {} but current hub is {}. Run `atlas auth signin --hub-url {}`.",
+            "CLI auth session is for {} but current hub is {}. Run `atlas login --hub-url {}`.",
             session.hub_url,
             requested_hub,
             requested_hub
@@ -81,7 +81,7 @@ pub fn require_access_token_for_hub(hub_url: &str) -> Result<String> {
 
     let now = unix_timestamp();
     if session.expires_at > 0 && now + 30 >= session.expires_at {
-        bail!("CLI auth session expired. Run `atlas auth signin` again.");
+        bail!("CLI auth session expired. Run `atlas login` again.");
     }
 
     Ok(session.access_token)

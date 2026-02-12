@@ -110,21 +110,21 @@ function updateNeoForgeVersion(value: string | number) {
       <CardDescription>
         {{
           props.setupLocked
-            ? "This setup is managed by Atlas Hub and cannot be edited locally."
-            : "Choose a Minecraft version and optional mod loader."
+            ? "This setup is managed in Atlas Hub and cannot be edited locally."
+            : "Choose your Minecraft version and mod loader."
         }}
       </CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <div v-if="!props.instance" class="text-sm text-muted-foreground">
-        Select a profile to manage its game setup.
+        Select a profile to manage game setup.
       </div>
 
       <div v-else class="space-y-4">
         <div class="grid gap-4 md:grid-cols-2">
           <div class="space-y-2">
             <label class="text-xs uppercase tracking-widest text-muted-foreground">
-              Play style
+              Mod loader
             </label>
             <div class="grid grid-cols-3 gap-2 text-xs font-semibold">
               <button
@@ -257,7 +257,7 @@ function updateNeoForgeVersion(value: string | number) {
             </option>
           </datalist>
           <p class="text-xs text-muted-foreground">
-            Atlas will install the matching profile automatically.
+            Atlas applies the matching setup automatically.
           </p>
         </div>
 
@@ -266,18 +266,18 @@ function updateNeoForgeVersion(value: string | number) {
             <div>
               <div class="uppercase tracking-widest text-muted-foreground">Installed versions</div>
               <div class="mt-1 font-semibold text-foreground">
-                {{ isInstalled ? "Selected version installed" : "Not installed yet" }}
+                {{ isInstalled ? "Selected setup is installed" : "Setup not installed yet" }}
               </div>
             </div>
             <Button :disabled="props.working" size="sm" variant="secondary" @click="emit('refresh')">
-              Refresh
+              Refresh list
             </Button>
           </div>
           <div class="mt-2 flex flex-wrap gap-2 text-muted-foreground">
             <span v-for="version in props.installedVersions" :key="version" class="rounded-full border px-2 py-1">
               {{ version }}
             </span>
-            <span v-if="props.installedVersions.length === 0">No versions installed.</span>
+            <span v-if="props.installedVersions.length === 0">No versions installed yet.</span>
           </div>
         </div>
       </div>
@@ -286,8 +286,8 @@ function updateNeoForgeVersion(value: string | number) {
       <div class="text-xs text-muted-foreground">
         {{
           props.setupLocked
-            ? "Remote packs are installed and updated from the Manage tab."
-            : "Install or update the selected setup."
+            ? "Remote packs are installed and updated from Manage pack."
+            : "Install the selected setup."
         }}
       </div>
       <Button
@@ -295,7 +295,7 @@ function updateNeoForgeVersion(value: string | number) {
         variant="secondary"
         @click="emit('install')"
       >
-        Install
+        Install setup
       </Button>
     </CardFooter>
   </Card>

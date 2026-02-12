@@ -8,7 +8,7 @@ import { detectDownloadTarget } from "@/lib/download-target";
 
 export const metadata: Metadata = {
   title: "Launcher Download | Atlas Hub",
-  description: "Download Atlas Launcher with platform-guided install steps.",
+  description: "Download Atlas Launcher with guided install steps.",
 };
 
 const platformTargets: readonly ProductPlatformTarget[] = [
@@ -94,7 +94,7 @@ export default async function LauncherDownloadPage() {
       manualEmptyLabel: "No stable Windows launcher files available yet.",
       nextSteps: [
         "Sign in and connect your account.",
-        "Choose a pack and start your first install.",
+        "Choose a pack and press Play.",
         "Use stable channel builds for everyday play.",
       ],
     },

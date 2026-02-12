@@ -65,15 +65,15 @@ const remoteControlsDisabled = computed(
   () => isRemoteInstance.value && !hasInstalledFiles.value
 );
 const contentTabLabel = computed(() =>
-  isRemoteInstance.value ? "Manage" : "Content"
+  isRemoteInstance.value ? "Manage pack" : "Content"
 );
 
 const launchBlockedReason = computed(() => {
   if (!props.profile) {
-    return "Sign in with Microsoft to play. Use the top-right menu to continue setup.";
+    return "Sign in with Microsoft to continue.";
   }
   if (!props.canLaunch) {
-    return "Finish linking Minecraft in Atlas Hub before launching.";
+    return "Link your Atlas and Microsoft accounts before launching.";
   }
   return null;
 });
@@ -104,14 +104,6 @@ const launchBlockedReason = computed(() => {
           </Button>
           <Button v-else :disabled="props.working || !props.canLaunch" @click="emit('launch')">
             Play
-          </Button>
-          <Button
-            v-if="!needsRemoteInstall"
-            :disabled="props.working"
-            variant="secondary"
-            @click="emit('update-files')"
-          >
-            Update
           </Button>
         </div>
       </div>

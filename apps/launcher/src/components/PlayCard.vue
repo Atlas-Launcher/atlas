@@ -27,13 +27,13 @@ const emit = defineEmits<{
   <Card class="glass">
     <CardHeader>
       <CardTitle>Ready to play</CardTitle>
-      <CardDescription>Atlas keeps the game updated so you can jump in fast.</CardDescription>
+      <CardDescription>Atlas handles setup in the background so you can launch quickly.</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <div class="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-xs">
-        <div class="text-xs uppercase tracking-widest text-muted-foreground">Active profile</div>
+        <div class="text-xs uppercase tracking-widest text-muted-foreground">Selected profile</div>
         <div class="mt-2 text-base font-semibold text-foreground">
-          {{ props.instance?.name ?? "Select a profile to start" }}
+          {{ props.instance?.name ?? "Select a profile to continue" }}
         </div>
         <div class="mt-1 text-muted-foreground">
           {{ props.instance?.loader?.kind ?? "vanilla" }}
@@ -43,18 +43,11 @@ const emit = defineEmits<{
       </div>
       <div class="grid gap-3">
         <Button :disabled="props.working || !props.profile || !props.instance" @click="emit('launch')">
-          Play now
-        </Button>
-        <Button
-          :disabled="props.working || !props.instance"
-          variant="secondary"
-          @click="emit('download')"
-        >
-          Prepare game files
+          Play
         </Button>
       </div>
       <div class="text-xs text-muted-foreground">
-        We will download or update files only when needed.
+        If files are missing or outdated, Atlas will prepare them before launch.
       </div>
     </CardContent>
     <CardFooter>

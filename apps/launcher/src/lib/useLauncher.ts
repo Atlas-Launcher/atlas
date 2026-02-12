@@ -26,12 +26,12 @@ export function useLauncher({
   function buildOptions(): LaunchOptions | null {
     const active = instance.value;
     if (!active) {
-      setStatus("Select an instance before launching.");
+      setStatus("Select a profile before launching.");
       return null;
     }
     const gameDir = resolveGameDir(active);
     if (!gameDir) {
-      setStatus("Select an instance with a valid data directory.");
+      setStatus("Select a profile with a valid data folder.");
       return null;
     }
     const loader = active.loader ?? { kind: "vanilla", loaderVersion: null };
@@ -62,7 +62,7 @@ export function useLauncher({
 
   async function launchMinecraft() {
     if (!profile.value) {
-      setStatus("Sign in before launching.");
+      setStatus("Sign in with Microsoft before launching.");
       return;
     }
     const options = buildOptions();
@@ -70,12 +70,12 @@ export function useLauncher({
       return;
     }
     setProgress(0);
-    setStatus("Launching Minecraft...");
+    setStatus("Starting Minecraft...");
     await run(async () => {
       try {
         await invoke("launch_minecraft", { options });
       } catch (err) {
-        setStatus(`Launch failed: ${String(err)}`);
+        setStatus(`Could not start Minecraft: ${String(err)}`);
       }
     });
   }
@@ -89,9 +89,9 @@ export function useLauncher({
     await run(async () => {
       try {
         await invoke("download_minecraft_files", { options });
-        setStatus("Minecraft files downloaded.");
+        setStatus("Game files are ready.");
       } catch (err) {
-        setStatus(`Download failed: ${String(err)}`);
+        setStatus(`Could not prepare files: ${String(err)}`);
       }
     });
   }

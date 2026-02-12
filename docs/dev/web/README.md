@@ -43,6 +43,14 @@ See:
 Invite web flow uses this deep link as primary CTA and falls back to:
 - `/download/app/installer/latest`
 
+## Copy Standards
+
+Player and creator copy constants are centralized under:
+- `apps/web/app/_copy/player.ts`
+- `apps/web/app/_copy/creator.ts`
+
+Use these for repeated user-facing messaging to keep tone consistent.
+
 ## Distribution API v1
 
 The web app now exposes a unified distribution registry for launcher/cli/runner/runnerd:
