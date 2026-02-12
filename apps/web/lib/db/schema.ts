@@ -347,6 +347,44 @@ export const runnerServiceTokens = pgTable(
   })
 );
 
+export const appDeployTokens = pgTable(
+  "app_deploy_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name"),
+    tokenHash: text("token_hash").notNull(),
+    tokenPrefix: text("token_prefix").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (table) => ({
+    tokenPrefixIdx: index("app_deploy_tokens_prefix_idx").on(table.tokenPrefix),
+  })
+);
+
+export const packDeployTokens = pgTable(
+  "pack_deploy_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    packId: text("pack_id")
+      .notNull()
+      .references(() => packs.id, { onDelete: "cascade" }),
+    name: text("name"),
+    tokenHash: text("token_hash").notNull(),
+    tokenPrefix: text("token_prefix").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (table) => ({
+    packIdx: index("pack_deploy_tokens_pack_idx").on(table.packId),
+    tokenPrefixIdx: index("pack_deploy_tokens_prefix_idx").on(table.tokenPrefix),
+  })
+);
+
 export const invites = pgTable("invites", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email"),

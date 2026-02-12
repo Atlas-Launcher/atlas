@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { hasRole } from "@/lib/auth/roles";
+import { resolveAppDeployToken, touchAppDeployToken } from "@/lib/auth/deploy-tokens";
 import {
   createDownloadUrlForArtifactRef,
   createUploadUrlForProvider,
@@ -18,13 +19,16 @@ function isDistributionReleaseArtifactKey(key: string) {
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
-
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!hasRole(session, ["admin", "creator"])) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const hasCreatorOrAdminSession = Boolean(session?.user && hasRole(session, ["admin", "creator"]));
+  const hasAdminSession = Boolean(session?.user && hasRole(session, ["admin"]));
+  const appDeployToken = request.headers.get("x-atlas-app-deploy-token")?.trim() || null;
+  let appDeployTokenId: string | null = null;
+  if (appDeployToken) {
+    const record = await resolveAppDeployToken(appDeployToken);
+    if (!record) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    appDeployTokenId = record.id;
   }
 
   try {
@@ -39,6 +43,13 @@ export async function POST(request: Request) {
     }
 
     if (action === "download") {
+      if (!hasCreatorOrAdminSession) {
+        if (!session?.user) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
       const artifactRef =
         providerFromBody && !key.includes("::")
           ? { provider: providerFromBody, key }
@@ -76,11 +87,24 @@ export async function POST(request: Request) {
         );
       }
 
-      if (isDistributionReleaseArtifactKey(objectKey) && session.user.role !== "admin") {
-        return NextResponse.json(
-          { error: "Only admins can prepare distribution release uploads." },
-          { status: 403 }
-        );
+      if (isDistributionReleaseArtifactKey(objectKey)) {
+        if (!hasAdminSession && !appDeployTokenId) {
+          if (!session?.user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+          }
+          return NextResponse.json(
+            { error: "Only admins can prepare distribution release uploads." },
+            { status: 403 }
+          );
+        }
+        if (appDeployTokenId) {
+          await touchAppDeployToken(appDeployTokenId);
+        }
+      } else if (!hasCreatorOrAdminSession) {
+        if (!session?.user) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
 
       const uploadRequest = await createUploadUrlForProvider({

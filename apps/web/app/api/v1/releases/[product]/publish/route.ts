@@ -16,7 +16,8 @@ import {
   makeDownloadId,
   normalizeDistributionChannel,
 } from "@/lib/distribution";
-import { getAuthenticatedUserId } from "@/lib/auth/request-user";
+import { auth } from "@/auth";
+import { resolveAppDeployToken, touchAppDeployToken } from "@/lib/auth/deploy-tokens";
 import { encodeArtifactRef, isStorageProviderEnabled } from "@/lib/storage/harness";
 import type { StorageProviderId } from "@/lib/storage/types";
 
@@ -52,19 +53,32 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ product: string }> }
 ) {
-  const userId = await getAuthenticatedUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const appDeployToken = request.headers.get("x-atlas-app-deploy-token")?.trim() || null;
+  let authorizedByAppToken = false;
+  if (appDeployToken) {
+    const record = await resolveAppDeployToken(appDeployToken);
+    if (!record) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    await touchAppDeployToken(record.id);
+    authorizedByAppToken = true;
   }
 
-  const [user] = await db
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  if (!authorizedByAppToken) {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const [user] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
+
+    if (!user || user.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   const { product } = await params;
