@@ -105,7 +105,7 @@ function onPrimaryAction(instance: InstanceConfig) {
         </Button>
       </div>
 
-      <div class="min-h-0 flex-1 overflow-y-auto snap-y snap-proximity pt-2 pb-2 pr-1 [scrollbar-gutter:stable]">
+      <div class="min-h-0 flex-1 overflow-y-auto snap-y snap-proximity pt-2 pb-3 pr-1 [scrollbar-gutter:stable]">
         <div v-if="filteredInstances.length === 0" class="text-sm text-muted-foreground px-1">
           No profiles available yet. Sync packs or create a local profile.
         </div>
@@ -114,7 +114,7 @@ function onPrimaryAction(instance: InstanceConfig) {
           <div
             v-for="instance in filteredInstances"
             :key="instance.id"
-            class="glass group rounded-2xl p-4 snap-start"
+            class="glass shadow-none group rounded-2xl p-4 snap-start"
             :class="instance.id === props.activeInstanceId ? 'border-foreground/70 bg-foreground/5' : ''"
           >
             <button

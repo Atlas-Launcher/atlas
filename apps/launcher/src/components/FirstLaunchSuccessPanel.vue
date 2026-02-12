@@ -19,7 +19,7 @@ const emit = defineEmits<{
 <template>
   <Card
     v-if="props.open"
-    class="mx-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10"
+    class="glass mx-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10"
     role="status"
     aria-live="polite"
   >
