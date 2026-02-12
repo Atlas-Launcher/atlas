@@ -19,6 +19,12 @@ pub struct AppSettings {
     pub theme_mode: Option<String>,
     #[serde(default)]
     pub launch_readiness_wizard: LaunchReadinessWizardState,
+    #[serde(default)]
+    pub pending_intent: Option<OnboardingIntent>,
+    #[serde(default)]
+    pub first_launch_completed_at: Option<String>,
+    #[serde(default)]
+    pub first_launch_notice_dismissed_at: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -32,8 +38,20 @@ impl Default for AppSettings {
             selected_instance_id: None,
             theme_mode: Some("system".to_string()),
             launch_readiness_wizard: LaunchReadinessWizardState::default(),
+            pending_intent: None,
+            first_launch_completed_at: None,
+            first_launch_notice_dismissed_at: None,
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingIntent {
+    pub source: String,
+    pub pack_id: String,
+    pub channel: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

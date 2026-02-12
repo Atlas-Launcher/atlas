@@ -15,6 +15,7 @@ interface AuthDeps {
   setStatus: (message: string) => void;
   pushLog: (entry: string) => void;
   run: <T>(task: () => Promise<T>) => Promise<T | undefined>;
+  onUnhandledDeepLink?: (url: string) => void;
 }
 
 function resolveAuthFlow(value: string): AuthFlow {
@@ -41,7 +42,7 @@ function atlasIdentity(profile: AtlasProfile): string {
   return profile.name?.trim() || profile.email?.trim() || profile.id;
 }
 
-export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
+export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDeps) {
   const authFlow = resolveAuthFlow((import.meta.env.VITE_AUTH_FLOW ?? "deeplink").toLowerCase());
   const deviceCode = ref<DeviceCodeResponse | null>(null);
   const pendingDeeplink = ref<string | null>(null);
@@ -299,19 +300,21 @@ export function useAuth({ setStatus, pushLog, run }: AuthDeps) {
       pendingDeeplink.value = url;
       pushLog("Microsoft auth redirect received.");
       void finishDeeplinkLogin(url);
+      return;
     }
+    onUnhandledDeepLink?.(url);
   }
 
   async function initDeepLink() {
-    const currentMicrosoft = await currentDeepLinkFor("microsoft");
-    if (currentMicrosoft && authFlow !== "device_code") {
-      pendingDeeplink.value = currentMicrosoft;
-      await finishDeeplinkLogin(currentMicrosoft);
-    }
-    const currentAtlas = await currentDeepLinkFor("atlas");
-    if (currentAtlas) {
-      atlasPendingDeeplink.value = currentAtlas;
-      await finishAtlasLogin(currentAtlas);
+    try {
+      const current = await getCurrent();
+      if (current?.length) {
+        for (const url of current) {
+          handleDeepLink(url);
+        }
+      }
+    } catch (err) {
+      pushLog(`Failed to read deep-link state: ${String(err)}`);
     }
 
     await onOpenUrl((urls) => {
