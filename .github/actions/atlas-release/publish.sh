@@ -130,15 +130,25 @@ while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
 
   upload_url="$(echo "${presign_response}" | jq -r '.url')"
   artifact_ref="$(echo "${presign_response}" | jq -r '.key')"
+  mapfile -t upload_headers < <(
+    echo "${presign_response}" | jq -r '.uploadHeaders // {} | to_entries[] | "\(.key): \(.value)"'
+  )
 
   if [[ -z "${upload_url}" || "${upload_url}" == "null" || -z "${artifact_ref}" || "${artifact_ref}" == "null" ]]; then
     echo "Invalid presign response: ${presign_response}" >&2
     exit 1
   fi
 
-  curl -fsS -X PUT --data-binary @"${path}" \
-    -H "content-type: application/octet-stream" \
-    "${upload_url}" >/dev/null
+  curl_args=(-fsS -X PUT --data-binary @"${path}")
+  if [[ ${#upload_headers[@]} -gt 0 ]]; then
+    for header in "${upload_headers[@]}"; do
+      curl_args+=(-H "${header}")
+    done
+  else
+    curl_args+=(-H "content-type: application/octet-stream")
+  fi
+  curl_args+=("${upload_url}")
+  curl "${curl_args[@]}" >/dev/null
 
   jq -n \
     --arg os "${os}" \
