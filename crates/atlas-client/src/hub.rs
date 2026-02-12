@@ -985,6 +985,9 @@ pub struct CiPresignResponse {
     pub artifact_key: String,
     /// Presigned URL for uploading the artifact
     pub upload_url: String,
+    /// Optional headers required by the storage provider for direct uploads
+    #[serde(default)]
+    pub upload_headers: std::collections::HashMap<String, String>,
 }
 
 /// Request to complete a CI build.
