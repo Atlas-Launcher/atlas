@@ -427,7 +427,8 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
   }
 
   function normalizeRemoteId(packId: string) {
-    return `atlas-${packId}`;
+    const normalizedPackId = packId.trim();
+    return `atlas-${normalizedPackId}`;
   }
 
   function normalizeRemoteGameDir(baseDir: string, packSlug: string, packId: string) {
@@ -437,8 +438,30 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
       .replace(/[^a-z0-9-]/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");
-    const dirId = safeSlug.length > 0 ? `atlas-${safeSlug}` : `atlas-${packId}`;
+    const normalizedPackId = packId.trim();
+    const dirId = safeSlug.length > 0 ? `atlas-${safeSlug}` : `atlas-${normalizedPackId}`;
     return deriveInstanceDir(baseDir, dirId);
+  }
+
+  function normalizeRemotePack(remote: AtlasRemotePack): AtlasRemotePack | null {
+    const packId = remote.packId?.trim();
+    if (!packId) {
+      return null;
+    }
+
+    return {
+      ...remote,
+      packId,
+      packName: remote.packName?.trim() || "Atlas Pack",
+      packSlug: remote.packSlug?.trim() || packId,
+      channel: normalizeAtlasChannel(remote.channel),
+      buildId: remote.buildId?.trim() || null,
+      buildVersion: remote.buildVersion?.trim() || null,
+      artifactKey: remote.artifactKey?.trim() || null,
+      minecraftVersion: remote.minecraftVersion?.trim() || null,
+      modloader: remote.modloader?.trim() || null,
+      modloaderVersion: remote.modloaderVersion?.trim() || null,
+    };
   }
 
   function createRemoteInstanceConfig(
@@ -491,11 +514,12 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
 
   function dedupeRemotePacks(remotePacks: AtlasRemotePack[]) {
     const byPackId = new Map<string, AtlasRemotePack>();
-    for (const remote of remotePacks) {
-      const packId = remote.packId?.trim();
-      if (!packId) {
+    for (const candidate of remotePacks) {
+      const remote = normalizeRemotePack(candidate);
+      if (!remote) {
         continue;
       }
+      const packId = remote.packId;
       if (!byPackId.has(packId)) {
         byPackId.set(packId, remote);
         continue;
@@ -511,13 +535,13 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
   }
 
   async function syncAtlasRemotePacks(remotePacks: AtlasRemotePack[]) {
-    const localInstances = instances.value.filter((instance) => instance.source !== "atlas");
+    const localInstances = instances.value.filter((instance) => !isAtlasBackedInstance(instance));
     const existingRemoteByPackId = new Map<string, InstanceConfig>();
     for (const instance of instances.value) {
-      if (instance.source !== "atlas" || !instance.atlasPack?.packId) {
+      if (!instance.atlasPack?.packId) {
         continue;
       }
-      existingRemoteByPackId.set(instance.atlasPack.packId, instance);
+      existingRemoteByPackId.set(instance.atlasPack.packId.trim(), instance);
     }
 
     const uniqueRemotePacks = dedupeRemotePacks(remotePacks);
@@ -532,7 +556,7 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
       )
     );
 
-    const nextInstances = [...localInstances, ...remoteInstances];
+    const nextInstances = dedupeInstances([...localInstances, ...remoteInstances]);
     const nextSelected = settings.value.selectedInstanceId;
     const hasSelected = nextInstances.some((instance) => instance.id === nextSelected);
 

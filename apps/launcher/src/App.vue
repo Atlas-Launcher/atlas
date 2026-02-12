@@ -1351,7 +1351,7 @@ watch(
 
       <!-- Main Content: Floating Pane -->
       <main class="flex flex-col min-h-0 overflow-visible gap-4">
-        <div v-if="showUpdaterBanner" class="sticky top-0 z-[55]">
+        <div v-if="showUpdaterBanner" class="sticky top-0 z-[90] isolate">
           <UpdaterBanner
             :visible="showUpdaterBanner"
             :checking="updaterChecking"

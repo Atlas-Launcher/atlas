@@ -87,7 +87,7 @@ const etaLabel = computed(() => {
 
 <template>
   <div v-if="props.visible" class="pointer-events-auto">
-    <Card class="glass">
+    <Card class="relative border-border/70 bg-background shadow-[0_20px_45px_rgba(0,0,0,0.22)]">
       <CardContent class="px-5 py-4">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0">
