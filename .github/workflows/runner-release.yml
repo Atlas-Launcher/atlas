@@ -166,7 +166,7 @@ jobs:
         uses: ./.github/actions/atlas-release
         with:
           atlas_base_url: ${{ secrets.ATLAS_HUB_URL }}
-          atlas_token: ${{ secrets.ATLAS_RELEASE_TOKEN }}
+          atlas_app_deploy_token: ${{ secrets.ATLAS_APP_DEPLOY_TOKEN }}
           product: runner
           version: ${{ steps.tag.outputs.version }}
           channel: stable
@@ -209,7 +209,7 @@ jobs:
         uses: ./.github/actions/atlas-release
         with:
           atlas_base_url: ${{ secrets.ATLAS_HUB_URL }}
-          atlas_token: ${{ secrets.ATLAS_RELEASE_TOKEN }}
+          atlas_app_deploy_token: ${{ secrets.ATLAS_APP_DEPLOY_TOKEN }}
           product: runnerd
           version: ${{ steps.tag.outputs.version }}
           channel: stable

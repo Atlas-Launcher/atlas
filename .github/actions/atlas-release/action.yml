@@ -4,8 +4,8 @@ inputs:
   atlas_base_url:
     description: Atlas Hub base URL (e.g. https://hub.atlas.dev)
     required: true
-  atlas_token:
-    description: Bearer token with publish permissions
+  atlas_app_deploy_token:
+    description: App deploy token with publish permissions
     required: true
   product:
     description: Distribution product (launcher|cli|runner|runnerd)
@@ -42,7 +42,7 @@ runs:
       shell: bash
       env:
         ATLAS_BASE_URL: ${{ inputs.atlas_base_url }}
-        ATLAS_TOKEN: ${{ inputs.atlas_token }}
+        ATLAS_APP_DEPLOY_TOKEN: ${{ inputs.atlas_app_deploy_token }}
         PRODUCT: ${{ inputs.product }}
         VERSION: ${{ inputs.version }}
         CHANNEL: ${{ inputs.channel }}
