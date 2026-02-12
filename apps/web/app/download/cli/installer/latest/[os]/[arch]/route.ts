@@ -2,8 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { normalizeDownloadArch, normalizeDownloadOs } from "@/lib/download-target";
-import { pickCliInstallerAsset } from "@/lib/installer-assets";
-import { getLatestRelease } from "@/lib/releases";
+import { resolveRelease } from "@/lib/distribution";
 import { applyRateLimitHeaders, getClientIp, rateLimit } from "@/lib/rate-limit";
 
 export async function GET(
@@ -29,19 +28,25 @@ export async function GET(
   }
 
   const arch = normalizeDownloadArch(archInput);
-  const release = await getLatestRelease("cli-v");
+  const release = await resolveRelease({
+    product: "cli",
+    os,
+    arch,
+    channel: "stable",
+  });
   if (!release) {
     return NextResponse.json({ error: "No CLI release found." }, { status: 404 });
   }
 
-  const asset = pickCliInstallerAsset(release.assets ?? [], os, arch);
+  const asset =
+    release.assets.find((entry) => entry.kind === "installer") ??
+    release.assets.find((entry) => entry.kind === "binary") ??
+    null;
   if (!asset) {
     return NextResponse.json({ error: `No CLI installer found for ${os}/${arch}.` }, { status: 404 });
   }
 
-  const tag = encodeURIComponent(release.tag_name);
-  const encodedAsset = encodeURIComponent(asset.name);
-  const location = `/download/cli/installer/file/${tag}/${encodedAsset}`;
+  const location = `/api/v1/download/${asset.download_id}`;
 
   const headers = new Headers({ location });
   applyRateLimitHeaders(headers, limiter);

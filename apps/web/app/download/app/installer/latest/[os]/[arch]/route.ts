@@ -2,8 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { normalizeDownloadArch, normalizeDownloadOs } from "@/lib/download-target";
-import { pickLauncherInstallerAsset } from "@/lib/installer-assets";
-import { getLatestRelease } from "@/lib/releases";
+import { resolveRelease } from "@/lib/distribution";
 import { applyRateLimitHeaders, getClientIp, rateLimit } from "@/lib/rate-limit";
 
 export async function GET(
@@ -29,12 +28,20 @@ export async function GET(
   }
 
   const arch = normalizeDownloadArch(archInput);
-  const release = await getLatestRelease("launcher-v");
+  const release = await resolveRelease({
+    product: "launcher",
+    os,
+    arch,
+    channel: "stable",
+  });
   if (!release) {
     return NextResponse.json({ error: "No launcher release found." }, { status: 404 });
   }
 
-  const asset = pickLauncherInstallerAsset(release.assets ?? [], os, arch);
+  const asset =
+    release.assets.find((entry) => entry.kind === "installer") ??
+    release.assets.find((entry) => entry.kind === "binary") ??
+    null;
   if (!asset) {
     return NextResponse.json(
       { error: `No launcher installer found for ${os}/${arch}.` },
@@ -42,9 +49,7 @@ export async function GET(
     );
   }
 
-  const tag = encodeURIComponent(release.tag_name);
-  const encodedAsset = encodeURIComponent(asset.name);
-  const location = `/download/app/installer/file/${tag}/${encodedAsset}`;
+  const location = `/api/v1/download/${asset.download_id}`;
 
   const headers = new Headers({ location });
   applyRateLimitHeaders(headers, limiter);
