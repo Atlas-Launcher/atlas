@@ -1,15 +1,12 @@
 import {
   createPresignedDownloadUrl as createR2DownloadUrl,
   createPresignedUploadUrl as createR2UploadUrl,
-  downloadFromR2,
   isR2Configured,
-  uploadToR2,
 } from "@/lib/storage/r2";
 import {
   createVercelBlobDownloadUrl,
-  downloadFromVercelBlob,
+  createVercelBlobUploadRequest,
   isVercelBlobConfigured,
-  uploadToVercelBlob,
 } from "@/lib/storage/vercel-blob";
 import type { ArtifactRef, StorageProviderId } from "@/lib/storage/types";
 
@@ -79,16 +76,20 @@ export async function createUploadUrlForProvider({
   provider: StorageProviderId;
   key: string;
   contentType?: string;
-}) {
+}): Promise<StorageUploadRequest> {
   if (!isStorageProviderEnabled(provider)) {
     throw new Error(`Storage provider '${provider}' is not enabled.`);
   }
 
   if (provider === "r2") {
-    return createR2UploadUrl({ key, contentType });
+    return { url: await createR2UploadUrl({ key, contentType }) };
   }
 
-  throw new Error(`Provider '${provider}' does not support direct presigned uploads.`);
+  if (provider === "vercel_blob") {
+    return createVercelBlobUploadRequest({ pathname: key, contentType });
+  }
+
+  throw new Error(`Provider '${provider}' does not support direct uploads.`);
 }
 
 export async function createDownloadUrlForArtifactRef(ref: ArtifactRef) {
@@ -102,38 +103,7 @@ export async function createDownloadUrlForArtifactRef(ref: ArtifactRef) {
 
   return createVercelBlobDownloadUrl(ref.key);
 }
-
-export async function uploadViaStorageProvider({
-  provider,
-  key,
-  body,
-  contentType,
-}: {
-  provider: StorageProviderId;
-  key: string;
-  body: ArrayBuffer;
-  contentType?: string;
-}) {
-  if (!isStorageProviderEnabled(provider)) {
-    throw new Error(`Storage provider '${provider}' is not enabled.`);
-  }
-
-  if (provider === "r2") {
-    await uploadToR2({ key, body, contentType });
-    return;
-  }
-
-  await uploadToVercelBlob({ pathname: key, body, contentType });
-}
-
-export async function downloadViaStorageProvider(ref: ArtifactRef) {
-  if (!isStorageProviderEnabled(ref.provider)) {
-    throw new Error(`Storage provider '${ref.provider}' is not enabled.`);
-  }
-
-  if (ref.provider === "r2") {
-    return downloadFromR2(ref.key);
-  }
-
-  return downloadFromVercelBlob(ref.key);
+export interface StorageUploadRequest {
+  url: string;
+  headers?: Record<string, string>;
 }
