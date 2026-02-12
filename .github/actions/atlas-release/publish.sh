@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-required=(ATLAS_BASE_URL ATLAS_TOKEN PRODUCT VERSION CHANNEL ARTIFACT_PREFIX)
+required=(ATLAS_BASE_URL ATLAS_APP_DEPLOY_TOKEN PRODUCT VERSION CHANNEL ARTIFACT_PREFIX)
 for name in "${required[@]}"; do
   if [[ -z "${!name:-}" ]]; then
     echo "Missing required env: ${name}" >&2
@@ -124,7 +124,7 @@ while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
 
   presign_payload="$(jq -n --arg action "upload" --arg key "${key}" '{action:$action,key:$key}')"
   presign_response="$(curl -fsS -X POST "${ATLAS_BASE_URL}/api/v1/storage/presign" \
-    -H "authorization: Bearer ${ATLAS_TOKEN}" \
+    -H "x-atlas-app-deploy-token: ${ATLAS_APP_DEPLOY_TOKEN}" \
     -H "content-type: application/json" \
     --data "${presign_payload}")"
 
@@ -190,7 +190,7 @@ for platform in "${platforms[@]}"; do
       + (if ($published_at|length)>0 then {published_at:$published_at} else {} end))')"
 
   curl -fsS -X POST "${ATLAS_BASE_URL}/api/v1/releases/${PRODUCT}/publish" \
-    -H "authorization: Bearer ${ATLAS_TOKEN}" \
+    -H "x-atlas-app-deploy-token: ${ATLAS_APP_DEPLOY_TOKEN}" \
     -H "content-type: application/json" \
     --data "${publish_payload}" >/dev/null
 
