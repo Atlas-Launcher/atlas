@@ -2,6 +2,20 @@ import { NextResponse } from "next/server";
 
 import { isDistributionArch, isDistributionOs, resolveRelease } from "@/lib/distribution";
 
+function normalizeUpdaterOs(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "win32") return "windows";
+  if (normalized === "darwin" || normalized === "osx") return "macos";
+  return normalized;
+}
+
+function normalizeUpdaterArch(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "x86_64" || normalized === "amd64") return "x64";
+  if (normalized === "aarch64") return "arm64";
+  return normalized;
+}
+
 function buildTauriResponse(release: NonNullable<Awaited<ReturnType<typeof resolveRelease>>>) {
   const primaryAsset =
     release.assets.find((asset) => asset.kind === "installer") ??
@@ -32,7 +46,9 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ os: string; arch: string }> }
 ) {
-  const { os, arch } = await params;
+  const { os: osInput, arch: archInput } = await params;
+  const os = normalizeUpdaterOs(osInput);
+  const arch = normalizeUpdaterArch(archInput);
 
   if (!isDistributionOs(os) || !isDistributionArch(arch)) {
     return NextResponse.json({ error: "Invalid platform." }, { status: 400 });
