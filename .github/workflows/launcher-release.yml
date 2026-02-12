@@ -144,13 +144,44 @@ jobs:
           manifest=".atlas-release/launcher-files.txt"
           : > "${manifest}"
 
-          map_arch() {
+          detect_arch_hint() {
             local lower="$1"
+            if [[ "${lower}" == *.sig ]]; then
+              detect_arch_hint "${lower%.sig}"
+              return
+            fi
             if [[ "${lower}" == *arm64* || "${lower}" == *aarch64* ]]; then
               echo "arm64"
-            else
-              echo "x64"
+              return
             fi
+            if [[ "${lower}" == *x64* || "${lower}" == *x86_64* || "${lower}" == *amd64* ]]; then
+              echo "x64"
+              return
+            fi
+            return 1
+          }
+
+          resolve_arch() {
+            local lower="$1"
+            local os="$2"
+
+            if arch_hint="$(detect_arch_hint "${lower}")"; then
+              echo "${arch_hint}"
+              return
+            fi
+
+            local os_has_x64="${ARCH_HINT_X64_BY_OS[${os}]:-0}"
+            local os_has_arm64="${ARCH_HINT_ARM64_BY_OS[${os}]:-0}"
+            if [[ "${os_has_x64}" == "1" && "${os_has_arm64}" == "0" ]]; then
+              echo "x64"
+              return
+            fi
+            if [[ "${os_has_arm64}" == "1" && "${os_has_x64}" == "0" ]]; then
+              echo "arm64"
+              return
+            fi
+
+            echo "x64"
           }
 
           infer_os_kind() {
@@ -160,18 +191,33 @@ jobs:
               return
             fi
 
-            if [[ "${lower}" == *.exe || "${lower}" == *.msi || "${lower}" == *.nsis.zip || "${lower}" == *.msi.zip ]]; then
+            if [[ "${lower}" == *.exe || "${lower}" == *.msi ]]; then
               echo "windows|installer"
               return
             fi
 
-            if [[ "${lower}" == *.dmg || "${lower}" == *.pkg || "${lower}" == *.app.tar.gz || "${lower}" == *.app.zip ]]; then
+            if [[ "${lower}" == *.nsis.zip || "${lower}" == *.msi.zip ]]; then
+              echo "windows|binary"
+              return
+            fi
+
+            if [[ "${lower}" == *.dmg || "${lower}" == *.pkg ]]; then
               echo "macos|installer"
               return
             fi
 
-            if [[ "${lower}" == *.deb || "${lower}" == *.rpm || "${lower}" == *.appimage || "${lower}" == *.appimage.tar.gz ]]; then
+            if [[ "${lower}" == *.app.tar.gz || "${lower}" == *.app.zip ]]; then
+              echo "macos|binary"
+              return
+            fi
+
+            if [[ "${lower}" == *.deb || "${lower}" == *.rpm || "${lower}" == *.appimage ]]; then
               echo "linux|installer"
+              return
+            fi
+
+            if [[ "${lower}" == *.appimage.tar.gz ]]; then
+              echo "linux|binary"
               return
             fi
 
@@ -193,6 +239,24 @@ jobs:
             return 1
           }
 
+          declare -A ARCH_HINT_X64_BY_OS=()
+          declare -A ARCH_HINT_ARM64_BY_OS=()
+          while IFS= read -r file; do
+            base="$(basename "${file}")"
+            lower="$(echo "${base}" | tr '[:upper:]' '[:lower:]')"
+
+            os_kind="$(infer_os_kind "${lower}")" || continue
+            os="${os_kind%%|*}"
+
+            if arch_hint="$(detect_arch_hint "${lower}")"; then
+              if [[ "${arch_hint}" == "x64" ]]; then
+                ARCH_HINT_X64_BY_OS["${os}"]=1
+              elif [[ "${arch_hint}" == "arm64" ]]; then
+                ARCH_HINT_ARM64_BY_OS["${os}"]=1
+              fi
+            fi
+          done < <(find dist/release -type f)
+
           while IFS= read -r file; do
             base="$(basename "${file}")"
             lower="$(echo "${base}" | tr '[:upper:]' '[:lower:]')"
@@ -200,7 +264,7 @@ jobs:
             os_kind="$(infer_os_kind "${lower}")" || continue
             os="${os_kind%%|*}"
             kind="${os_kind##*|}"
-            arch="$(map_arch "${lower}")"
+            arch="$(resolve_arch "${lower}" "${os}")"
 
             if [[ "${lower}" == *.sig ]]; then
               kind="signature"
