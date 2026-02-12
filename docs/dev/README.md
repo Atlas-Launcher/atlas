@@ -13,7 +13,9 @@ These docs are for engineers working on Atlas code in this repository.
 ## Start Here
 1. Read `general/executive-summary.md`.
 2. Read `general/platform-support.md`.
-3. Open the project folder you plan to change.
+3. Read `general/deployment.md` for environment, rollout, and verification guidance.
+4. Read `general/release-distribution-api-v1.md` for CI release publishing flow.
+5. Open the project folder you plan to change.
 
 ## Important Status Notes
 - `apps/runner` (Runner v1) is legacy and unsupported.
