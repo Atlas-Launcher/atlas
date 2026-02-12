@@ -22,6 +22,7 @@ env:
   CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER: lld-link
   RUSTC_WRAPPER: sccache
   SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
 
 jobs:
   changes:
@@ -95,7 +96,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.7
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Install Linux system dependencies (launcher tauri)
         if: needs.changes.outputs.launcher_tauri == 'true'
