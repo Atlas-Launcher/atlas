@@ -42,11 +42,23 @@ async function buildTauriResponse({
   arch: "x64" | "arm64";
   requestOrigin: string;
 }) {
+  const updateAssetCandidates = release.assets.filter(
+    (asset) => asset.kind === "binary" || asset.kind === "installer"
+  );
+  const signatureAssets = release.assets.filter((asset) => asset.kind === "signature");
+
   const primaryAsset =
-    release.assets.find((asset) => asset.kind === "installer") ??
-    release.assets.find((asset) => asset.kind === "binary") ??
+    updateAssetCandidates.find((asset) =>
+      signatureAssets.some((signatureAsset) => signatureAsset.filename === `${asset.filename}.sig`)
+    ) ??
+    updateAssetCandidates.find((asset) => asset.kind === "binary") ??
+    updateAssetCandidates.find((asset) => asset.kind === "installer") ??
     null;
-  const signatureAsset = release.assets.find((asset) => asset.kind === "signature") ?? null;
+  const signatureAsset =
+    (primaryAsset
+      ? signatureAssets.find((asset) => asset.filename === `${primaryAsset.filename}.sig`) ?? null
+      : null) ??
+    null;
 
   if (!primaryAsset || !signatureAsset) {
     return null;
