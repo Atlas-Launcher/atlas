@@ -83,6 +83,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const launcherFallbackTimer = useRef<number | null>(null);
+  const launcherDownloadRef = useRef<HTMLAnchorElement | null>(null);
 
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -133,6 +134,13 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!launcherFallbackVisible) {
+      return;
+    }
+    launcherDownloadRef.current?.focus();
+  }, [launcherFallbackVisible]);
 
   useEffect(() => {
     if (!code) {
@@ -383,7 +391,10 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                     </div>
                   ) : null}
                   {inviteStatus === "warning" ? (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                    <div
+                      className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700"
+                      role="alert"
+                    >
                       {inviteError ?? "Invite acceptance needs attention."}
                     </div>
                   ) : null}
@@ -392,7 +403,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                       onClick={() => setStepAndUrl("launcher")}
                       disabled={inviteStatus === "loading"}
                     >
-                      Continue to launcher
+                      Continue to Atlas Launcher
                     </Button>
                     {inviteStatus === "warning" ? (
                       <Button variant="outline" onClick={() => setInviteStatus("idle")}>Retry invite acceptance</Button>
@@ -408,6 +419,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                       onChange={(event) => setName(event.target.value)}
                       type="text"
                       autoComplete="name"
+                      autoFocus
                       className="mt-2"
                     />
                   </label>
@@ -434,7 +446,10 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                     />
                   </label>
                   {accountError ? (
-                    <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+                    <p
+                      className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700"
+                      role="alert"
+                    >
                       {accountError}
                     </p>
                   ) : null}
@@ -460,7 +475,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
             <CardHeader>
               <CardTitle>Open Atlas Launcher</CardTitle>
               <CardDescription>
-                Use the handoff button to open Atlas Launcher and preselect your invited pack.
+                Open Atlas Launcher and jump straight to your invited pack.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -474,23 +489,28 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                 </Button>
                 <a
                   href="/download/app/installer/latest"
+                  ref={launcherDownloadRef}
                   className="inline-flex items-center rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
                   rel="noreferrer"
                   target="_blank"
                 >
-                  Download launcher
+                  Download Atlas Launcher
                 </a>
               </div>
 
               {launcherFallbackVisible ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                  Launcher didn&apos;t open automatically. Install it with the download button, then retry.
+                <div
+                  className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700"
+                  role="alert"
+                >
+                  Atlas Launcher didn&apos;t open automatically. Install it with the download button, then try opening
+                  it again.
                 </div>
               ) : null}
 
               {launcherAttempted ? (
                 <div className="flex flex-wrap gap-3">
-                  <Button variant="outline" onClick={() => setStepAndUrl("done")}>I opened launcher</Button>
+                  <Button variant="outline" onClick={() => setStepAndUrl("done")}>Launcher is open</Button>
                   {deepLink ? (
                     <button
                       type="button"
@@ -502,7 +522,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                   ) : null}
                 </div>
               ) : (
-                <Button variant="outline" onClick={() => setStepAndUrl("done")}>I already have launcher open</Button>
+                <Button variant="outline" onClick={() => setStepAndUrl("done")}>Atlas Launcher is already open</Button>
               )}
             </CardContent>
           </Card>
@@ -512,7 +532,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
           <Card>
             <CardHeader>
               <CardTitle>You&apos;re ready to play</CardTitle>
-              <CardDescription>Continue in Atlas Launcher.</CardDescription>
+              <CardDescription>Finish setup in Atlas Launcher.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <ol className="list-decimal space-y-2 pl-4 text-sm text-[var(--atlas-ink-muted)]">

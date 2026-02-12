@@ -167,7 +167,7 @@ export default function SignInClient() {
             <Badge variant="secondary">Atlas Hub</Badge>
             <CardTitle>Sign in</CardTitle>
             <CardDescription>
-              Access your packs, releases, and channel controls.
+              Continue onboarding and open Atlas Launcher.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -179,6 +179,7 @@ export default function SignInClient() {
                   onChange={(event) => setEmail(event.target.value)}
                   type="email"
                   autoComplete="username webauthn"
+                  autoFocus
                   required
                   className="mt-2"
                 />
@@ -196,7 +197,11 @@ export default function SignInClient() {
               </label>
 
               {error ? (
-                <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+                <p
+                  className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700"
+                  role="alert"
+                  aria-live="polite"
+                >
                   {error}
                 </p>
               ) : null}
@@ -215,13 +220,13 @@ export default function SignInClient() {
                 disabled={!passkeyAvailable || loading}
                 onClick={handlePasskey}
               >
-                Sign in with passkey
+                Continue with passkey
               </Button>
               <a
                 className="block text-center text-xs text-[var(--atlas-ink-muted)] underline"
                 href={signUpHref}
               >
-                Need an account? Create one
+                Need an account? Create Atlas account
               </a>
             </div>
           </CardContent>
