@@ -65,7 +65,12 @@ pub fn run(args: DeployArgs) -> Result<()> {
     let presign = hub_client.blocking_presign_ci_upload(&pack_id)?;
 
     let upload_client = Client::new();
-    upload_artifact(&upload_client, &presign.upload_url, bytes)?;
+    upload_artifact(
+        &upload_client,
+        &presign.upload_url,
+        &presign.upload_headers,
+        bytes,
+    )?;
 
     hub_client.blocking_complete_ci_build(&CiCompleteRequest {
         pack_id: pack_id.clone(),
@@ -97,10 +102,23 @@ enum CiAuth {
     OidcToken(String),
 }
 
-fn upload_artifact(client: &Client, upload_url: &str, bytes: Vec<u8>) -> Result<()> {
-    client
-        .put(upload_url)
-        .header("Content-Type", "application/octet-stream")
+fn upload_artifact(
+    client: &Client,
+    upload_url: &str,
+    upload_headers: &std::collections::HashMap<String, String>,
+    bytes: Vec<u8>,
+) -> Result<()> {
+    let mut request = client.put(upload_url);
+
+    if upload_headers.is_empty() {
+        request = request.header("Content-Type", "application/octet-stream");
+    } else {
+        for (name, value) in upload_headers {
+            request = request.header(name, value);
+        }
+    }
+
+    request
         .body(bytes)
         .send()
         .context("Failed to upload artifact")?
