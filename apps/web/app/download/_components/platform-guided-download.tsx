@@ -185,8 +185,8 @@ export function PlatformGuidedDownload({
                   }`}
                 >
                   {copyState === "ok"
-                    ? "Command copied to clipboard."
-                    : "Could not copy automatically. Please copy the command manually."}
+                    ? "Command copied."
+                    : "Could not copy automatically. Copy the command manually."}
                 </p>
               ) : null}
               {selected.action.note ? (

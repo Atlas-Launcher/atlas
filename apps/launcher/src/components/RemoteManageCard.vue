@@ -45,19 +45,19 @@ function updateChannel(value: any) {
 <template>
   <Card class="glass">
     <CardHeader>
-      <CardTitle>Manage remote pack</CardTitle>
+      <CardTitle>Remote pack</CardTitle>
       <CardDescription>
-        Manage channel and local files for this Atlas Hub pack.
+        Choose a release channel and manage local files for this Atlas pack.
       </CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <div v-if="!props.instance" class="text-sm text-muted-foreground">
-        Select a profile to manage.
+        Select a profile to continue.
       </div>
 
         <div v-else class="space-y-4">
           <div class="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-sm">
-            <div class="text-xs uppercase tracking-widest text-muted-foreground">Remote source</div>
+            <div class="text-xs uppercase tracking-widest text-muted-foreground">Pack source</div>
             <div class="mt-1 font-semibold text-foreground">
               {{ props.instance.atlasPack?.packSlug ?? props.instance.name }}
             </div>
@@ -78,20 +78,20 @@ function updateChannel(value: any) {
               Build {{ props.instance.atlasPack.buildVersion }}
             </div>
             <div v-if="runtimeLabel" class="mt-1 text-xs text-muted-foreground">
-              Runtime {{ runtimeLabel }}
+              Game setup {{ runtimeLabel }}
             </div>
           </div>
 
         <div v-if="hasInstalledFiles" class="flex flex-wrap gap-2">
           <Button :disabled="props.working" variant="destructive" @click="emit('uninstall')">
-            Uninstall local files
+            Remove local files
           </Button>
         </div>
       </div>
     </CardContent>
     <CardFooter>
       <div class="text-xs text-muted-foreground">
-        Version and loader are managed by Atlas Hub for remote packs.
+        Version and loader are managed in Atlas Hub for remote packs.
       </div>
     </CardFooter>
   </Card>

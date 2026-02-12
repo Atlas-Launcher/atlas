@@ -20,7 +20,7 @@ while [ "$#" -gt 0 ]; do
 Usage: atlas-runner-install.sh [--no-daemon-install]
 
 Options:
-  --no-daemon-install   Skip 'atlas-runner install' daemon setup.
+  --no-daemon-install   Skip 'atlas-runner host install' daemon setup.
 USAGE
       exit 0
       ;;
@@ -87,8 +87,8 @@ echo "Installed /usr/local/bin/atlas-runner"
 echo "Verify with: atlas-runner --version"
 
 if [ "\${install_daemon}" -eq 1 ]; then
-  echo "Installing atlas-runnerd systemd daemon via atlas-runner install..."
-  ATLAS_HUB_URL="${origin}" atlas-runner install
+  echo "Installing atlas-runnerd systemd daemon via atlas-runner host install..."
+  ATLAS_HUB_URL="${origin}" atlas-runner host install
   echo "Daemon install complete."
 else
   echo "Skipping daemon install (--no-daemon-install)."

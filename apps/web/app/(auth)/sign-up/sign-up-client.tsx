@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { playerWebCopy } from "@/app/_copy/player";
 
 export default function SignUpClient() {
   const router = useRouter();
@@ -69,9 +70,9 @@ export default function SignUpClient() {
         <Card>
           <CardHeader>
             <Badge variant="secondary">Atlas Hub</Badge>
-            <CardTitle>Create Atlas account</CardTitle>
+            <CardTitle>{playerWebCopy.auth.signUpTitle}</CardTitle>
             <CardDescription>
-              Create your account and continue onboarding in Atlas Launcher.
+              {playerWebCopy.auth.continueInLauncher}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -121,7 +122,7 @@ export default function SignUpClient() {
               ) : null}
 
               <Button type="submit" disabled={loading} size="lg" className="w-full">
-                {loading ? "Creating" : "Create Atlas account"}
+                {loading ? "Creating account..." : "Create account"}
               </Button>
             </form>
 
@@ -129,7 +130,7 @@ export default function SignUpClient() {
               className="block text-center text-xs text-[var(--atlas-ink-muted)] underline"
               href={signInHref}
             >
-              Already have an Atlas account? Sign in
+              Already have an account? Sign in
             </a>
           </CardContent>
         </Card>

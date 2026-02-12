@@ -102,7 +102,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       setLoading(false);
 
       if (!response.ok) {
-        setError(data?.error ?? "Unable to load packs.");
+        setError(data?.error ?? "Could not load packs.");
         return;
       }
 
@@ -112,7 +112,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       }
     };
 
-    loadPacks().catch(() => setError("Unable to load packs."));
+    loadPacks().catch(() => setError("Could not load packs."));
   }, [selectedPackId]);
 
   useEffect(() => {
@@ -128,7 +128,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       setGithubLoading(false);
 
       if (!response.ok) {
-        setGithubError(data?.error ?? "Unable to load linked accounts.");
+        setGithubError(data?.error ?? "Could not load linked accounts.");
         return;
       }
 
@@ -141,7 +141,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
     loadAccounts().catch(() => {
       setGithubLoading(false);
-      setGithubError("Unable to load linked accounts.");
+      setGithubError("Could not load linked accounts.");
     });
   }, []);
 
@@ -161,13 +161,13 @@ export default function DashboardClient({ session }: DashboardClientProps) {
         if (isPasskeyCancelError(result.error)) {
           return false;
         }
-        setError(result.error.message ?? "Unable to add passkey.");
+        setError(result.error.message ?? "Could not add passkey.");
         return false;
       }
       await refetchPasskeys();
       return true;
     } catch {
-      setError("Unable to add passkey.");
+      setError("Could not add passkey.");
       return false;
     } finally {
       setPasskeyLoading(false);
@@ -190,14 +190,14 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       });
 
       if (!response.ok) {
-        setError(await parseErrorMessage(response, "Unable to rename passkey."));
+        setError(await parseErrorMessage(response, "Could not rename passkey."));
         return false;
       }
 
       await refetchPasskeys();
       return true;
     } catch {
-      setError("Unable to rename passkey.");
+      setError("Could not rename passkey.");
       return false;
     }
   };
@@ -212,14 +212,14 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       });
 
       if (!response.ok) {
-        setError(await parseErrorMessage(response, "Unable to delete passkey."));
+        setError(await parseErrorMessage(response, "Could not delete passkey."));
         return false;
       }
 
       await refetchPasskeys();
       return true;
     } catch {
-      setError("Unable to delete passkey.");
+      setError("Could not delete passkey.");
       return false;
     }
   };
@@ -246,7 +246,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     setGithubLoading(false);
 
     if (!response.ok) {
-      setGithubError(data?.error ?? "Unable to link GitHub.");
+      setGithubError(data?.error ?? "Could not link GitHub.");
       return;
     }
 
@@ -269,7 +269,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     setGithubLoading(false);
 
     if (!response.ok) {
-      setGithubError(data?.error ?? "Unable to unlink GitHub.");
+      setGithubError(data?.error ?? "Could not unlink GitHub.");
       return;
     }
 

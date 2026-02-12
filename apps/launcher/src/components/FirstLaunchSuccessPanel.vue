@@ -31,10 +31,10 @@ const emit = defineEmits<{
             First launch complete
           </p>
           <p class="mt-1 text-xs text-muted-foreground">
-            {{ props.packName ? `${props.packName} is up and running.` : "Your profile is up and running." }}
+            {{ props.packName ? `${props.packName} launched successfully.` : "Your profile launched successfully." }}
           </p>
           <p class="mt-1 text-xs text-muted-foreground">
-            Next steps: launch again anytime, or open Launch Assist if you need tuning help.
+            You can launch again anytime, or open Launch Assist if you need help.
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -46,7 +46,7 @@ const emit = defineEmits<{
             <LifeBuoy class="mr-1 h-3.5 w-3.5" />
             Launch Assist
           </Button>
-          <Button size="sm" variant="ghost" @click="emit('dismiss')">Dismiss</Button>
+          <Button size="sm" variant="ghost" @click="emit('dismiss')">Close</Button>
         </div>
       </div>
     </CardContent>

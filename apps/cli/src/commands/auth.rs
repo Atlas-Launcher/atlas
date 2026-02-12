@@ -98,7 +98,7 @@ fn signin(args: SignInArgs) -> Result<()> {
                 bail!("Authorization was denied in the browser.")
             }
             DeviceTokenPollStatus::ExpiredToken => {
-                bail!("Device code expired. Run `atlas auth signin` again.")
+                bail!("Device code expired. Run `atlas login` again.")
             }
             DeviceTokenPollStatus::Fatal(message) => bail!(message),
         }

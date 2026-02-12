@@ -2,18 +2,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use atlas_client::hub::HubClient;
-use base64::Engine;
 use clap::Args;
-
-use crate::auth_store;
 
 #[derive(Args)]
 pub struct PushArgs {
     #[arg(long, default_value = ".")]
     input: PathBuf,
-    #[arg(long)]
-    hub_url: Option<String>,
     #[arg(long, default_value = "origin")]
     remote: String,
     #[arg(long)]
@@ -37,36 +31,8 @@ pub fn run(args: PushArgs) -> Result<()> {
         (false, value) => value,
     };
 
-    let mut github_token = None;
-    if is_github_https_url(&remote_url) {
-        let hub_url = auth_store::resolve_hub_url(args.hub_url.clone());
-        match auth_store::require_access_token_for_hub(&hub_url) {
-            Ok(access_token) => {
-                let mut client = HubClient::new(&hub_url)?;
-                client.set_token(access_token);
-                match request_linked_github_access_token(&client) {
-                    Ok(token) => github_token = token,
-                    Err(error) => {
-                        println!(
-                            "Could not fetch linked GitHub token ({error}). Trying local git credentials."
-                        );
-                    }
-                }
-            }
-            Err(_) => {
-                println!(
-                    "No valid Atlas session for linked GitHub token. Trying local git credentials."
-                );
-            }
-        }
-    }
-
-    if github_token.is_none() && is_github_https_url(&remote_url) {
-        println!("No linked GitHub token found. Trying local git credentials.");
-    }
-
     println!(
-        "Pushing {}{} via {}",
+        "Pushing {}{} via system git credentials ({})",
         args.remote,
         branch
             .as_ref()
@@ -80,14 +46,8 @@ pub fn run(args: PushArgs) -> Result<()> {
         branch.as_deref(),
         args.set_upstream,
         args.force_with_lease,
-        github_token.as_deref(),
-        &remote_url,
     )?;
     Ok(())
-}
-
-fn request_linked_github_access_token(client: &HubClient) -> Result<Option<String>> {
-    client.blocking_get_github_token()
 }
 
 fn resolve_remote_url(root: &Path, remote: &str) -> Result<String> {
@@ -140,19 +100,9 @@ fn run_git_push(
     branch: Option<&str>,
     set_upstream: bool,
     force_with_lease: bool,
-    github_token: Option<&str>,
-    remote_url: &str,
 ) -> Result<()> {
     let mut command = Command::new("git");
     command.current_dir(root);
-
-    if let Some(token) = github_token.filter(|_| is_github_https_url(remote_url)) {
-        let basic =
-            base64::engine::general_purpose::STANDARD.encode(format!("x-access-token:{token}"));
-        command.arg("-c").arg(format!(
-            "http.https://github.com/.extraheader=AUTHORIZATION: basic {basic}"
-        ));
-    }
 
     command.arg("push");
     if force_with_lease {
@@ -172,10 +122,4 @@ fn run_git_push(
     }
 
     Ok(())
-}
-
-fn is_github_https_url(repo_url: &str) -> bool {
-    repo_url
-        .to_ascii_lowercase()
-        .starts_with("https://github.com/")
 }

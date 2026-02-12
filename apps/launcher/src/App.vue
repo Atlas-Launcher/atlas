@@ -191,10 +191,10 @@ const canLaunch = computed(() => {
 
 const homeStatusMessage = computed(() => {
   if (!profile.value) {
-    return "Sign in with Microsoft to play. Use the top-right menu to continue setup.";
+    return "Sign in with Microsoft to continue.";
   }
   if (!atlasProfile.value) {
-    return "Sign in to Atlas Hub to finish setup.";
+    return "Sign in to your Atlas account to finish setup.";
   }
   if (!canLaunch.value) {
     return "Finish linking Minecraft in Atlas Hub before launching.";
@@ -397,7 +397,7 @@ async function applyPendingOnboardingIntent() {
       launchAssistMode.value = "readiness";
       launchAssistOpen.value = true;
     }
-    setStatus(`Invite ready for ${matchedInstance.name}. Install files and press Play.`);
+    setStatus(`Invite ready for ${matchedInstance.name}. Press Play to continue.`);
 
     const nextSettings = {
       ...settings.value,
@@ -492,7 +492,7 @@ async function openTroubleshooter(trigger: "settings" | "help" | "failure") {
     setStatus(
       blocker
         ? `Complete readiness check first: ${blocker}.`
-        : "Complete launch readiness checks before opening Launch Assist."
+        : "Complete readiness checks before opening Launch Assist."
     );
     pushLog(`[LaunchAssist] blocked auto-open due to readiness; trigger=${trigger}; blocker=${blocker ?? "none"}`);
     launchAssistMode.value = "readiness";
@@ -562,7 +562,7 @@ async function openLauncherLinkPage(code: string) {
 
 async function startLauncherLinking() {
   if (!profile.value) {
-    setStatus("Sign in with Microsoft first.");
+    setStatus("Sign in with Microsoft to continue.");
     pushLog("Launcher link start blocked: missing Microsoft profile.");
     return;
   }
@@ -665,7 +665,7 @@ interface AtlasSyncOptions {
 
 async function syncAtlasInstanceFiles(instance: InstanceConfig, options?: AtlasSyncOptions) {
   if (!atlasProfile.value) {
-    setStatus("Sign in to Atlas Hub to update this profile.");
+    setStatus("Sign in to your Atlas account to update this profile.");
     return false;
   }
   const packId = instance.atlasPack?.packId;
@@ -1072,7 +1072,7 @@ async function handleReadinessSignOut(scope: "microsoft" | "all") {
 
 async function refreshAtlasPacksFromLibrary() {
   if (!atlasProfile.value) {
-    setStatus("Sign in to Atlas Hub to refresh remote packs.");
+    setStatus("Sign in to your Atlas account to refresh packs.");
     return;
   }
   await syncAtlasPacks();
@@ -1393,7 +1393,7 @@ watch(
               <div>
                 <p class="font-medium text-amber-700 dark:text-amber-300">Issue detected</p>
                 <p class="text-xs text-muted-foreground">
-                  Recent status suggests a launch/setup failure. Open Launch Assist for guided fixes.
+                  We detected a launch issue. Open Launch Assist for guided fixes.
                 </p>
               </div>
               <div class="flex items-center gap-2">

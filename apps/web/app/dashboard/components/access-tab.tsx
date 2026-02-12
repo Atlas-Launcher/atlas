@@ -118,12 +118,12 @@ export default function AccessTab({
       <Dialog open={Boolean(inviteLinkModal)} onOpenChange={handleModalOpenChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Invite Link Ready</DialogTitle>
-            <DialogDescription>Copy and share this full invite URL.</DialogDescription>
+            <DialogTitle>Invite link ready</DialogTitle>
+            <DialogDescription>Copy and share this invite URL.</DialogDescription>
           </DialogHeader>
           <Input readOnly value={inviteLinkModal ?? ""} />
           <DialogFooter className="pt-2">
-            <Button onClick={handleCopyInviteLink}>{copied ? "Copied" : "Copy Link"}</Button>
+            <Button onClick={handleCopyInviteLink}>{copied ? "Copied" : "Copy link"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -131,18 +131,18 @@ export default function AccessTab({
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Access</CardTitle>
-            <CardDescription>Manage collaborators and pending invites.</CardDescription>
+            <CardDescription>Manage collaborators and active invite links.</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="users">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <TabsList>
                   <TabsTrigger value="users">Users</TabsTrigger>
-                  <TabsTrigger value="invites">Active Invites</TabsTrigger>
+                  <TabsTrigger value="invites">Invites</TabsTrigger>
                 </TabsList>
                 {canManageInvites ? (
                   <Button onClick={onCreateInvite} disabled={loading}>
-                    {loading ? "Creating..." : "Create Invite"}
+                    {loading ? "Creating..." : "Create invite"}
                   </Button>
                 ) : null}
               </div>
@@ -200,7 +200,7 @@ export default function AccessTab({
                                     onClick={() => onPromoteMember(member.userId)}
                                     disabled={loading}
                                   >
-                                    Promote
+                                    Make creator
                                   </Button>
                                 ) : null}
                                 {member.role === "creator" ? (
@@ -210,7 +210,7 @@ export default function AccessTab({
                                     onClick={() => onDemoteMember(member.userId)}
                                     disabled={loading}
                                   >
-                                    Demote
+                                    Make player
                                   </Button>
                                 ) : null}
                                 <Button
@@ -270,7 +270,7 @@ export default function AccessTab({
                                 onClick={() => onDeleteInvite(invite.id)}
                                 disabled={loading}
                               >
-                                Delete
+                                Revoke
                               </Button>
                             ) : (
                               <span className="text-xs text-[var(--atlas-ink-muted)]">—</span>

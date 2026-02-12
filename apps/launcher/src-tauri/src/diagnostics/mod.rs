@@ -87,10 +87,10 @@ pub fn build_launch_readiness(input: ReadinessContext) -> LaunchReadinessReport 
     let checklist = vec![
         ReadinessItem {
             key: "atlasLogin".to_string(),
-            label: "Sign in to Atlas Hub".to_string(),
+            label: "Sign in to Atlas".to_string(),
             ready: atlas_logged_in,
             detail: (!atlas_logged_in)
-                .then_some("Sign in to your Atlas Hub account to continue.".to_string()),
+                .then_some("Sign in to your Atlas account to continue.".to_string()),
         },
         ReadinessItem {
             key: "microsoftLogin".to_string(),
@@ -145,7 +145,7 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
         findings.push(TroubleshooterFinding {
             code: "atlas_not_signed_in".to_string(),
             title: "Sign in to Atlas Hub".to_string(),
-            detail: "You’re not currently signed in to Atlas Hub, or your session has expired."
+            detail: "You are not currently signed in to Atlas, or your session expired."
                 .to_string(),
             confidence: 100,
             suggested_actions: vec![FixAction::RelinkAccount],
@@ -155,7 +155,7 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
         findings.push(TroubleshooterFinding {
             code: "microsoft_not_signed_in".to_string(),
             title: "Sign in to Microsoft".to_string(),
-            detail: "You’re not signed in to your Microsoft account, or your session has expired."
+            detail: "You are not signed in to your Microsoft account, or your session expired."
                 .to_string(),
             confidence: 100,
             suggested_actions: vec![FixAction::RelinkAccount],
@@ -168,7 +168,7 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
         findings.push(TroubleshooterFinding {
             code: "account_link_mismatch".to_string(),
             title: "Accounts don’t match".to_string(),
-            detail: "The Microsoft account you’re signed in with isn’t the one linked to your Atlas Hub profile."
+            detail: "The Microsoft account you signed in with is not the one linked to your Atlas profile."
                 .to_string(),
             confidence: 100,
             suggested_actions: vec![FixAction::RelinkAccount],

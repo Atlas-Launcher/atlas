@@ -100,18 +100,18 @@ function updateJvmArgs(event: Event) {
 <template>
   <Card class="glass">
     <CardHeader>
-      <CardTitle>Profile options</CardTitle>
-      <CardDescription>Manage this profile and its runtime behavior.</CardDescription>
+      <CardTitle>Profile settings</CardTitle>
+      <CardDescription>Manage this profile and optional runtime overrides.</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <div v-if="!props.instance" class="text-sm text-muted-foreground">
-        Select a profile to edit its settings.
+        Select a profile to edit settings.
       </div>
 
       <Tabs v-else v-model="optionsTab" class="space-y-4">
         <TabsList class="grid w-full grid-cols-2">
           <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="runtime">Runtime override</TabsTrigger>
+          <TabsTrigger value="runtime">Runtime overrides</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" class="space-y-4">
@@ -119,7 +119,7 @@ function updateJvmArgs(event: Event) {
             v-if="props.managedByAtlas"
             class="rounded-xl border border-border/60 bg-card/70 px-4 py-3 text-xs text-muted-foreground"
           >
-            Profile identity is managed by Atlas Hub for remote packs.
+            Profile details are managed in Atlas Hub for remote packs.
           </div>
           <div class="space-y-2">
             <Label class="text-xs uppercase tracking-widest text-muted-foreground">Name</Label>
@@ -131,7 +131,7 @@ function updateJvmArgs(event: Event) {
           </div>
           <div class="space-y-2">
             <Label class="text-xs uppercase tracking-widest text-muted-foreground">
-              Data directory
+              Data folder
             </Label>
             <div class="flex items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-3 py-2">
               <div
@@ -142,7 +142,7 @@ function updateJvmArgs(event: Event) {
                 @click="copyGameDir"
                 @keydown.enter.prevent="copyGameDir"
                 @keydown.space.prevent="copyGameDir"
-                aria-label="Data directory (click to copy)"
+                aria-label="Data folder (click to copy)"
               >
                 {{ displayGameDir }}
               </div>
@@ -156,7 +156,7 @@ function updateJvmArgs(event: Event) {
               variant="secondary"
               @click="emit('duplicate', props.instance.id)"
             >
-              Duplicate profile
+              Duplicate
             </Button>
             <Button
               :disabled="props.working || props.instancesCount <= 1"
@@ -164,7 +164,7 @@ function updateJvmArgs(event: Event) {
               variant="destructive"
               @click="emit('remove', props.instance.id)"
             >
-              Delete profile
+              Delete
             </Button>
           </div>
         </TabsContent>
@@ -202,7 +202,7 @@ function updateJvmArgs(event: Event) {
               variant="ghost"
               @click="clearRuntimeOverrides"
             >
-              Use default runtime settings
+              Use launcher defaults
             </Button>
           </div>
 
@@ -243,7 +243,7 @@ function updateJvmArgs(event: Event) {
           </div>
 
           <p v-else class="text-xs text-muted-foreground">
-            This profile currently inherits runtime settings from Launcher settings.
+            This profile uses launcher runtime defaults.
           </p>
         </TabsContent>
       </Tabs>

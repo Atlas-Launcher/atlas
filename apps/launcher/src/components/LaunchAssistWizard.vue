@@ -122,14 +122,14 @@ const accountLinkStatus = computed(() => {
   }
 
   if (props.isSigningIn) {
-    return "Your browser has opened to complete sign-in. Finish there to continue.";
+    return "Your browser opened for sign-in. Complete it there to continue.";
   }
 
   if (props.linkSession) {
-    return "Waiting for Atlas to confirm your sign-in. This should only take a moment.";
+    return "Waiting for Atlas to confirm sign-in. This usually takes a few seconds.";
   }
 
-  return "Click continue to complete account linking in your browser.";
+  return "Select continue to finish account linking in your browser.";
 });
 
 function actionLabel(action: FixAction): string {
@@ -137,9 +137,9 @@ function actionLabel(action: FixAction): string {
     case "relinkAccount":
       return "Relink account";
     case "setSafeMemory":
-      return "Set safe memory";
+      return "Use safe memory settings";
     case "resyncPack":
-      return "Resync pack";
+      return "Sync pack again";
     case "repairRuntime":
       return "Repair runtime";
     case "fullRepair":
@@ -348,7 +348,7 @@ watch(
 
         <CardHeader class="space-y-3 pr-14">
           <CardTitle>Launch Assist</CardTitle>
-          <CardDescription>Complete readiness checks, diagnose issues, and retry from one flow.</CardDescription>
+          <CardDescription>Check readiness, fix issues, and retry from one guided flow.</CardDescription>
           <div class="flex gap-2 pt-1">
             <Button
               size="sm"
@@ -372,7 +372,7 @@ watch(
         <CardContent class="space-y-4 overflow-y-auto max-h-[70vh]">
           <template v-if="mode === 'readiness'">
             <div v-if="!props.readiness" class="rounded-xl border border-border/60 bg-background/40 p-3 text-sm text-muted-foreground">
-              Loading readiness status...
+              Checking readiness...
             </div>
 
             <div v-if="allReady" class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4">
@@ -432,7 +432,7 @@ watch(
                   class="p-0 text-xs text-muted-foreground underline-offset-4 hover:underline"
                   @click="revealLinkCode"
                 >
-                  Browser didn&apos;t open? Reveal code.
+                  Browser did not open? Show code.
                 </Button>
               </div>
             </div>
@@ -500,13 +500,13 @@ watch(
                   @click="fixAndRetry"
                 >
                   <LoaderCircle v-if="!!applyingFix" class="mr-1 h-3.5 w-3.5 animate-spin" />
-                  Fix &amp; retry launch
+                  Fix and retry launch
                 </Button>
               </div>
             </section>
 
             <section v-if="!loading && !hasFindings" class="rounded-2xl border border-emerald-600/30 bg-emerald-600/10 p-4 text-sm text-emerald-700 dark:text-emerald-300">
-              No launch/runtime findings detected.
+              No launch or runtime issues detected.
             </section>
 
             <section v-if="findings.length > 1" class="space-y-2">
@@ -530,7 +530,7 @@ watch(
               <div class="flex items-center justify-between gap-2">
                 <h4 class="text-xs uppercase tracking-widest text-muted-foreground">Support bundle</h4>
                 <Button size="sm" variant="outline" :disabled="supportBundleLoading" @click="generateSupportBundle">
-                  {{ supportBundleLoading ? "Generating..." : "Generate" }}
+                  {{ supportBundleLoading ? "Generating..." : "Generate bundle" }}
                 </Button>
               </div>
               <p v-if="supportBundleError" class="text-xs text-destructive" role="alert">{{ supportBundleError }}</p>

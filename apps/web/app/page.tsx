@@ -87,10 +87,10 @@ export default function Home() {
         <section className="grid gap-12 pb-16 pt-12 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-[var(--atlas-ink)]/10 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
-              Creator-friendly modpack delivery
+              Creator-friendly pack delivery
             </div>
             <h1 className="text-4xl font-semibold leading-tight text-[var(--atlas-ink)] md:text-6xl">
-              Build once. Share everywhere. Play fast.
+              Build packs with confidence. Ship updates cleanly.
             </h1>
             <p className="max-w-2xl text-lg text-[var(--atlas-ink-muted)]">
               Atlas brings your modpacks together with simple releases, reliable installs, and a hub that keeps creators
@@ -107,7 +107,7 @@ export default function Home() {
                 href="/download"
                 className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
               >
-                View Downloads
+                View install options
               </Link>
             </div>
           </div>
@@ -217,7 +217,7 @@ export default function Home() {
 
       <footer className="relative z-10 border-t border-[var(--atlas-ink)]/10 bg-white/60">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-6 px-6 py-8 text-xs text-[var(--atlas-ink-muted)]">
-          <span>Atlas Hub - Modpacks made simple</span>
+          <span>Atlas Hub - Reliable modpack delivery</span>
           <span>Build with confidence. Share with ease.</span>
         </div>
       </footer>

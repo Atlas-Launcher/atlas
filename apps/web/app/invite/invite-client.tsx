@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { playerWebCopy } from "@/app/_copy/player";
 
 type InviteStep = "account" | "launcher" | "done";
 
@@ -62,11 +63,7 @@ const steps: { id: InviteStep; label: string; detail: string }[] = [
     label: "Open launcher",
     detail: "Open Atlas Launcher and land on your invited pack.",
   },
-  {
-    id: "done",
-    label: "Ready to play",
-    detail: "Continue in Atlas Launcher.",
-  },
+  { id: "done", label: "Continue", detail: "Finish setup in Atlas Launcher." },
 ];
 
 function resolveInviteStep(value: string | null): InviteStep | null {
@@ -309,7 +306,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
       <aside className="space-y-6">
         <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-6 shadow-[0_20px_50px_rgba(16,20,24,0.1)]">
           <Badge variant="secondary">Invite</Badge>
-          <h2 className="mt-4 text-3xl font-semibold">Welcome to Atlas.</h2>
+          <h2 className="mt-4 text-3xl font-semibold">{playerWebCopy.invite.title}</h2>
           <p className="mt-3 text-sm text-[var(--atlas-ink-muted)]">
             {preview?.pack?.name
               ? `You're joining ${preview.pack.name}. We'll connect your account and send you to Atlas Launcher.`
@@ -373,21 +370,21 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
         {resolvedStep === "account" ? (
           <Card>
             <CardHeader>
-              <CardTitle>Create your Atlas account</CardTitle>
-              <CardDescription>We&apos;ll auto-accept the invite as soon as you&apos;re signed in.</CardDescription>
+              <CardTitle>{playerWebCopy.invite.accountStepTitle}</CardTitle>
+              <CardDescription>We will accept your invite as soon as you are signed in.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {accountComplete ? (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-                    Account ready. We&apos;re connecting your invite now.
+                    Account ready. Connecting your invite now.
                   </div>
                   {inviteStatus === "loading" ? (
-                    <p className="text-xs text-[var(--atlas-ink-muted)]">Accepting invite…</p>
+                    <p className="text-xs text-[var(--atlas-ink-muted)]">Accepting invite...</p>
                   ) : null}
                   {inviteStatus === "accepted" ? (
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-                      Invite accepted. You&apos;re in the pack.
+                      Invite accepted. You are in the pack.
                     </div>
                   ) : null}
                   {inviteStatus === "warning" ? (
@@ -403,10 +400,10 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                       onClick={() => setStepAndUrl("launcher")}
                       disabled={inviteStatus === "loading"}
                     >
-                      Continue to Atlas Launcher
+                      Continue
                     </Button>
                     {inviteStatus === "warning" ? (
-                      <Button variant="outline" onClick={() => setInviteStatus("idle")}>Retry invite acceptance</Button>
+                      <Button variant="outline" onClick={() => setInviteStatus("idle")}>Try again</Button>
                     ) : null}
                   </div>
                 </div>
@@ -455,7 +452,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                   ) : null}
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit" disabled={accountLoading} size="lg">
-                      {accountLoading ? "Creating" : "Create account"}
+                      {accountLoading ? "Creating account" : "Create account"}
                     </Button>
                     <Link
                       href={`/sign-in?redirect=${encodeURIComponent(`/invite?code=${code}`)}`}
@@ -473,19 +470,19 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
         {resolvedStep === "launcher" ? (
           <Card>
             <CardHeader>
-              <CardTitle>Open Atlas Launcher</CardTitle>
+              <CardTitle>{playerWebCopy.invite.launcherStepTitle}</CardTitle>
               <CardDescription>
-                Open Atlas Launcher and jump straight to your invited pack.
+                Open Atlas Launcher to continue directly to your invited pack.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-4 text-sm text-[var(--atlas-ink-muted)]">
-                Atlas Launcher will open on your invited pack so you can install and play.
+                Atlas Launcher opens on your invited pack so you can install and play.
               </div>
 
               <div className="flex flex-wrap gap-3">
                 <Button size="lg" onClick={handleOpenLauncher}>
-                  Open Atlas Launcher
+                  {playerWebCopy.invite.openLauncherCta}
                 </Button>
                 <a
                   href="/download/app/installer/latest"
@@ -494,7 +491,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                   rel="noreferrer"
                   target="_blank"
                 >
-                  Download Atlas Launcher
+                  {playerWebCopy.invite.downloadLauncherCta}
                 </a>
               </div>
 
@@ -503,27 +500,22 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                   className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700"
                   role="alert"
                 >
-                  Atlas Launcher didn&apos;t open automatically. Install it with the download button, then try opening
-                  it again.
+                  Atlas Launcher did not open automatically. Install it with the download button, then try again.
                 </div>
               ) : null}
 
-              {launcherAttempted ? (
-                <div className="flex flex-wrap gap-3">
-                  <Button variant="outline" onClick={() => setStepAndUrl("done")}>Launcher is open</Button>
-                  {deepLink ? (
-                    <button
-                      type="button"
-                      className="text-xs text-[var(--atlas-ink-muted)] underline"
-                      onClick={handleOpenLauncher}
-                    >
-                      Try opening again
-                    </button>
-                  ) : null}
-                </div>
-              ) : (
-                <Button variant="outline" onClick={() => setStepAndUrl("done")}>Atlas Launcher is already open</Button>
-              )}
+              <div className="flex flex-wrap gap-3">
+                <Button variant="outline" onClick={() => setStepAndUrl("done")}>Continue in launcher</Button>
+                {launcherAttempted && deepLink ? (
+                  <button
+                    type="button"
+                    className="text-xs text-[var(--atlas-ink-muted)] underline"
+                    onClick={handleOpenLauncher}
+                  >
+                    Try opening again
+                  </button>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
         ) : null}
@@ -531,7 +523,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
         {resolvedStep === "done" ? (
           <Card>
             <CardHeader>
-              <CardTitle>You&apos;re ready to play</CardTitle>
+              <CardTitle>{playerWebCopy.invite.doneTitle}</CardTitle>
               <CardDescription>Finish setup in Atlas Launcher.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

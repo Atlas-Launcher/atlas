@@ -11,13 +11,23 @@ Binary name: `atlas`
 - CI workflow sync/bootstrap.
 - Deploy/build completion path against Hub APIs.
 
-## Command Groups (Current)
+## Command Surface (Current)
 
 Defined in `apps/cli/src/main.rs`:
-- `pack` (init/reinit/channel/build/add/rm/list/pull/push/commit/validate)
-- `auth`
-- `ci` (init/update)
-- `deploy`
+- `login`
+- `logout`
+- `status`
+- `init`
+- `reinit`
+- `pull`
+- `push`
+- `build`
+- `publish`
+- `promote`
+- `validate`
+- `commit`
+- `mod` (`add`, `remove`, `list`, `import`)
+- `workflow` (`init`, `update`)
 - `completion`
 
 ## Current Usage Intent

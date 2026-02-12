@@ -66,7 +66,7 @@ function formatDate(seconds: number) {
   <Card class="glass">
     <CardHeader>
       <CardTitle>Mods</CardTitle>
-      <CardDescription>Manage add-ons for the active profile.</CardDescription>
+      <CardDescription>Manage mods for the active profile.</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <div v-if="!props.instance" class="text-sm text-muted-foreground">
@@ -77,7 +77,7 @@ function formatDate(seconds: number) {
         <div class="grid gap-3 md:grid-cols-[1.4fr_0.6fr]">
           <Input
             :model-value="search"
-            placeholder="Search mods..."
+            placeholder="Search mods"
             @update:modelValue="(value) => (search = String(value))"
           />
           <div class="flex flex-wrap items-center justify-end gap-2">
@@ -90,8 +90,8 @@ function formatDate(seconds: number) {
           </div>
         </div>
         <div class="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-xs text-muted-foreground">
-          Mods live in <span class="font-semibold text-foreground mono">{{ props.modsDir }}</span>. Drop `.jar` or `.zip`
-          files into the folder to install.
+          Mods are stored in <span class="font-semibold text-foreground mono">{{ props.modsDir }}</span>. Add `.jar` or `.zip`
+          files to install them.
         </div>
 
         <div class="space-y-2">
@@ -132,14 +132,14 @@ function formatDate(seconds: number) {
             </div>
           </div>
           <div v-if="filteredMods.length === 0" class="text-sm text-muted-foreground">
-            No mods yet.
+            No mods added yet.
           </div>
         </div>
       </div>
     </CardContent>
     <CardFooter>
       <div class="text-xs text-muted-foreground">
-        Mods require a compatible loader for the selected profile.
+        Mods need a compatible loader for the selected profile.
       </div>
     </CardFooter>
   </Card>

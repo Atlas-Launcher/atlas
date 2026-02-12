@@ -46,7 +46,7 @@ const primaryTaskStatusText = computed(() => {
     return "";
   }
   if (primaryTask.value.indeterminate && primaryTask.value.statusText.trim().length === 0) {
-    return "Working through setup. Time remaining will appear once progress is measurable.";
+    return "Working through setup. Time remaining appears when progress can be measured.";
   }
   return primaryTask.value.statusText;
 });
@@ -78,7 +78,7 @@ const primaryTaskEtaText = computed(() => {
         <CardContent class="space-y-3 py-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div class="text-xs uppercase tracking-widest text-muted-foreground/60 mb-2">Task Center</div>
+              <div class="text-xs uppercase tracking-widest text-muted-foreground/60 mb-2">Tasks</div>
               <div class="text-sm font-semibold text-foreground">
                 {{ primaryTaskHeadline }}
               </div>

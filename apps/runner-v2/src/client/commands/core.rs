@@ -1,10 +1,12 @@
 use crate::client::connect_or_start;
 use atlas_client::hub::HubClient;
+use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 use runner_core_v2::proto::{Envelope, Outbound, Request, Response};
 use runner_core_v2::PROTOCOL_VERSION;
 use runner_v2_utils::{ensure_dir, runtime_paths_v2};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use sysinfo::System;
 
@@ -95,17 +97,17 @@ pub async fn up(
             if accept_eula {
                 config.eula_accepted = Some(true);
             } else {
+                if !is_interactive_terminal() {
+                    anyhow::bail!(
+                        "Minecraft EULA acceptance is required. Re-run with `--accept-eula` or run in interactive mode."
+                    );
+                }
                 println!("Minecraft EULA: https://aka.ms/MinecraftEULA");
-                print!("Do you accept the Minecraft EULA? (y/N): ");
-                std::io::Write::flush(&mut std::io::stdout())?;
-                let accepted = tokio::task::spawn_blocking(|| {
-                    let mut input = String::new();
-                    std::io::stdin().read_line(&mut input).unwrap();
-                    let answer = input.trim().to_ascii_lowercase();
-                    answer == "y" || answer == "yes"
-                })
-                .await
-                .unwrap();
+                let accepted = Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Do you accept the Minecraft EULA?")
+                    .default(false)
+                    .interact()
+                    .map_err(|err| anyhow::anyhow!("Failed to read EULA confirmation: {err}"))?;
                 if !accepted {
                     anyhow::bail!("EULA not accepted. Re-run with --accept-eula to proceed.");
                 }
@@ -113,60 +115,50 @@ pub async fn up(
             }
         }
         if config.max_ram.is_none() {
-            // first run, prompt for channel
-            println!("Select channel to follow:");
-            println!("1. production (stable releases)");
-            println!("2. beta (pre-release testing)");
-            println!("3. dev (latest development builds)");
-            print!("Enter choice (1-3, default 1): ");
-            std::io::Write::flush(&mut std::io::stdout())?;
-            let channel = tokio::task::spawn_blocking(|| {
-                let mut input = String::new();
-                std::io::stdin().read_line(&mut input).unwrap();
-                let choice = input.trim().parse::<u32>().unwrap_or(1);
-                match choice {
-                    1 => "production".to_string(),
-                    2 => "beta".to_string(),
-                    3 => "dev".to_string(),
-                    _ => "production".to_string(),
-                }
-            })
-            .await
-            .unwrap();
-            config.channel = channel;
+            if is_interactive_terminal() {
+                let channels = ["production", "beta", "dev"];
+                let descriptions = [
+                    "production (stable releases)",
+                    "beta (pre-release testing)",
+                    "dev (latest development builds)",
+                ];
+                let selection = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Choose a release channel")
+                    .items(&descriptions)
+                    .default(0)
+                    .interact()
+                    .map_err(|err| anyhow::anyhow!("Failed to read channel selection: {err}"))?;
+                config.channel = channels[selection].to_string();
+            } else {
+                config.channel = "production".to_string();
+            }
         }
         let max_ram_val_mb = if let Some(arg_val_mb) = max_ram {
             arg_val_mb.max(512)
         } else if let Some(existing) = config.max_ram {
             normalize_max_ram_mb(existing)
         } else {
-            // prompt
             let default_mb = get_default_max_ram_mb();
             let default_gb = default_mb.div_ceil(1024);
-            println!(
-                "Default RAM limit is {} GB ({} MB). Override? (y/n)",
-                default_gb, default_mb
-            );
-            let do_override = tokio::task::spawn_blocking(|| {
-                use std::io::{self};
-                let stdin = io::stdin();
-                let mut input = String::new();
-                stdin.read_line(&mut input).unwrap();
-                input.trim().to_lowercase() == "y"
-            })
-            .await
-            .unwrap();
+            if !is_interactive_terminal() {
+                anyhow::bail!(
+                    "RAM limit is not configured yet. Re-run with `--max-ram <MB>` or run in interactive mode."
+                );
+            }
+            let do_override = Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt(format!(
+                    "Use a custom RAM limit? (default: {} GB / {} MB)",
+                    default_gb, default_mb
+                ))
+                .default(false)
+                .interact()
+                .map_err(|err| anyhow::anyhow!("Failed to read RAM confirmation: {err}"))?;
             if do_override {
-                println!("Enter RAM limit in GB:");
-                let ram_gb = tokio::task::spawn_blocking(move || {
-                    use std::io::{self};
-                    let stdin = io::stdin();
-                    let mut input = String::new();
-                    stdin.read_line(&mut input).unwrap();
-                    input.trim().parse::<u32>().unwrap_or(default_gb)
-                })
-                .await
-                .unwrap();
+                let ram_gb = Input::<u32>::with_theme(&ColorfulTheme::default())
+                    .with_prompt("RAM limit in GB")
+                    .default(default_gb)
+                    .interact_text()
+                    .map_err(|err| anyhow::anyhow!("Failed to read RAM amount: {err}"))?;
                 (ram_gb.max(1)) * 1024
             } else {
                 default_mb
@@ -314,6 +306,10 @@ mod tests {
 
 fn default_channel() -> String {
     "production".to_string()
+}
+
+fn is_interactive_terminal() -> bool {
+    io::stdin().is_terminal() && io::stdout().is_terminal()
 }
 
 async fn read_response_payload(

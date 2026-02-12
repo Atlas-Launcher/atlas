@@ -67,7 +67,7 @@ function updateThemeMode(value: string) {
   <Card class="glass">
     <CardHeader>
       <CardTitle>Settings</CardTitle>
-      <CardDescription>Manage launcher defaults and sign-in options.</CardDescription>
+      <CardDescription>Set launcher defaults and account options.</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
       <Tabs v-model="settingsTab" class="space-y-4">
@@ -80,7 +80,7 @@ function updateThemeMode(value: string) {
         <TabsContent value="runtime" class="space-y-4">
           <div class="space-y-2">
             <label class="text-xs uppercase tracking-widest text-muted-foreground">
-              Default Java memory (MB)
+              Default memory (MB)
             </label>
             <Input
               type="number"
@@ -91,7 +91,7 @@ function updateThemeMode(value: string) {
           </div>
           <div class="space-y-2">
             <label class="text-xs uppercase tracking-widest text-muted-foreground">
-              Default JVM launch options
+              Default JVM options
             </label>
             <textarea
               class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -101,7 +101,7 @@ function updateThemeMode(value: string) {
               @input="updateDefaultJvmArgs"
             />
             <p class="text-xs text-muted-foreground">
-              Applied when a profile does not override runtime settings.
+              Used when a profile does not define its own runtime overrides.
             </p>
           </div>
         </TabsContent>
@@ -155,7 +155,7 @@ function updateThemeMode(value: string) {
                     Update {{ props.updaterUpdateVersion }} is available.
                   </template>
                   <template v-else>
-                    Check for launcher updates manually.
+                  Check for launcher updates manually.
                   </template>
                 </p>
               </div>
@@ -173,7 +173,7 @@ function updateThemeMode(value: string) {
 
           <div class="space-y-2">
             <label class="text-xs uppercase tracking-widest text-muted-foreground">
-              Microsoft Client ID
+              Microsoft client ID
             </label>
             <Input
               :model-value="props.settingsClientId"
@@ -192,7 +192,7 @@ function updateThemeMode(value: string) {
             />
           </div>
           <div class="text-xs text-muted-foreground">
-            Sign out and sign back in after changing auth settings.
+            Sign out and sign back in after changing account settings.
           </div>
         </TabsContent>
       </Tabs>
@@ -200,7 +200,7 @@ function updateThemeMode(value: string) {
     <CardFooter>
       <div class="flex w-full items-center justify-between gap-3">
         <div />
-        <Button :disabled="props.working" variant="secondary" @click="emit('save-settings')">Save settings</Button>
+        <Button :disabled="props.working" variant="secondary" @click="emit('save-settings')">Save</Button>
       </div>
     </CardFooter>
   </Card>

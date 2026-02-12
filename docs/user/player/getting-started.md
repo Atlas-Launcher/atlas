@@ -25,7 +25,7 @@ Launcher opens with your invited pack preselected. It does not auto-install.
 
 Atlas uses a single Launch Assist flow to get you launch-ready:
 1. Sign in to Atlas.
-2. Sign in with Microsoft.
+2. Sign in to Microsoft.
 3. Complete account linking so IDs match.
 
 Launch Assist shows one next action at a time for blockers.

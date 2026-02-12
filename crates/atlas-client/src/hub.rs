@@ -186,6 +186,31 @@ pub struct DistributionReleaseResponse {
     pub assets: Vec<DistributionReleaseAsset>,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PackBuild {
+    pub id: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub commit_hash: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PackChannel {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub updated_at: String,
+    #[serde(default)]
+    pub build_id: Option<String>,
+    #[serde(default)]
+    pub build_version: Option<String>,
+    #[serde(default)]
+    pub build_commit: Option<String>,
+}
+
 impl HubClient {
     pub fn new(base_url: &str) -> Result<Self> {
         let base_url = Url::parse(base_url)?;
@@ -516,6 +541,83 @@ impl HubClient {
             modloader: artifact.modloader,
             modloader_version: artifact.modloader_version,
         })
+    }
+
+    pub async fn list_pack_builds(&self, pack_id: &str) -> Result<Vec<PackBuild>> {
+        let url = self.base_url.join(&format!("/api/v1/packs/{pack_id}/builds"))?;
+        let response = self
+            .client
+            .get(url)
+            .headers(self.get_auth_headers().await?)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        #[derive(Debug, Deserialize)]
+        struct BuildsResponse {
+            builds: Vec<PackBuild>,
+        }
+
+        response
+            .json::<BuildsResponse>()
+            .await
+            .context("Failed to parse pack builds response")
+            .map(|payload| payload.builds)
+    }
+
+    pub async fn list_pack_channels(&self, pack_id: &str) -> Result<Vec<PackChannel>> {
+        let url = self
+            .base_url
+            .join(&format!("/api/v1/packs/{pack_id}/channels"))?;
+        let response = self
+            .client
+            .get(url)
+            .headers(self.get_auth_headers().await?)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        #[derive(Debug, Deserialize)]
+        struct ChannelsResponse {
+            channels: Vec<PackChannel>,
+        }
+
+        response
+            .json::<ChannelsResponse>()
+            .await
+            .context("Failed to parse pack channels response")
+            .map(|payload| payload.channels)
+    }
+
+    pub async fn promote_pack_channel(
+        &self,
+        pack_id: &str,
+        channel: &str,
+        build_id: &str,
+    ) -> Result<()> {
+        let url = self
+            .base_url
+            .join(&format!("/api/v1/packs/{pack_id}/channels"))?;
+        let response = self
+            .client
+            .post(url)
+            .headers(self.get_auth_headers().await?)
+            .json(&serde_json::json!({
+                "channel": channel,
+                "buildId": build_id,
+            }))
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Channel promotion failed (HTTP {}): {}",
+                status.as_u16(),
+                body
+            );
+        }
+        Ok(())
     }
 
     pub async fn get_whitelist(&self, pack_id: &str) -> Result<Vec<WhitelistEntry>> {
@@ -957,6 +1059,23 @@ impl HubClient {
     /// Returns a vector of `LauncherPack` objects representing available packs.
     pub fn blocking_list_launcher_packs(&self) -> Result<Vec<LauncherPack>> {
         self.block_on_hub_future(self.list_launcher_packs())
+    }
+
+    pub fn blocking_list_pack_builds(&self, pack_id: &str) -> Result<Vec<PackBuild>> {
+        self.block_on_hub_future(self.list_pack_builds(pack_id))
+    }
+
+    pub fn blocking_list_pack_channels(&self, pack_id: &str) -> Result<Vec<PackChannel>> {
+        self.block_on_hub_future(self.list_pack_channels(pack_id))
+    }
+
+    pub fn blocking_promote_pack_channel(
+        &self,
+        pack_id: &str,
+        channel: &str,
+        build_id: &str,
+    ) -> Result<()> {
+        self.block_on_hub_future(self.promote_pack_channel(pack_id, channel, build_id))
     }
 }
 

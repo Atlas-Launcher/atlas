@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { playerWebCopy } from "@/app/_copy/player";
 
 interface LauncherLinkClientProps {
   code: string | null;
@@ -90,8 +91,8 @@ export default function LauncherLinkClient({ code, signedIn }: LauncherLinkClien
       <Card>
         <CardHeader>
           <Badge variant="secondary">Launcher Link</Badge>
-          <CardTitle>Connect your launcher</CardTitle>
-          <CardDescription>Sign in to finish linking your Minecraft profile.</CardDescription>
+          <CardTitle>{playerWebCopy.link.title}</CardTitle>
+          <CardDescription>Sign in to finish linking your launcher.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           <Link href={`/sign-in?redirect=${redirect}`}>
@@ -110,7 +111,7 @@ export default function LauncherLinkClient({ code, signedIn }: LauncherLinkClien
       <Card>
         <CardHeader>
           <Badge variant="secondary">Launcher Link</Badge>
-          <CardTitle>Unable to link</CardTitle>
+          <CardTitle>Unable to link launcher</CardTitle>
           <CardDescription>{message ?? "Link session failed."}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -128,7 +129,7 @@ export default function LauncherLinkClient({ code, signedIn }: LauncherLinkClien
         <CardHeader>
           <Badge variant="secondary">Launcher Link</Badge>
           <CardTitle>Link confirmed</CardTitle>
-          <CardDescription>Return to the launcher to finish syncing.</CardDescription>
+          <CardDescription>{playerWebCopy.link.success}</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-[var(--atlas-ink-muted)]">
