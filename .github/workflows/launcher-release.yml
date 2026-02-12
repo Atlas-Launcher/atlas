@@ -108,7 +108,8 @@ jobs:
               continue
             fi
             echo "Generating missing updater signature for ${file}"
-            pnpm --filter atlas exec tauri signer sign "${file}"
+            file_abs="${PWD}/${file#./}"
+            pnpm --filter atlas exec tauri signer sign "${file_abs}"
           done
 
       - name: Collect launcher bundles
