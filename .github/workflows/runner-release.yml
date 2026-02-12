@@ -14,6 +14,7 @@ concurrency:
 
 env:
   CARGO_PROFILE_RELEASE_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
   CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: lld-link
   CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER: lld-link
   RUSTC_WRAPPER: sccache
@@ -21,8 +22,8 @@ env:
   SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
 
 jobs:
-  build-runner:
-    name: Build runner-v2 (${{ matrix.os }})
+  build-binaries:
+    name: Build runner-v2 + runnerd-v2 (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     if: startsWith(github.ref_name, 'runner-v')
     strategy:
@@ -34,14 +35,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          lfs: true
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Install mold linker (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mold
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -52,19 +58,35 @@ jobs:
           cache-all-crates: true
           cache-on-failure: true
 
-      - name: Build runner-v2
+      - name: Build runner-v2 (Linux)
+        if: runner.os == 'Linux'
+        run: ATLAS_BUILD_VERSION="${GITHUB_REF_NAME#runner-v}" RUSTFLAGS="-C link-arg=-fuse-ld=mold" cargo build --release -p runner-v2
+
+      - name: Build runner-v2 (Non-Linux)
+        if: runner.os != 'Linux'
         run: ATLAS_BUILD_VERSION="${GITHUB_REF_NAME#runner-v}" cargo build --release -p runner-v2
 
-      - name: Stage runner-v2 artifact
+      - name: Build runnerd-v2 (Linux)
+        if: runner.os == 'Linux'
+        run: ATLAS_BUILD_VERSION="${GITHUB_REF_NAME#runner-v}" RUSTFLAGS="-C link-arg=-fuse-ld=mold" cargo build --release -p runnerd-v2
+
+      - name: Build runnerd-v2 (Non-Linux)
+        if: runner.os != 'Linux'
+        run: ATLAS_BUILD_VERSION="${GITHUB_REF_NAME#runner-v}" cargo build --release -p runnerd-v2
+
+      - name: Stage runner binaries
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
 
-          BIN_PATH="target/release/atlas-runner"
-          FILE_NAME="atlas-runner-${{ runner.os }}-${{ runner.arch }}"
+          RUNNER_BIN_PATH="target/release/atlas-runner"
+          RUNNER_FILE_NAME="atlas-runner-${{ runner.os }}-${{ runner.arch }}"
+          RUNNERD_BIN_PATH="target/release/atlas-runnerd"
+          RUNNERD_FILE_NAME="atlas-runnerd-${{ runner.os }}-${{ runner.arch }}"
 
-          cp "${BIN_PATH}" "dist/${FILE_NAME}"
+          cp "${RUNNER_BIN_PATH}" "dist/${RUNNER_FILE_NAME}"
+          cp "${RUNNERD_BIN_PATH}" "dist/${RUNNERD_FILE_NAME}"
           ls -lah dist
 
       - name: Upload runner-v2 artifact
@@ -73,52 +95,6 @@ jobs:
           name: atlas-runner-${{ matrix.os }}
           path: dist/atlas-runner-*
           if-no-files-found: error
-
-  build-runnerd:
-    name: Build runnerd-v2 (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    if: startsWith(github.ref_name, 'runner-v')
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          lfs: true
-          fetch-depth: 0
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            . -> target
-          shared-key: atlas-rust-${{ runner.os }}-workspace
-          cache-all-crates: true
-          cache-on-failure: true
-
-      - name: Build runnerd-v2
-        run: ATLAS_BUILD_VERSION="${GITHUB_REF_NAME#runner-v}" cargo build --release -p runnerd-v2
-
-      - name: Stage runnerd-v2 artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-
-          BIN_PATH="target/release/atlas-runnerd"
-          FILE_NAME="atlas-runnerd-${{ runner.os }}-${{ runner.arch }}"
-
-          cp "${BIN_PATH}" "dist/${FILE_NAME}"
-          ls -lah dist
 
       - name: Upload runnerd-v2 artifact
         uses: actions/upload-artifact@v4
@@ -131,10 +107,12 @@ jobs:
     name: Release Runner v2
     runs-on: ubuntu-latest
     if: startsWith(github.ref_name, 'runner-v')
-    needs: [build-runner, build-runnerd]
+    needs: [build-binaries]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Parse version
         id: tag
