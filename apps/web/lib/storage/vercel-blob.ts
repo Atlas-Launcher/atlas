@@ -1,4 +1,5 @@
 import { head } from "@vercel/blob";
+import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
 
 const VERCEL_BLOB_API_BASE = "https://blob.vercel-storage.com";
 
@@ -107,4 +108,40 @@ export async function createVercelBlobDownloadUrl(pathname: string) {
 
   const metadata = await head(normalizedPath, { token });
   return metadata.downloadUrl ?? metadata.url;
+}
+
+export async function createVercelBlobUploadRequest({
+  pathname,
+  contentType,
+}: {
+  pathname: string;
+  contentType?: string;
+}) {
+  const { token } = getConfig();
+  const normalizedPath = normalizeBlobPathname(pathname);
+  const resolvedContentType = contentType ?? "application/octet-stream";
+  if (!normalizedPath) {
+    throw new Error("Blob pathname is required");
+  }
+
+  const clientToken = await generateClientTokenFromReadWriteToken({
+    pathname: normalizedPath,
+    token,
+    addRandomSuffix: false,
+    allowOverwrite: false,
+    allowedContentTypes: [resolvedContentType],
+    validUntil: Date.now() + 5 * 60 * 1000,
+  });
+
+  const encodedPath = encodeBlobPath(normalizedPath);
+
+  return {
+    url: `${VERCEL_BLOB_API_BASE}/${encodedPath}`,
+    headers: {
+      Authorization: `Bearer ${clientToken}`,
+      "x-add-random-suffix": "0",
+      "x-content-type": resolvedContentType,
+      "content-type": resolvedContentType,
+    } as Record<string, string>,
+  };
 }
