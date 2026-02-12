@@ -68,12 +68,12 @@ export default function ManageTab({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Manage Pack</CardTitle>
-        <CardDescription>Update pack settings and Atlas-specific metadata.</CardDescription>
+        <CardTitle>Manage pack</CardTitle>
+        <CardDescription>Update pack settings and service tokens.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="inline-block w-[42rem] max-w-full rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 p-4">
-          <h3 className="text-sm font-semibold">Pack Name</h3>
+          <h3 className="text-sm font-semibold">Pack name</h3>
           {canManageFriendlyName ? (
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <Input
@@ -83,7 +83,7 @@ export default function ManageTab({
                 placeholder={packName}
               />
               <Button onClick={onSaveFriendlyName} disabled={savingFriendlyName}>
-                {savingFriendlyName ? "Saving..." : "Change Name"}
+                {savingFriendlyName ? "Saving..." : "Save name"}
               </Button>
             </div>
           ) : (
@@ -93,7 +93,7 @@ export default function ManageTab({
 
         {canDeletePack ? (
           <div className="inline-block w-[42rem] max-w-full space-y-4 rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 p-4">
-            <h3 className="text-lg font-semibold">Delete Pack</h3>
+            <h3 className="text-lg font-semibold">Delete pack</h3>
             <div className="inline-block w-[42rem] max-w-full rounded-2xl border border-amber-300 bg-amber-50 p-4">
               <p className="text-sm text-amber-800">
                 Deleting a pack removes build history, channels, invites, and access records from
@@ -125,7 +125,7 @@ export default function ManageTab({
             <div>
               <h3 className="text-sm font-semibold">Runner Service Tokens</h3>
               <p className="text-xs text-[var(--atlas-ink-muted)]">
-                Manage deploy keys used by Atlas Runner.
+              Manage deploy keys used by Atlas Runner.
               </p>
             </div>
           </div>

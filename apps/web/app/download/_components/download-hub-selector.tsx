@@ -32,9 +32,9 @@ export function DownloadHubSelector({
           <p className="inline-flex items-center rounded-full border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
             Atlas downloads
           </p>
-          <h1 className="mt-4 text-4xl font-semibold leading-tight md:text-6xl">Choose your Atlas install path</h1>
+          <h1 className="mt-4 text-4xl font-semibold leading-tight md:text-6xl">Choose what you want to install</h1>
           <p className="mx-auto mt-4 max-w-3xl text-lg text-[var(--atlas-ink-muted)]">
-            Pick a product first, then follow the guided install flow for your platform.
+            Pick a product, then follow the guided steps for your platform.
           </p>
         </div>
 
@@ -71,10 +71,11 @@ export function DownloadHubSelector({
           >
             {selected.primaryLabel}
           </a>
-          <div className="mt-4">
+          <div className="mt-4 text-xs text-[var(--atlas-ink-muted)]">
+            Need more options?
             <Link
               href={selected.pageHref}
-              className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
+              className="ml-1 underline underline-offset-4"
             >
               {selected.pageLabel}
             </Link>

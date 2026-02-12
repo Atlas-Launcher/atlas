@@ -6,6 +6,10 @@ export interface ActiveTask {
   phase: string;
   message: string;
   percent: number;
+  stageLabel: string;
+  statusText: string;
+  etaSeconds: number | null;
+  indeterminate: boolean;
   startedAt: number;
   lastUpdated: number;
 }
@@ -17,6 +21,56 @@ export function useStatus() {
   const tasks = ref<ActiveTask[]>([]);
   const ACTIVE_LAUNCH_TASK_ID = "launch:active";
   const ACTIVE_LAUNCH_TASK_STALE_MS = 300000;
+  const latestLaunchSuccessAt = ref<number | null>(null);
+  let lastEtaSample:
+    | {
+      stageLabel: string;
+      percent: number;
+      at: number;
+    }
+    | null = null;
+
+  function normalizeMessage(message: string | null | undefined) {
+    const value = (message ?? "").trim();
+    return value || "Working on setup...";
+  }
+
+  function mapLaunchStage(event: LaunchEvent) {
+    const phase = event.phase.trim().toLowerCase();
+    if (phase === "atlas-sync") {
+      return "Syncing pack";
+    }
+    if (
+      phase === "setup" ||
+      phase === "download" ||
+      phase === "client" ||
+      phase === "libraries" ||
+      phase === "natives" ||
+      phase === "assets"
+    ) {
+      return "Preparing files";
+    }
+    if (phase === "launch") {
+      return "Starting Minecraft";
+    }
+    return "Preparing files";
+  }
+
+  function resolvePercent(event: LaunchEvent) {
+    if (typeof event.percent === "number" && Number.isFinite(event.percent)) {
+      return Math.max(0, Math.min(100, Math.round(event.percent)));
+    }
+    if (
+      typeof event.current === "number" &&
+      Number.isFinite(event.current) &&
+      typeof event.total === "number" &&
+      Number.isFinite(event.total) &&
+      event.total > 0
+    ) {
+      return Math.max(0, Math.min(100, Math.round((event.current / event.total) * 100)));
+    }
+    return 0;
+  }
 
   function pushLog(entry: string) {
     logs.value = [entry, ...logs.value].slice(0, 200);
@@ -37,6 +91,10 @@ export function useStatus() {
       phase: label,
       message: label,
       percent: 0,
+      stageLabel: label,
+      statusText: label,
+      etaSeconds: null,
+      indeterminate: true,
       startedAt: now,
       lastUpdated: now
     });
@@ -79,17 +137,47 @@ export function useStatus() {
   function upsertTaskFromEvent(event: LaunchEvent) {
     const now = Date.now();
     const id = ACTIVE_LAUNCH_TASK_ID;
-    const percent =
-      typeof event.percent === "number"
-        ? Math.round(event.percent)
-        : event.current && event.total
-          ? Math.round((event.current / event.total) * 100)
-          : 0;
+    const percent = resolvePercent(event);
+    const stageLabel = mapLaunchStage(event);
+    const statusText = normalizeMessage(event.message);
+    const hasKnownProgress =
+      typeof event.percent === "number" ||
+      (typeof event.current === "number" && typeof event.total === "number" && event.total > 0);
+    let etaSeconds: number | null = null;
+
+    if (hasKnownProgress && percent > 0 && percent < 100) {
+      if (
+        lastEtaSample &&
+        lastEtaSample.stageLabel === stageLabel &&
+        percent > lastEtaSample.percent
+      ) {
+        const elapsedSeconds = (now - lastEtaSample.at) / 1000;
+        const progressDelta = percent - lastEtaSample.percent;
+        const progressRate = progressDelta / Math.max(elapsedSeconds, 0.1);
+        if (elapsedSeconds >= 2 && progressDelta >= 2 && progressRate > 0) {
+          const estimate = Math.round((100 - percent) / progressRate);
+          if (Number.isFinite(estimate) && estimate > 0 && estimate < 7200) {
+            etaSeconds = estimate;
+          }
+        }
+      }
+      lastEtaSample = {
+        stageLabel,
+        percent,
+        at: now
+      };
+    } else {
+      lastEtaSample = null;
+    }
 
     const existing = tasks.value.find((task) => task.id === id);
     if (existing) {
       existing.phase = event.phase;
-      existing.message = event.message;
+      existing.message = statusText;
+      existing.stageLabel = stageLabel;
+      existing.statusText = statusText;
+      existing.indeterminate = !hasKnownProgress;
+      existing.etaSeconds = etaSeconds;
       if (percent > 0 || typeof event.percent === "number") {
         existing.percent = percent;
       }
@@ -98,22 +186,32 @@ export function useStatus() {
       tasks.value.push({
         id,
         phase: event.phase,
-        message: event.message,
+        message: statusText,
         percent,
+        stageLabel,
+        statusText,
+        etaSeconds,
+        indeterminate: !hasKnownProgress,
         startedAt: now,
         lastUpdated: now
       });
     }
 
-    const doneMessage = event.message.toLowerCase();
+    const doneMessage = statusText.toLowerCase();
     const isLaunchPhase = event.phase.toLowerCase() === "launch";
+    const isLaunchSuccess = isLaunchPhase && doneMessage.includes("window is on-screen");
     const isLaunchComplete = isLaunchPhase && percent >= 100;
     const isFailure = doneMessage.includes("failed") || doneMessage.includes("error");
     const isNonLaunchComplete =
       !isLaunchPhase && (doneMessage.includes("ready") || doneMessage.includes("complete"));
 
+    if (isLaunchSuccess) {
+      latestLaunchSuccessAt.value = now;
+    }
+
     if (isLaunchComplete || isFailure || isNonLaunchComplete) {
       tasks.value = tasks.value.filter((task) => task.id !== id);
+      lastEtaSample = null;
     }
 
     const cutoff = now - ACTIVE_LAUNCH_TASK_STALE_MS;
@@ -138,6 +236,7 @@ export function useStatus() {
     finishTask,
     failTask,
     runTask,
-    upsertTaskFromEvent
+    upsertTaskFromEvent,
+    latestLaunchSuccessAt
   };
 }

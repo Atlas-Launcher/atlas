@@ -32,6 +32,29 @@ interface LauncherRemotePack {
   modloaderVersion: string | null;
 }
 
+function rolePriority(role: MemberRole): number {
+  if (role === "admin") {
+    return 3;
+  }
+  if (role === "creator") {
+    return 2;
+  }
+  return 1;
+}
+
+function accessPriority(accessLevel: AccessLevel): number {
+  if (accessLevel === "all") {
+    return 4;
+  }
+  if (accessLevel === "dev") {
+    return 3;
+  }
+  if (accessLevel === "beta") {
+    return 2;
+  }
+  return 1;
+}
+
 function preferredChannel(accessLevel: AccessLevel): ChannelName {
   if (accessLevel === "dev") {
     return "dev";
@@ -114,7 +137,29 @@ export async function GET(request: Request) {
     return NextResponse.json({ packs: [] });
   }
 
-  const packIds = memberships.map((membership) => membership.packId);
+  // Guard against duplicate membership rows for the same user/pack.
+  // Keep the strongest role/access pair so launcher receives one pack entry.
+  const membershipsByPackId = new Map<
+    string,
+    (typeof memberships)[number]
+  >();
+  for (const membership of memberships) {
+    const existing = membershipsByPackId.get(membership.packId);
+    if (!existing) {
+      membershipsByPackId.set(membership.packId, membership);
+      continue;
+    }
+    if (
+      rolePriority(membership.role) > rolePriority(existing.role) ||
+      (rolePriority(membership.role) === rolePriority(existing.role) &&
+        accessPriority(membership.accessLevel) > accessPriority(existing.accessLevel))
+    ) {
+      membershipsByPackId.set(membership.packId, membership);
+    }
+  }
+  const uniqueMemberships = [...membershipsByPackId.values()];
+
+  const packIds = uniqueMemberships.map((membership) => membership.packId);
   const channelRows = await db
     .select({
       packId: channels.packId,
@@ -164,7 +209,7 @@ export async function GET(request: Request) {
     channelMap.set(row.packId, map);
   }
 
-  const remotePacks: LauncherRemotePack[] = memberships
+  const remotePacks: LauncherRemotePack[] = uniqueMemberships
     .map((membership) => {
       const channelsForPack = channelMap.get(membership.packId) ?? new Map();
       const selected = selectChannel(membership.accessLevel, membership.role, channelsForPack);

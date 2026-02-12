@@ -3,17 +3,17 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, ProgressBarStatus, Window } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import ActivityCard from "./components/ActivityCard.vue";
+import FirstLaunchSuccessPanel from "./components/FirstLaunchSuccessPanel.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
 import InstanceView from "./components/InstanceView.vue";
+import LaunchAssistWizard from "./components/LaunchAssistWizard.vue";
 import LibraryView from "./components/LibraryView.vue";
-import LaunchReadinessWizard from "./components/LaunchReadinessWizard.vue";
 import SettingsCard from "./components/SettingsCard.vue";
 import SidebarNav from "./components/SidebarNav.vue";
 import TitleBar from "./components/TitleBar.vue";
-import TroubleshooterDialog from "./components/TroubleshooterDialog.vue";
 import UpdaterBanner from "./components/UpdaterBanner.vue";
 import Button from "./components/ui/button/Button.vue";
+import { parseOnboardingDeepLink, type OnboardingIntent } from "./lib/onboardingDeepLink";
 import { initLaunchEvents } from "./lib/useLaunchEvents";
 import { useAuth } from "./lib/useAuth";
 import { useLibrary } from "./lib/useLibrary";
@@ -35,9 +35,11 @@ const {
   setStatus,
   setProgress,
   runTask,
-  upsertTaskFromEvent
+  upsertTaskFromEvent,
+  latestLaunchSuccessAt
 } = useStatus();
 const { working, run } = useWorking();
+const incomingOnboardingIntent = ref<OnboardingIntent | null>(null);
 const {
   isSigningIn,
   profile,
@@ -52,7 +54,17 @@ const {
   createLauncherLink,
   completeLauncherLink,
   startLauncherLinkCompletionPoll
-} = useAuth({ setStatus, pushLog, run });
+} = useAuth({
+  setStatus,
+  pushLog,
+  run,
+  onUnhandledDeepLink: (url) => {
+    const intent = parseOnboardingDeepLink(url);
+    if (intent) {
+      incomingOnboardingIntent.value = intent;
+    }
+  }
+});
 const {
   settings,
   settingsClientId,
@@ -102,7 +114,6 @@ const {
   checking: updaterChecking,
   installing: updaterInstalling,
   installComplete: updaterInstallComplete,
-  dialogOpen: updaterDialogOpen,
   showBanner: showUpdaterBanner,
   updaterBusy,
   updateInfo,
@@ -110,13 +121,12 @@ const {
   errorMessage: updaterErrorMessage,
   downloadedBytes: updaterDownloadedBytes,
   totalBytes: updaterTotalBytes,
+  speedBytesPerSecond: updaterSpeedBytesPerSecond,
+  etaSeconds: updaterEtaSeconds,
   progressPercent: updaterProgressPercent,
   checkForUpdates,
   installUpdate,
-  restartNow,
-  openDialog: openUpdaterDialog,
-  closeDialog: closeUpdaterDialog,
-  dismissBanner: dismissUpdaterBanner
+  restartNow
 } = useUpdater({ setStatus, pushLog });
 
 const activeTab = ref<"library" | "settings">("library");
@@ -125,8 +135,8 @@ const syncingRemotePacks = ref(false);
 const instanceInstallStateById = ref<Record<string, boolean>>({});
 const tasksPanelOpen = ref(false);
 const launchReadiness = ref<LaunchReadinessReport | null>(null);
-const readinessWizardOpen = ref(false);
-const troubleshooterOpen = ref(false);
+const launchAssistOpen = ref(false);
+const launchAssistMode = ref<"readiness" | "recovery">("readiness");
 // New flag: when we detect a connectivity error but required vars exist
 const cannotConnect = ref(false);
 const troubleshooterTrigger = ref<"settings" | "help" | "failure">("settings");
@@ -137,12 +147,28 @@ const HOURLY_UPDATE_CHECK_MS = 60 * 60 * 1000;
 let updateCheckInterval: ReturnType<typeof setInterval> | null = null;
 let failurePromptCheckVersion = 0;
 const lastAutoTroubleshooterSignal = ref<string | null>(null);
+const onboardingIntentApplying = ref(false);
 const hubUrl = computed(() => (settingsAtlasHubUrl.value ?? "").trim() || import.meta.env.VITE_ATLAS_HUB_URL || "https://atlas.nathanm.org");
 const readinessNextActionLabels: Partial<Record<string, string>> = {
   atlasLogin: "Sign in to Atlas",
   microsoftLogin: "Sign in to Microsoft",
   accountLink: "Link accounts"
 };
+
+function onboardingIntentMatches(a: AppSettings["pendingIntent"], b: AppSettings["pendingIntent"]) {
+  if (!a && !b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  return (
+    a.source === b.source &&
+    a.packId === b.packId &&
+    a.channel === b.channel &&
+    a.createdAt === b.createdAt
+  );
+}
 
 function normalizeUuid(value?: string | null) {
   return (value ?? "").trim().toLowerCase().replace(/-/g, "");
@@ -162,16 +188,22 @@ const canLaunch = computed(() => {
 
 const homeStatusMessage = computed(() => {
   if (!profile.value) {
-    return "Sign in with Microsoft to play. Use the top-right menu to continue setup.";
+    return "Sign in with Microsoft to continue.";
   }
   if (!atlasProfile.value) {
-    return "Sign in to Atlas Hub to finish setup.";
+    return "Sign in to your Atlas account to finish setup.";
   }
   if (!canLaunch.value) {
     return "Finish linking Minecraft in Atlas Hub before launching.";
   }
   return null;
 });
+const showFirstLaunchSuccessPanel = computed(
+  () =>
+    !!settings.value.firstLaunchCompletedAt &&
+    !settings.value.firstLaunchNoticeDismissedAt
+);
+const firstLaunchPackName = computed(() => activeInstance.value?.name ?? null);
 
 const modsDir = computed(() => {
   const base = resolveInstanceGameDir(activeInstance.value);
@@ -262,11 +294,13 @@ async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
     cannotConnect.value = false;
     const autoOpen = options?.autoOpen === true;
     if (autoOpen && launchReadiness.value && shouldAutoOpenReadinessWizard(launchReadiness.value)) {
-      readinessWizardOpen.value = true;
+      launchAssistMode.value = "readiness";
+      launchAssistOpen.value = true;
     }
     // If the report indicates we are not ready to launch (login/link blockers), ensure the wizard is open
     if (launchReadiness.value && hasLoginReadinessBlockers(launchReadiness.value)) {
-      readinessWizardOpen.value = true;
+      launchAssistMode.value = "readiness";
+      launchAssistOpen.value = true;
     }
   } catch (err) {
     const msg = String(err);
@@ -291,7 +325,8 @@ async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
     }
     // Clear any connectivity flag and open the readiness wizard to allow configuring missing vars
     cannotConnect.value = false;
-    readinessWizardOpen.value = true;
+    launchAssistMode.value = "readiness";
+    launchAssistOpen.value = true;
   }
 }
 
@@ -303,6 +338,73 @@ function shouldAutoOpenReadinessWizard(report: LaunchReadinessReport) {
 
 function hasLoginReadinessBlockers(report: LaunchReadinessReport) {
   return !report.atlasLoggedIn || !report.microsoftLoggedIn || !report.accountsLinked;
+}
+
+async function persistIncomingOnboardingIntent(intent: OnboardingIntent) {
+  if (onboardingIntentMatches(settings.value.pendingIntent, intent)) {
+    return;
+  }
+  const nextSettings = {
+    ...settings.value,
+    pendingIntent: intent
+  };
+  await updateSettings(nextSettings);
+  setStatus("Invite handoff received. Preparing your pack in Atlas Launcher.");
+}
+
+function findAtlasInstanceByPackId(packId: string) {
+  return instances.value.find(
+    (instance) => instance.source === "atlas" && instance.atlasPack?.packId === packId
+  ) ?? null;
+}
+
+async function applyPendingOnboardingIntent() {
+  const intent = settings.value.pendingIntent;
+  if (!intent || onboardingIntentApplying.value) {
+    return false;
+  }
+
+  const matchedInstance = findAtlasInstanceByPackId(intent.packId);
+  if (!matchedInstance) {
+    return false;
+  }
+
+  onboardingIntentApplying.value = true;
+  try {
+    if (matchedInstance.atlasPack && matchedInstance.atlasPack.channel !== intent.channel) {
+      await updateInstance(matchedInstance.id, {
+        atlasPack: {
+          ...matchedInstance.atlasPack,
+          channel: intent.channel,
+          buildId: null,
+          buildVersion: null,
+          artifactKey: null
+        }
+      });
+    }
+
+    if (settings.value.selectedInstanceId !== matchedInstance.id) {
+      await selectInstance(matchedInstance.id);
+    }
+
+    activeTab.value = "library";
+    libraryView.value = "detail";
+    await refreshLaunchReadiness();
+    if (launchReadiness.value && hasLoginReadinessBlockers(launchReadiness.value)) {
+      launchAssistMode.value = "readiness";
+      launchAssistOpen.value = true;
+    }
+    setStatus(`Invite ready for ${matchedInstance.name}. Press Play to continue.`);
+
+    const nextSettings = {
+      ...settings.value,
+      pendingIntent: null
+    };
+    await updateSettings(nextSettings);
+    return true;
+  } finally {
+    onboardingIntentApplying.value = false;
+  }
 }
 
 async function persistReadinessWizardState(state: { dismissedAt?: string | null; completedAt?: string | null }) {
@@ -345,7 +447,10 @@ function buildDefaultLauncherSettings(): AppSettings {
     launchReadinessWizard: {
       dismissedAt: null,
       completedAt: null
-    }
+    },
+    pendingIntent: null,
+    firstLaunchCompletedAt: null,
+    firstLaunchNoticeDismissedAt: null
   };
 }
 
@@ -365,7 +470,8 @@ async function startUnifiedAuthFlow() {
 
 async function openReadinessWizard() {
   await refreshLaunchReadiness();
-  readinessWizardOpen.value = true;
+  launchAssistMode.value = "readiness";
+  launchAssistOpen.value = true;
 }
 
 function dismissTroubleshooterFailurePrompt() {
@@ -373,30 +479,32 @@ function dismissTroubleshooterFailurePrompt() {
 }
 
 async function openTroubleshooter(trigger: "settings" | "help" | "failure") {
-  pushLog(`[Troubleshooter] openTroubleshooter called (trigger=${trigger})`);
+  pushLog(`[LaunchAssist] open recovery requested (trigger=${trigger})`);
   await refreshLaunchReadiness();
-  pushLog(`[Troubleshooter] launchReadiness=${JSON.stringify(launchReadiness.value)}`);
+  pushLog(`[LaunchAssist] launchReadiness=${JSON.stringify(launchReadiness.value)}`);
   const readiness = launchReadiness.value;
-  // Only block opening the troubleshooter automatically for failure-triggered auto-open when readiness is not ready.
+  // Only block opening Launch Assist recovery automatically for failure-triggered auto-open when readiness is not ready.
   if (trigger === "failure" && (!readiness || !readiness.readyToLaunch)) {
     const blocker = readiness?.checklist.find((item) => !item.ready)?.label;
     setStatus(
       blocker
         ? `Complete readiness check first: ${blocker}.`
-        : "Complete launch readiness checks before opening Troubleshooter."
+        : "Complete readiness checks before opening Launch Assist."
     );
-    pushLog(`[Troubleshooter] blocked auto-open due to readiness; trigger=${trigger}; blocker=${blocker ?? "none"}`);
-    readinessWizardOpen.value = true;
+    pushLog(`[LaunchAssist] blocked auto-open due to readiness; trigger=${trigger}; blocker=${blocker ?? "none"}`);
+    launchAssistMode.value = "readiness";
+    launchAssistOpen.value = true;
     if (trigger === "failure") {
       dismissTroubleshooterFailurePrompt();
     }
     return;
   }
 
-  // For manual opens (help/settings) we allow showing the troubleshooter even if readiness isn't fully ready.
+  // For manual opens (help/settings) we allow recovery mode even if readiness isn't fully ready.
   troubleshooterTrigger.value = trigger;
-  troubleshooterOpen.value = true;
-  pushLog(`[Troubleshooter] opened (trigger=${trigger})`);
+  launchAssistMode.value = "recovery";
+  launchAssistOpen.value = true;
+  pushLog(`[LaunchAssist] opened recovery mode (trigger=${trigger})`);
   if (trigger === "failure") {
     dismissTroubleshooterFailurePrompt();
   }
@@ -407,7 +515,7 @@ function handleTroubleshooterStatus(message: string) {
 }
 
 function handleTroubleshooterLog(message: string) {
-  pushLog(`[Troubleshooter:${troubleshooterTrigger.value}] ${message}`);
+  pushLog(`[LaunchAssist:${troubleshooterTrigger.value}] ${message}`);
 }
 
 async function refreshFailurePromptEligibility() {
@@ -451,7 +559,7 @@ async function openLauncherLinkPage(code: string) {
 
 async function startLauncherLinking() {
   if (!profile.value) {
-    setStatus("Sign in with Microsoft first.");
+    setStatus("Sign in with Microsoft to continue.");
     pushLog("Launcher link start blocked: missing Microsoft profile.");
     return;
   }
@@ -554,7 +662,7 @@ interface AtlasSyncOptions {
 
 async function syncAtlasInstanceFiles(instance: InstanceConfig, options?: AtlasSyncOptions) {
   if (!atlasProfile.value) {
-    setStatus("Sign in to Atlas Hub to update this profile.");
+    setStatus("Sign in to your Atlas account to update this profile.");
     return false;
   }
   const packId = instance.atlasPack?.packId;
@@ -813,6 +921,10 @@ async function syncAtlasPacks() {
     }
     const remotePacks = await invoke<AtlasRemotePack[]>("list_atlas_remote_packs");
     await syncAtlasRemotePacks(remotePacks);
+    const onboardingHandled = await applyPendingOnboardingIntent();
+    if (onboardingHandled) {
+      return;
+    }
     setStatus(`Atlas packs synced (${remotePacks.length}).`);
   } catch (err) {
     setStatus(`Failed to sync Atlas packs: ${String(err)}`);
@@ -826,10 +938,7 @@ async function checkForUpdatesFromSettings() {
 }
 
 async function installLauncherUpdate() {
-  const started = await installUpdate();
-  if (!started) {
-    openUpdaterDialog();
-  }
+  await installUpdate();
 }
 
 function stopHourlyUpdateChecks() {
@@ -869,18 +978,46 @@ async function handleReadinessAction(key: string) {
 }
 
 async function dismissReadinessWizard() {
-  readinessWizardOpen.value = false;
+  launchAssistOpen.value = false;
   await persistReadinessWizardState({
     dismissedAt: new Date().toISOString()
   });
 }
 
 async function completeReadinessWizard() {
-  readinessWizardOpen.value = false;
+  launchAssistOpen.value = false;
   await persistReadinessWizardState({
     completedAt: new Date().toISOString(),
     dismissedAt: null
   });
+}
+
+async function closeLaunchAssist() {
+  if (launchReadiness.value?.readyToLaunch) {
+    launchAssistOpen.value = false;
+    return;
+  }
+  await dismissReadinessWizard();
+}
+
+async function retryLaunchFromAssist() {
+  await launchActiveInstance();
+}
+
+async function markFirstLaunchSuccessNoticeDismissed() {
+  if (settings.value.firstLaunchNoticeDismissedAt) {
+    return;
+  }
+  await updateSettings({
+    ...settings.value,
+    firstLaunchNoticeDismissedAt: new Date().toISOString()
+  });
+}
+
+async function openLaunchAssistRecoveryFromSuccess() {
+  troubleshooterTrigger.value = "help";
+  launchAssistMode.value = "recovery";
+  launchAssistOpen.value = true;
 }
 
 async function handleReadinessSignOut(scope: "microsoft" | "all") {
@@ -921,14 +1058,15 @@ async function handleReadinessSignOut(scope: "microsoft" | "all") {
       });
       setStatus("Signed out of Microsoft.");
     }
-    readinessWizardOpen.value = true;
+    launchAssistMode.value = "readiness";
+    launchAssistOpen.value = true;
     await refreshLaunchReadiness({ autoOpen: true });
   });
 }
 
 async function refreshAtlasPacksFromLibrary() {
   if (!atlasProfile.value) {
-    setStatus("Sign in to Atlas Hub to refresh remote packs.");
+    setStatus("Sign in to your Atlas account to refresh packs.");
     return;
   }
   await syncAtlasPacks();
@@ -1004,6 +1142,40 @@ onUnmounted(() => {
 });
 
 watch(
+  () => incomingOnboardingIntent.value,
+  async (intent) => {
+    if (!intent) {
+      return;
+    }
+    await persistIncomingOnboardingIntent(intent);
+    incomingOnboardingIntent.value = null;
+    if (atlasProfile.value) {
+      await syncAtlasPacks();
+    }
+  }
+);
+
+watch(
+  () => [
+    appBootstrapped.value,
+    settings.value.pendingIntent?.packId ?? null,
+    settings.value.pendingIntent?.channel ?? null,
+    instances.value
+      .map(
+        (instance) =>
+          `${instance.id}:${instance.source}:${instance.atlasPack?.packId ?? ""}:${instance.atlasPack?.channel ?? ""}`
+      )
+      .join("|")
+  ],
+  async ([bootstrapped, pendingPackId]) => {
+    if (!bootstrapped || !pendingPackId) {
+      return;
+    }
+    await applyPendingOnboardingIntent();
+  }
+);
+
+watch(
   () => [
     status.value,
     launchReadiness.value?.readyToLaunch ?? false,
@@ -1028,7 +1200,7 @@ watch(
     logs.value[0] ?? ""
   ],
   async ([shouldPrompt, logTriggered, statusValue, firstLog]) => {
-    if (!shouldPrompt || !logTriggered || troubleshooterOpen.value) {
+    if (!shouldPrompt || !logTriggered || launchAssistOpen.value) {
       return;
     }
     const signal = `${statusValue ?? ""}|${firstLog ?? ""}`;
@@ -1132,6 +1304,20 @@ watch(
 );
 
 watch(
+  () => latestLaunchSuccessAt.value,
+  async (value) => {
+    if (!value || settings.value.firstLaunchCompletedAt) {
+      return;
+    }
+    await updateSettings({
+      ...settings.value,
+      firstLaunchCompletedAt: new Date(value).toISOString(),
+      firstLaunchNoticeDismissedAt: null
+    });
+  }
+);
+
+watch(
   () => tasks.value.length,
   (count, previousCount) => {
     // Manual control only: removed auto-open logic
@@ -1148,11 +1334,11 @@ watch(
       :atlas-profile="atlasProfile"
       :is-signing-in="isSigningIn"
       :cannot-connect="cannotConnect"
-      :readiness-open="readinessWizardOpen"
+      :readiness-open="launchAssistOpen"
       @open-readiness-wizard="openReadinessWizard"
     />
     
-    <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-8">
+    <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-11">
       <!-- SidebarNav: Floating Aside -->
       <SidebarNav
         :active-tab="activeTab"
@@ -1165,26 +1351,34 @@ watch(
 
       <!-- Main Content: Floating Pane -->
       <main class="flex flex-col min-h-0 overflow-visible gap-4">
-        <UpdaterBanner
-          :visible="showUpdaterBanner"
-          :open="updaterDialogOpen"
-          :checking="updaterChecking"
-          :installing="updaterInstalling"
-          :install-complete="updaterInstallComplete"
-          :progress-percent="updaterProgressPercent"
-          :downloaded-bytes="updaterDownloadedBytes"
-          :total-bytes="updaterTotalBytes"
-          :update-info="updateInfo"
-          :error-message="updaterErrorMessage"
-          @open="openUpdaterDialog"
-          @close="closeUpdaterDialog"
-          @dismiss="dismissUpdaterBanner"
-          @install="installLauncherUpdate"
-          @restart="restartLauncherAfterUpdate"
+        <div v-if="showUpdaterBanner" class="sticky top-0 z-[55]">
+          <UpdaterBanner
+            :visible="showUpdaterBanner"
+            :checking="updaterChecking"
+            :installing="updaterInstalling"
+            :install-complete="updaterInstallComplete"
+            :progress-percent="updaterProgressPercent"
+            :downloaded-bytes="updaterDownloadedBytes"
+            :total-bytes="updaterTotalBytes"
+            :speed-bytes-per-second="updaterSpeedBytesPerSecond"
+            :eta-seconds="updaterEtaSeconds"
+            :update-info="updateInfo"
+            :error-message="updaterErrorMessage"
+            @install="installLauncherUpdate"
+            @restart="restartLauncherAfterUpdate"
+          />
+        </div>
+        <FirstLaunchSuccessPanel
+          :open="showFirstLaunchSuccessPanel"
+          :pack-name="firstLaunchPackName"
+          @retry-launch="retryLaunchFromAssist"
+          @open-assist="openLaunchAssistRecoveryFromSuccess"
+          @dismiss="markFirstLaunchSuccessNoticeDismissed"
         />
         <section
           v-if="activeTab === 'library'"
-          class="flex-1 min-h-0 flex flex-col gap-6 overflow-visible"
+          class="flex-1 min-h-0 flex flex-col gap-6"
+          :class="libraryView === 'detail' ? 'overflow-visible' : 'overflow-hidden'"
         >
           <div
             v-if="showTroubleshooterFailurePrompt"
@@ -1194,18 +1388,18 @@ watch(
               <div>
                 <p class="font-medium text-amber-700 dark:text-amber-300">Issue detected</p>
                 <p class="text-xs text-muted-foreground">
-                  Recent status suggests a launch/setup failure. Open Troubleshooter for guided fixes.
+                  We detected a launch issue. Open Launch Assist for guided fixes.
                 </p>
               </div>
               <div class="flex items-center gap-2">
-                <Button size="sm" @click="openTroubleshooter('failure')">Open troubleshooter</Button>
+                <Button size="sm" @click="openTroubleshooter('failure')">Open Launch Assist</Button>
                 <Button size="sm" variant="outline" @click="dismissTroubleshooterFailurePrompt">Dismiss</Button>
               </div>
             </div>
           </div>
           <div
             v-if="libraryView === 'grid'"
-            class="flex-1 min-h-0 overflow-y-auto px-4 pr-1"
+            class="flex-1 min-h-0 overflow-visible pb-1"
           >
             <LibraryView
               :instances="instances"
@@ -1254,8 +1448,9 @@ watch(
             @update-channel="updateAtlasChannel"
           />
         </section>
-        <section v-else class="flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-6">
+        <section v-else class="flex-1 min-h-0 overflow-hidden">
           <SettingsCard
+            class="h-full min-h-0"
             v-model:settingsClientId="settingsClientId"
             v-model:settingsAtlasHubUrl="settingsAtlasHubUrl"
             v-model:settingsDefaultMemoryMb="settingsDefaultMemoryMb"
@@ -1270,13 +1465,6 @@ watch(
             @check-updates="checkForUpdatesFromSettings"
             @open-readiness-wizard="openReadinessWizard"
           />
-          <ActivityCard
-            title="Recent activity"
-            description="Helpful signals while tuning Atlas."
-            :logs="logs"
-            action-label="Troubleshooter"
-            @action="openTroubleshooter('help')"
-          />
         </section>
       </main>
     </div>
@@ -1285,8 +1473,9 @@ watch(
       :tasks="tasks"
       :pack-name="activeInstance?.name ?? null"
     />
-    <LaunchReadinessWizard
-      :open="readinessWizardOpen"
+    <LaunchAssistWizard
+      :open="launchAssistOpen"
+      :mode="launchAssistMode"
       :readiness="launchReadiness"
       :atlas-signed-in="!!atlasProfile"
       :microsoft-signed-in="!!profile"
@@ -1295,22 +1484,19 @@ watch(
       :hub-url="hubUrl"
       :working="working"
       :next-action-labels="readinessNextActionLabels"
-      @action="handleReadinessAction"
-      @sign-out="handleReadinessSignOut"
-      @close="dismissReadinessWizard"
-      @complete="completeReadinessWizard"
-    />
-    <TroubleshooterDialog
-      :open="troubleshooterOpen"
       :game-dir="troubleshooterGameDir"
       :pack-id="troubleshooterPackId"
       :channel="troubleshooterChannel"
       :recent-status="status"
       :recent-logs="logs"
-      @update:open="troubleshooterOpen = $event"
+      @action="handleReadinessAction"
+      @sign-out="handleReadinessSignOut"
       @status="handleTroubleshooterStatus"
       @log="handleTroubleshooterLog"
       @relink-requested="handleTroubleshooterRelinkRequested"
+      @retry-launch="retryLaunchFromAssist"
+      @close="closeLaunchAssist"
+      @complete="completeReadinessWizard"
     />
   </div>
 </template>

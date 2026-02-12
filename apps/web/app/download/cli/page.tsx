@@ -93,8 +93,9 @@ export default async function CliDownloadPage() {
       manualDownloads: manualDownloadsForOs(releases, "windows"),
       manualEmptyLabel: "No stable Windows CLI files available yet.",
       nextSteps: [
-        "Run `atlas build --channel dev` in your pack repo.",
-        "Use `atlas deploy` to publish builds.",
+        "Run `atlas build` in your pack repo.",
+        "Use `atlas publish` to upload a build.",
+        "Use `atlas promote` to move channels.",
         "Store deploy tokens in CI secrets.",
       ],
     },
@@ -118,8 +119,8 @@ export default async function CliDownloadPage() {
       manualDownloads: manualDownloadsForOs(releases, "macos"),
       manualEmptyLabel: "No stable macOS CLI files available yet.",
       nextSteps: [
-        "Authenticate with your Atlas Hub.",
-        "Run build and deploy commands from your repo root.",
+        "Authenticate with your Atlas Hub (`atlas login`).",
+        "Run `atlas build` and `atlas publish` from your repo root.",
         "Use CI workflow templates for automation.",
       ],
     },
@@ -143,8 +144,9 @@ export default async function CliDownloadPage() {
       manualDownloads: manualDownloadsForOs(releases, "linux"),
       manualEmptyLabel: "No stable Linux CLI files available yet.",
       nextSteps: [
-        "Run `atlas build --channel dev`.",
-        "Publish artifacts with `atlas deploy`.",
+        "Run `atlas build`.",
+        "Publish artifacts with `atlas publish`.",
+        "Promote channels with `atlas promote`.",
         "Integrate into CI using the atlas-build workflow.",
       ],
     },
@@ -154,7 +156,7 @@ export default async function CliDownloadPage() {
     <PlatformGuidedDownload
       badge="Atlas CLI"
       title="Download Atlas CLI"
-      subtitle="Select your platform, install the CLI, and run your build/deploy workflow."
+      subtitle="Select your platform, install the CLI, and run your build/publish workflow."
       latestLabel={
         firstRelease
           ? `Latest stable v${firstRelease.version} • ${formatDate(firstRelease.published_at)}`

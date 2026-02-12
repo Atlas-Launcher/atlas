@@ -7,16 +7,7 @@ import CardTitle from "./ui/card/CardTitle.vue";
 import CardDescription from "./ui/card/CardDescription.vue";
 import CardContent from "./ui/card/CardContent.vue";
 import Input from "./ui/input/Input.vue";
-// import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "./ui/select";
-import { Box, Download, Play } from "lucide-vue-next";
+import { Box } from "lucide-vue-next";
 import type { InstanceConfig } from "@/types/settings";
 import { formatLoaderKind } from "@/lib/utils";
 
@@ -37,65 +28,21 @@ const emit = defineEmits<{
 }>();
 
 const search = ref("");
-const filter = ref<"all" | "atlas" | "local">("all");
-const sort = ref<"name" | "loader">("name");
-const group = ref<"none" | "loader">("none");
 
 const filteredInstances = computed(() => {
   const query = search.value.trim().toLowerCase();
-  let items = props.instances.filter((instance) => {
-    if (filter.value === "atlas" && instance.source !== "atlas") {
-      return false;
-    }
-    if (filter.value === "local" && instance.source === "atlas") {
-      return false;
-    }
-    if (!query) {
-      return true;
-    }
-    return (
-      instance.name.toLowerCase().includes(query) ||
-      (instance.version ?? "").toLowerCase().includes(query)
-    );
-  });
-
-  items = [...items].sort((a, b) => {
-    if (sort.value === "loader") {
-      const aLoader = a.loader?.kind ?? "vanilla";
-      const bLoader = b.loader?.kind ?? "vanilla";
-      if (aLoader !== bLoader) {
-        return aLoader.localeCompare(bLoader);
+  return [...props.instances]
+    .filter((instance) => {
+      if (!query) {
+        return true;
       }
-    }
-    return a.name.localeCompare(b.name);
-  });
-
-  return items;
+      return (
+        instance.name.toLowerCase().includes(query) ||
+        (instance.version ?? "").toLowerCase().includes(query)
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 });
-
-const groupedInstances = computed(() => {
-  if (group.value !== "loader") {
-    return [{ label: "All profiles", items: filteredInstances.value }];
-  }
-  const buckets: Record<string, InstanceConfig[]> = {};
-  for (const instance of filteredInstances.value) {
-    const key = instance.loader?.kind ?? "vanilla";
-    if (!buckets[key]) {
-      buckets[key] = [];
-    }
-    buckets[key].push(instance);
-  }
-  return Object.entries(buckets).map(([label, items]) => ({
-    label,
-    items
-  }));
-});
-
-/*
-function displaySource(instance: InstanceConfig) {
-  return instance.source === "atlas" ? "Atlas Hub" : "Local";
-}
-*/
 
 function displayLoader(instance: InstanceConfig) {
   const kind = instance.loader?.kind ?? "vanilla";
@@ -107,7 +54,7 @@ function displayLoader(instance: InstanceConfig) {
 
 function displayVersion(instance: InstanceConfig) {
   if (!props.instanceInstallStateById[instance.id]) {
-    return null
+    return null;
   }
   return instance.version?.trim() ? instance.version : "Latest release";
 }
@@ -124,11 +71,11 @@ function needsRemoteInstall(instance: InstanceConfig) {
   return instance.source === "atlas" && !props.instanceInstallStateById[instance.id];
 }
 
-function quickActionLabel(instance: InstanceConfig) {
-  return needsRemoteInstall(instance) ? `Install ${instance.name}` : `Play ${instance.name}`;
+function actionLabel(instance: InstanceConfig) {
+  return needsRemoteInstall(instance) ? "Install" : "Play";
 }
 
-function onQuickAction(instance: InstanceConfig) {
+function onPrimaryAction(instance: InstanceConfig) {
   if (needsRemoteInstall(instance)) {
     emit("install", instance.id);
     return;
@@ -141,120 +88,60 @@ function onQuickAction(instance: InstanceConfig) {
 </script>
 
 <template>
-  <Card class="glass rounded-2xl border-none bg-transparent shadow-none">
-    <CardHeader class="pt-6">
-      <CardTitle>Your Instances</CardTitle>
-      <CardDescription>Manage your Minecraft profiles and installations.</CardDescription>
+  <Card class="glass h-full min-h-0 rounded-2xl flex flex-col">
+    <CardHeader class="pt-7">
+      <CardTitle>Your profiles</CardTitle>
+      <CardDescription>Pick a profile, install if needed, then play.</CardDescription>
     </CardHeader>
-    <CardContent class="space-y-6">
-      <!-- <div class="flex flex-wrap items-center gap-4">
-         <Tabs v-model="filter">
-            <TabsList>
-              <TabsTrigger value="all">All Profiles</TabsTrigger>
-              <TabsTrigger value="atlas">Atlas Profiles</TabsTrigger>
-              <TabsTrigger value="local">Local Profiles</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Button
-            :disabled="props.working"
-            size="sm"
-            variant="secondary"
-            @click="emit('refresh-packs')"
-          >
-            Refresh Packs
-          </Button>
-          <Button
-            class="ml-auto"
-            :disabled="props.working"
-            size="sm"
-            variant="secondary"
-            @click="emit('create')"
-          >
-            New Local Profile
-          </Button>
-       </div> -->
-
-      <div class="grid gap-3 md:grid-cols-[1.0fr_0.6fr_0.6fr_0.3fr]">
+    <CardContent class="flex-1 min-h-0 flex flex-col space-y-6 pr-3 pb-5 pt-1">
+      <div class="grid gap-3 md:grid-cols-[1fr_auto]">
         <Input
           :model-value="search"
-          placeholder="Search profiles..."
+          placeholder="Search profiles"
           @update:modelValue="(value) => (search = String(value))"
         />
-        <Select v-model="sort">
-          <SelectTrigger>
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="name">Sort by: Name</SelectItem>
-            <SelectItem value="loader">Sort by: Loader</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select v-model="group">
-          <SelectTrigger>
-            <SelectValue placeholder="Group by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Group by: None</SelectItem>
-            <SelectItem value="loader">Group by: Loader</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button
-            :disabled="props.working"
-            size="sm"
-            variant="secondary"
-            @click="emit('refresh-packs')"
-        >
-          Refresh Packs
+        <Button :disabled="props.working" size="sm" variant="secondary" @click="emit('refresh-packs')">
+          Refresh
         </Button>
       </div>
 
-      <div v-if="groupedInstances.length === 0" class="text-sm text-muted-foreground">
-        No profiles match the current filter.
-      </div>
-
-      <div v-for="grouping in groupedInstances" :key="grouping.label" class="space-y-3">
-        <div
-          v-if="groupedInstances.length > 1"
-          class="text-xs uppercase tracking-widest text-muted-foreground"
-        >
-          {{ grouping.label }}
+      <div class="min-h-0 flex-1 overflow-y-auto snap-y snap-proximity pt-2 pb-3 pr-1 [scrollbar-gutter:stable]">
+        <div v-if="filteredInstances.length === 0" class="text-sm text-muted-foreground px-1">
+          No profiles available yet. Sync packs or create a local profile.
         </div>
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <div
-            v-for="instance in grouping.items"
-            :key="instance.id"
-            class="group flex cursor-pointer items-center gap-3 rounded-2xl border border-border/60 bg-card/70 px-4 py-3 text-left transition hover:shadow-sm"
-            :class="
-              instance.id === props.activeInstanceId
-                ? 'border-foreground/70 bg-foreground/5'
-                : ''
-            "
-            role="button"
-            tabindex="0"
-            @click="emit('select', instance.id)"
-            @keydown="(event) => onCardKeydown(event, instance.id)"
-          >
-            <div
-              class="relative flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-muted"
-            >
-              <Box class="h-6 w-6 text-muted-foreground transition-opacity group-hover:opacity-0 group-focus-within:opacity-0" />
-              <button
-                type="button"
-                class="absolute inset-1 inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground opacity-0 transition-opacity hover:bg-primary/90 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
-                :aria-label="quickActionLabel(instance)"
-                :disabled="props.working || (!needsRemoteInstall(instance) && !props.canLaunch)"
-                @click.stop="onQuickAction(instance)"
-              >
-                <Download v-if="needsRemoteInstall(instance)" class="h-4 w-4" />
-                <Play v-else class="h-4 w-4" />
-              </button>
-            </div>
-            <div class="flex-1">
-              <div class="font-semibold text-foreground">{{ instance.name }}</div>
-              <div class="text-xs text-muted-foreground">
 
-                <!-- {{ displaySource(instance) }} · --> {{ displayLoader(instance) }} {{(displayVersion(instance)) ? ` · ${displayVersion(instance)}` : `` }}
+        <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div
+            v-for="instance in filteredInstances"
+            :key="instance.id"
+            class="glass shadow-none group rounded-2xl p-4 snap-start"
+            :class="instance.id === props.activeInstanceId ? 'border-foreground/70 bg-foreground/5' : ''"
+          >
+            <button
+              class="flex w-full cursor-pointer items-center gap-3 text-left"
+              type="button"
+              @click="emit('select', instance.id)"
+              @keydown="(event) => onCardKeydown(event, instance.id)"
+            >
+              <div class="flex h-12 w-12 items-center justify-center rounded-xl border border-border/60 bg-muted">
+                <Box class="h-6 w-6 text-muted-foreground" />
               </div>
+              <div class="flex-1">
+                <div class="font-semibold text-foreground">{{ instance.name }}</div>
+                <div class="text-xs text-muted-foreground">
+                  {{ displayLoader(instance) }} {{ displayVersion(instance) ? ` · ${displayVersion(instance)}` : "" }}
+                </div>
+              </div>
+            </button>
+
+            <div class="mt-3 flex items-center justify-end">
+              <Button
+                size="sm"
+                :disabled="props.working || (!needsRemoteInstall(instance) && !props.canLaunch)"
+                @click="onPrimaryAction(instance)"
+              >
+                {{ actionLabel(instance) }}
+              </Button>
             </div>
           </div>
         </div>

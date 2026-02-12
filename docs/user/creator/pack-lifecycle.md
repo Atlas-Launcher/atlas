@@ -2,26 +2,26 @@
 
 ## Author
 
-Maintain pack config and assets in repo source.
+Maintain pack config and assets in your repository.
 
 ## Build
 
-Compile source to artifact with `atlas` CLI or CI pipeline.
+Compile source to artifact with `atlas build` or CI pipeline.
 
 ## Publish
 
-Use presign + complete build API flow via CI/CLI.
+Use `atlas publish` (or CI) to upload and register a build.
 
 ## Promote
 
-Move channel pointers (`dev` -> `beta` -> `production`) as validation completes.
+Move channel pointers (`dev` -> `beta` -> `production`) with `atlas promote`.
 
 ## Consume
 
-- Launcher users resolve build by channel.
-- Runner daemon resolves server artifact and applies it.
+- Launcher resolves builds by channel for players.
+- Runner resolves builds by channel for servers.
 
-## Rollback Strategy
+## Rollback strategy
 
 Because builds are immutable, rollback is pointer-based:
-- repoint channel to known-good previous build.
+- Promote or repoint the channel to a known-good build.

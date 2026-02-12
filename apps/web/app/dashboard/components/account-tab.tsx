@@ -128,13 +128,13 @@ export default function AccountTab({
           <CardHeader>
             <CardTitle>Passkeys</CardTitle>
             <CardDescription>
-              Register a hardware-backed passkey for quick sign-in.
+              Register a passkey for faster sign-in.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <form onSubmit={handleSubmit} className="space-y-3">
               <label className="block text-xs font-medium text-[var(--atlas-ink-muted)]">
-                Passkey Name
+                Passkey name
                 <Input
                   value={passkeyName}
                   onChange={(event) => setPasskeyName(event.target.value)}
@@ -144,13 +144,13 @@ export default function AccountTab({
                 />
               </label>
               <Button type="submit" disabled={passkeyLoading}>
-                {passkeyLoading ? "Waiting for device…" : "Add Passkey"}
+                {passkeyLoading ? "Waiting for device..." : "Add passkey"}
               </Button>
             </form>
 
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
-                Active Passkeys
+                Active passkeys
               </p>
               {passkeysError ? (
                 <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -250,7 +250,7 @@ export default function AccountTab({
           <CardHeader>
             <CardTitle>GitHub</CardTitle>
             <CardDescription>
-              Link GitHub to create repositories and pull org ownership.
+              Link GitHub to create and manage repositories.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -273,7 +273,7 @@ export default function AccountTab({
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      <Button variant="outline">Manage Access</Button>
+                      <Button variant="outline">Manage access</Button>
                     </a>
                     <Button
                       variant="outline"
@@ -300,7 +300,7 @@ export default function AccountTab({
 
           <Card>
             <CardHeader>
-              <CardTitle>Minecraft Profile</CardTitle>
+              <CardTitle>Minecraft profile</CardTitle>
               <CardDescription>
                 Your launcher links your Minecraft identity to this account.
               </CardDescription>

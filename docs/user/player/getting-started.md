@@ -11,16 +11,26 @@ Launcher supports:
 
 If your platform is not listed, it is unsupported.
 
-## 2. Sign-in and Link Flow
+## 2. Invite to Launcher Flow
 
-To become launch-ready:
-1. Sign in to Atlas account.
-2. Sign in with Microsoft account.
-3. Complete account link so launcher and Atlas identity match.
+When you open an invite link in the web app:
+1. Create or sign in to your Atlas account.
+2. Invite acceptance happens automatically.
+3. Select **Open Atlas Launcher** on the invite page.
+4. If launcher protocol handoff fails, use **Download Atlas Launcher** and retry.
 
-The launcher readiness flow is designed to block launch until blockers are resolved.
+Launcher opens with your invited pack preselected. It does not auto-install.
 
-## 3. Install and Launch
+## 3. Sign-in and Link Readiness
+
+Atlas uses a single Launch Assist flow to get you launch-ready:
+1. Sign in to Atlas.
+2. Sign in to Microsoft.
+3. Complete account linking so IDs match.
+
+Launch Assist shows one next action at a time for blockers.
+
+## 4. Install and Launch
 
 Launcher will:
 - resolve pack/version data,
@@ -29,11 +39,20 @@ Launcher will:
 - install required loader/runtime metadata,
 - launch Minecraft with computed arguments.
 
-## 4. Updates
+Progress is shown as:
+- Syncing pack
+- Preparing files
+- Starting Minecraft
+
+## 5. Updates
 
 Launcher can check for launcher app updates and install them through in-app updater flow.
 
-## 5. If Launch Fails
+## 6. First Launch Completion
 
-Use launcher troubleshooter for post-install/runtime issues.
-Readiness handles pre-launch blockers (auth/link/readiness).
+After the first confirmed successful launch, Atlas shows a compact success panel with quick actions.
+
+## 7. If Launch Fails
+
+Open **Launch Assist** from the sidebar, settings activity card, or failure prompt.
+It includes readiness guidance, recovery actions, diagnostics reruns, logs, and support bundle generation.

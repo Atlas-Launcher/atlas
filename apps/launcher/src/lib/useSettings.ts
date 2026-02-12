@@ -4,6 +4,8 @@ import type {
   AppSettings,
   AtlasPackChannel,
   InstanceConfig,
+  OnboardingIntent,
+  OnboardingIntentSource,
   LaunchReadinessWizardState,
   ModLoaderConfig
 } from "@/types/settings";
@@ -28,7 +30,10 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     launchReadinessWizard: {
       dismissedAt: null,
       completedAt: null
-    }
+    },
+    pendingIntent: null,
+    firstLaunchCompletedAt: null,
+    firstLaunchNoticeDismissedAt: null
   });
   const defaultGameDir = ref("");
 
@@ -132,6 +137,54 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     };
   }
 
+  function normalizeOnboardingSource(value: string | null | undefined): OnboardingIntentSource | null {
+    if (value === "invite") {
+      return "invite";
+    }
+    return null;
+  }
+
+  function normalizeOnboardingChannel(value: string | null | undefined): AtlasPackChannel | null {
+    if (value === "dev" || value === "beta" || value === "production") {
+      return value;
+    }
+    return null;
+  }
+
+  function normalizeOnboardingIntent(value: OnboardingIntent | null | undefined): OnboardingIntent | null {
+    if (!value) {
+      return null;
+    }
+    const source = normalizeOnboardingSource(value.source);
+    const channel = normalizeOnboardingChannel(value.channel);
+    const packId = value.packId?.trim();
+    const createdAt = value.createdAt?.trim();
+    if (!source || !channel || !packId || !createdAt) {
+      return null;
+    }
+    return {
+      source,
+      channel,
+      packId,
+      createdAt
+    };
+  }
+
+  function sameOnboardingIntent(a: OnboardingIntent | null | undefined, b: OnboardingIntent | null | undefined) {
+    if (!a && !b) {
+      return true;
+    }
+    if (!a || !b) {
+      return false;
+    }
+    return (
+      a.source === b.source &&
+      a.channel === b.channel &&
+      a.packId === b.packId &&
+      a.createdAt === b.createdAt
+    );
+  }
+
   function createInstanceConfig(id: string, name: string, baseDir: string): InstanceConfig {
     return {
       id,
@@ -193,7 +246,10 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
         ),
         selectedInstanceId: loaded.selectedInstanceId ?? null,
         themeMode: (loaded.themeMode as "light" | "dark" | "system") ?? null,
-        launchReadinessWizard: normalizeLaunchReadinessWizard(loaded.launchReadinessWizard)
+        launchReadinessWizard: normalizeLaunchReadinessWizard(loaded.launchReadinessWizard),
+        pendingIntent: normalizeOnboardingIntent(loaded.pendingIntent),
+        firstLaunchCompletedAt: loaded.firstLaunchCompletedAt ?? null,
+        firstLaunchNoticeDismissedAt: loaded.firstLaunchNoticeDismissedAt ?? null
       };
       if (ensureDefaults()) {
         await saveSettings(true);
@@ -228,6 +284,22 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
 
     if (!settings.value.launchReadinessWizard) {
       settings.value.launchReadinessWizard = normalizeLaunchReadinessWizard(null);
+      changed = true;
+    }
+
+    const normalizedIntent = normalizeOnboardingIntent(settings.value.pendingIntent);
+    if (!sameOnboardingIntent(normalizedIntent, settings.value.pendingIntent)) {
+      settings.value.pendingIntent = normalizedIntent;
+      changed = true;
+    }
+
+    if (settings.value.firstLaunchCompletedAt === undefined) {
+      settings.value.firstLaunchCompletedAt = null;
+      changed = true;
+    }
+
+    if (settings.value.firstLaunchNoticeDismissedAt === undefined) {
+      settings.value.firstLaunchNoticeDismissedAt = null;
       changed = true;
     }
 
@@ -383,6 +455,27 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     };
   }
 
+  function dedupeRemotePacks(remotePacks: AtlasRemotePack[]) {
+    const byPackId = new Map<string, AtlasRemotePack>();
+    for (const remote of remotePacks) {
+      const packId = remote.packId?.trim();
+      if (!packId) {
+        continue;
+      }
+      if (!byPackId.has(packId)) {
+        byPackId.set(packId, remote);
+        continue;
+      }
+      const existing = byPackId.get(packId)!;
+      const existingHasBuild = !!existing.buildId;
+      const nextHasBuild = !!remote.buildId;
+      if (!existingHasBuild && nextHasBuild) {
+        byPackId.set(packId, remote);
+      }
+    }
+    return [...byPackId.values()];
+  }
+
   async function syncAtlasRemotePacks(remotePacks: AtlasRemotePack[]) {
     const localInstances = instances.value.filter((instance) => instance.source !== "atlas");
     const existingRemoteByPackId = new Map<string, InstanceConfig>();
@@ -393,7 +486,8 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
       existingRemoteByPackId.set(instance.atlasPack.packId, instance);
     }
 
-    const normalizedRemotePacks = [...remotePacks].sort((a, b) =>
+    const uniqueRemotePacks = dedupeRemotePacks(remotePacks);
+    const normalizedRemotePacks = [...uniqueRemotePacks].sort((a, b) =>
       a.packName.localeCompare(b.packName)
     );
     const remoteInstances = normalizedRemotePacks.map((remote) =>

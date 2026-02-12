@@ -3,44 +3,27 @@ import { computed } from "vue";
 import Button from "./ui/button/Button.vue";
 import Card from "./ui/card/Card.vue";
 import CardContent from "./ui/card/CardContent.vue";
-import CardDescription from "./ui/card/CardDescription.vue";
-import CardHeader from "./ui/card/CardHeader.vue";
-import CardTitle from "./ui/card/CardTitle.vue";
 import Progress from "./ui/progress/Progress.vue";
 import type { ReleaseInfo } from "@/lib/useUpdater";
 
 const props = defineProps<{
   visible: boolean;
-  open: boolean;
   checking: boolean;
   installing: boolean;
   installComplete: boolean;
   progressPercent: number;
   downloadedBytes: number;
   totalBytes: number | null;
+  speedBytesPerSecond: number | null;
+  etaSeconds: number | null;
   updateInfo: ReleaseInfo | null;
   errorMessage: string | null;
 }>();
 
 const emit = defineEmits<{
-  (event: "open"): void;
-  (event: "close"): void;
-  (event: "dismiss"): void;
   (event: "install"): void;
   (event: "restart"): void;
 }>();
-
-const releaseDate = computed(() => {
-  const value = props.updateInfo?.date;
-  if (!value) {
-    return null;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toLocaleString();
-});
 
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
@@ -55,123 +38,105 @@ function formatBytes(value: number) {
   }
   return `${size.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
 }
+
+function formatEta(seconds: number | null) {
+  if (seconds == null || !Number.isFinite(seconds)) {
+    return null;
+  }
+  const clamped = Math.max(0, Math.round(seconds));
+  if (clamped < 60) {
+    return `${clamped}s left`;
+  }
+  const minutes = Math.floor(clamped / 60);
+  const remainder = clamped % 60;
+  if (minutes < 60) {
+    return `${minutes}m ${remainder}s left`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const minutesRemainder = minutes % 60;
+  return `${hours}h ${minutesRemainder}m left`;
+}
+
+const speedLabel = computed(() => {
+  if (!props.installing) {
+    return null;
+  }
+  if (!props.speedBytesPerSecond || props.speedBytesPerSecond <= 0) {
+    return "Calculating speed...";
+  }
+  return `${formatBytes(props.speedBytesPerSecond)}/s`;
+});
+
+const amountLabel = computed(() => {
+  if (!props.installing) {
+    return null;
+  }
+  if (props.totalBytes) {
+    return `${formatBytes(props.downloadedBytes)} / ${formatBytes(props.totalBytes)} (${props.progressPercent}%)`;
+  }
+  return `${formatBytes(props.downloadedBytes)} downloaded`;
+});
+
+const etaLabel = computed(() => {
+  if (!props.installing) {
+    return null;
+  }
+  return formatEta(props.etaSeconds);
+});
 </script>
 
 <template>
-  <div v-if="props.visible" class="px-4 pr-1">
-    <Card class="glass border-primary/40">
-      <CardHeader class="space-y-1 pb-2">
-        <CardTitle class="text-sm">
-          <template v-if="props.installComplete">
-            Update installed
-          </template>
-          <template v-else>
-            Launcher update available
-          </template>
-        </CardTitle>
-        <CardDescription v-if="props.updateInfo">
-          <template v-if="props.installComplete">
-            Restart Atlas Launcher to apply version {{ props.updateInfo.version }}.
-          </template>
-          <template v-else>
-            Version {{ props.updateInfo.version }} is ready (current {{ props.updateInfo.currentVersion }}).
-          </template>
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-3 pt-0">
-        <div class="flex flex-wrap items-center mt-2 gap-2">
-          <Button
-            v-if="props.installComplete"
-            size="sm"
-            :disabled="props.checking || props.installing"
-            @click="emit('restart')"
-          >
-            Restart now
-          </Button>
-          <Button
-            v-else
-            size="sm"
-            :disabled="props.checking || props.installing"
-            @click="emit('install')"
-          >
-            {{ props.installing ? "Installing..." : "Install update" }}
-          </Button>
+  <div v-if="props.visible" class="pointer-events-auto">
+    <Card class="glass">
+      <CardContent class="px-5 py-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-foreground">
+              <template v-if="props.installComplete">
+                Apply update
+              </template>
+              <template v-else>
+                Update available
+              </template>
+            </p>
+            <p v-if="props.updateInfo" class="text-sm text-muted-foreground">
+              <template v-if="props.installComplete">
+                Version {{ props.updateInfo.version }} is ready. Relaunch to apply it.
+              </template>
+              <template v-else>
+                Version {{ props.updateInfo.version }} is ready (current {{ props.updateInfo.currentVersion }}).
+              </template>
+            </p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <Button
+              v-if="props.installComplete"
+              size="sm"
+              :disabled="props.checking || props.installing"
+              @click="emit('restart')"
+            >
+              Relaunch
+            </Button>
+            <Button
+              v-else
+              size="sm"
+              :disabled="props.checking || props.installing"
+              @click="emit('install')"
+            >
+              {{ props.installing ? "Installing..." : "Install" }}
+            </Button>
+          </div>
         </div>
-        <div v-if="props.installing" class="w-full space-y-2 pt-1">
+        <div v-if="props.installing" class="mt-3 w-full space-y-2">
           <Progress :model-value="props.progressPercent" />
-          <p class="text-xs text-muted-foreground">
-            <template v-if="props.totalBytes">
-              {{ formatBytes(props.downloadedBytes) }} / {{ formatBytes(props.totalBytes) }}
-              ({{ props.progressPercent }}%)
-            </template>
-            <template v-else>
-              Downloading update package...
-            </template>
+          <p v-if="amountLabel" class="text-xs text-muted-foreground">{{ amountLabel }}</p>
+          <p v-if="speedLabel || etaLabel" class="text-xs text-muted-foreground">
+            <span v-if="speedLabel">{{ speedLabel }}</span>
+            <span v-if="speedLabel && etaLabel"> • </span>
+            <span v-if="etaLabel">{{ etaLabel }}</span>
           </p>
         </div>
-      </CardContent>
-    </Card>
-  </div>
-
-  <div
-    v-if="props.open"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
-    @click.self="emit('close')"
-  >
-    <Card class="w-full max-w-2xl max-h-[85vh] overflow-y-auto border-primary/40">
-      <CardHeader class="space-y-1 pb-2">
-        <CardTitle>Application Update</CardTitle>
-        <CardDescription v-if="props.updateInfo">
-          Atlas Launcher {{ props.updateInfo.currentVersion }} -> {{ props.updateInfo.version }}
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-5 pt-0">
-        <p v-if="releaseDate" class="text-xs text-muted-foreground">Published: {{ releaseDate }}</p>
-        <div
-          v-if="props.updateInfo?.body"
-          class="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground whitespace-pre-wrap"
-        >
-          {{ props.updateInfo.body }}
-        </div>
-        <p v-else class="text-sm text-muted-foreground">No release notes were provided.</p>
-
-        <div v-if="props.installing" class="space-y-2">
-          <Progress :model-value="props.progressPercent" />
-          <p class="text-xs text-muted-foreground">
-            <template v-if="props.totalBytes">
-              {{ formatBytes(props.downloadedBytes) }} / {{ formatBytes(props.totalBytes) }}
-              ({{ props.progressPercent }}%)
-            </template>
-            <template v-else>
-              Downloading update package...
-            </template>
-          </p>
-        </div>
-
-        <p v-if="props.installComplete" class="text-sm text-primary">
-          Update installed. Restart Atlas Launcher to finish.
-        </p>
-        <p v-if="props.errorMessage" class="text-sm text-destructive">
-          {{ props.errorMessage }}
-        </p>
-
-        <div class="flex flex-wrap gap-2">
-          <Button variant="outline" @click="emit('close')">Close</Button>
-          <Button
-            v-if="props.installComplete"
-            :disabled="props.checking || props.installing"
-            @click="emit('restart')"
-          >
-            Restart now
-          </Button>
-          <Button
-            v-else
-            :disabled="props.checking || props.installing"
-            @click="emit('install')"
-          >
-            {{ props.installing ? "Installing..." : "Install update" }}
-          </Button>
-        </div>
+        <p v-if="props.errorMessage" class="mt-2 text-xs text-destructive">{{ props.errorMessage }}</p>
       </CardContent>
     </Card>
   </div>

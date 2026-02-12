@@ -4,5 +4,6 @@ pub mod completion;
 pub mod deploy;
 pub mod init;
 pub mod pack;
+pub mod promote;
 pub mod pull;
 pub mod push;

@@ -24,7 +24,7 @@ export default function PublicNavbar() {
           <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[var(--atlas-ink-muted)]">
             Atlas Hub
           </p>
-          <p className="text-xs text-[var(--atlas-ink-muted)]">Modpack releases made simple</p>
+          <p className="text-xs text-[var(--atlas-ink-muted)]">Modpack delivery made practical</p>
         </div>
       </Link>
       <nav
@@ -42,13 +42,13 @@ export default function PublicNavbar() {
           href="/sign-up"
           className="rounded-full border border-[var(--atlas-ink)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5 hover:bg-[var(--atlas-ink)] hover:text-[var(--atlas-cream)]"
         >
-          Request Invite
+          Create account
         </Link>
         <Link
           href="/dashboard"
           className="rounded-full bg-[var(--atlas-accent)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] shadow-[0_10px_30px_rgba(60,132,109,0.25)] transition hover:-translate-y-0.5"
         >
-          Open Dashboard
+          Open creator dashboard
         </Link>
       </div>
     </header>

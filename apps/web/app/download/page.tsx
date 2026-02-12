@@ -9,7 +9,7 @@ import { isDistributionArch } from "@/lib/distribution";
 
 export const metadata: Metadata = {
   title: "Downloads | Atlas Hub",
-  description: "Download Atlas Launcher, CLI, and Runner with guided install flows.",
+  description: "Download Atlas Launcher, CLI, and Runner with guided setup.",
 };
 
 function releaseLabel(version?: string, publishedAt?: string) {
@@ -45,12 +45,12 @@ export default async function DownloadPage() {
     {
       id: "launcher",
       label: "Launcher",
-      detail: "Best for players who want a desktop app and auto-updates.",
+      detail: "Best for players who want a desktop app with automatic updates.",
       latest: releaseLabel(launcherRelease?.version, launcherRelease?.published_at),
       primaryHref: launcherRecommendedHref,
       primaryLabel: "Download launcher",
       pageHref: "/download/app",
-      pageLabel: "Open launcher page",
+      pageLabel: "View launcher options",
       installSteps: [
         "Download the launcher installer for your platform.",
         "Run setup and sign in with your Atlas account.",
@@ -60,16 +60,16 @@ export default async function DownloadPage() {
     {
       id: "cli",
       label: "CLI",
-      detail: "Best for creators, automation, and CI build pipelines.",
+      detail: "Best for creators, automation, and CI pipelines.",
       latest: releaseLabel(cliRelease?.version, cliRelease?.published_at),
       primaryHref: cliRecommendedHref,
       primaryLabel: "Download CLI",
       pageHref: "/download/cli",
-      pageLabel: "Open CLI page",
+      pageLabel: "View CLI options",
       installSteps: [
         "Install the CLI for your platform.",
         "Verify with `atlas --version`.",
-        "Run `atlas build` and `atlas deploy` in your pack repo.",
+        "Run `atlas build` and `atlas publish` in your pack repo.",
       ],
     },
     {
@@ -78,9 +78,9 @@ export default async function DownloadPage() {
       detail: "Best for Linux VPS and server hosts. macOS manual, Windows via WSL.",
       latest: releaseLabel(runnerRelease?.version, runnerRelease?.published_at),
       primaryHref: "/download/runner",
-      primaryLabel: "Open runner install flow",
+      primaryLabel: "Open runner setup",
       pageHref: "/download/runner",
-      pageLabel: "Open runner page",
+      pageLabel: "View runner options",
       installSteps: [
         "Use the Linux one-command install for VPS hosts.",
         "For macOS, download runner and runnerd manually.",

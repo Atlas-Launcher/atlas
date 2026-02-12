@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { playerWebCopy } from "@/app/_copy/player";
 
 function isPasskeyAbortError(error: unknown) {
   if (!error) {
@@ -165,9 +166,9 @@ export default function SignInClient() {
         <Card>
           <CardHeader>
             <Badge variant="secondary">Atlas Hub</Badge>
-            <CardTitle>Sign in</CardTitle>
+            <CardTitle>{playerWebCopy.auth.signInTitle}</CardTitle>
             <CardDescription>
-              Access your packs, releases, and channel controls.
+              {playerWebCopy.auth.continueInLauncher}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -179,6 +180,7 @@ export default function SignInClient() {
                   onChange={(event) => setEmail(event.target.value)}
                   type="email"
                   autoComplete="username webauthn"
+                  autoFocus
                   required
                   className="mt-2"
                 />
@@ -196,13 +198,17 @@ export default function SignInClient() {
               </label>
 
               {error ? (
-                <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+                <p
+                  className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700"
+                  role="alert"
+                  aria-live="polite"
+                >
                   {error}
                 </p>
               ) : null}
 
               <Button type="submit" disabled={loading} size="lg" className="w-full">
-                {loading ? "Signing in" : "Sign in"}
+                {loading ? "Signing in..." : "Sign in"}
               </Button>
             </form>
 
@@ -215,7 +221,7 @@ export default function SignInClient() {
                 disabled={!passkeyAvailable || loading}
                 onClick={handlePasskey}
               >
-                Sign in with passkey
+                Continue with passkey
               </Button>
               <a
                 className="block text-center text-xs text-[var(--atlas-ink-muted)] underline"

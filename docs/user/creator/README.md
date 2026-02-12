@@ -1,9 +1,15 @@
 # Creator Docs
 
 Audience:
-- Pack creators
-- Server hosts operating Atlas runner tooling
+- Pack creators familiar with Minecraft/modpack concepts.
+- Limited assumptions about CLI, CI, or server internals.
+
+Tone:
+- Practical and concise.
+- Command-first with clear outcomes.
 
 Read in order:
 1. `getting-started.md`
-2. `pack-lifecycle.md`
+2. `tutorial-first-pack.md`
+3. `pack-lifecycle.md`
+4. `quick-reference.md`
