@@ -14,6 +14,7 @@ import TitleBar from "./components/TitleBar.vue";
 import TroubleshooterDialog from "./components/TroubleshooterDialog.vue";
 import UpdaterBanner from "./components/UpdaterBanner.vue";
 import Button from "./components/ui/button/Button.vue";
+import { parseOnboardingDeepLink, type OnboardingIntent } from "./lib/onboardingDeepLink";
 import { initLaunchEvents } from "./lib/useLaunchEvents";
 import { useAuth } from "./lib/useAuth";
 import { useLibrary } from "./lib/useLibrary";
@@ -38,6 +39,7 @@ const {
   upsertTaskFromEvent
 } = useStatus();
 const { working, run } = useWorking();
+const incomingOnboardingIntent = ref<OnboardingIntent | null>(null);
 const {
   isSigningIn,
   profile,
@@ -52,7 +54,17 @@ const {
   createLauncherLink,
   completeLauncherLink,
   startLauncherLinkCompletionPoll
-} = useAuth({ setStatus, pushLog, run });
+} = useAuth({
+  setStatus,
+  pushLog,
+  run,
+  onUnhandledDeepLink: (url) => {
+    const intent = parseOnboardingDeepLink(url);
+    if (intent) {
+      incomingOnboardingIntent.value = intent;
+    }
+  }
+});
 const {
   settings,
   settingsClientId,
@@ -137,12 +149,28 @@ const HOURLY_UPDATE_CHECK_MS = 60 * 60 * 1000;
 let updateCheckInterval: ReturnType<typeof setInterval> | null = null;
 let failurePromptCheckVersion = 0;
 const lastAutoTroubleshooterSignal = ref<string | null>(null);
+const onboardingIntentApplying = ref(false);
 const hubUrl = computed(() => (settingsAtlasHubUrl.value ?? "").trim() || import.meta.env.VITE_ATLAS_HUB_URL || "https://atlas.nathanm.org");
 const readinessNextActionLabels: Partial<Record<string, string>> = {
   atlasLogin: "Sign in to Atlas",
   microsoftLogin: "Sign in to Microsoft",
   accountLink: "Link accounts"
 };
+
+function onboardingIntentMatches(a: AppSettings["pendingIntent"], b: AppSettings["pendingIntent"]) {
+  if (!a && !b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+  return (
+    a.source === b.source &&
+    a.packId === b.packId &&
+    a.channel === b.channel &&
+    a.createdAt === b.createdAt
+  );
+}
 
 function normalizeUuid(value?: string | null) {
   return (value ?? "").trim().toLowerCase().replace(/-/g, "");
@@ -305,6 +333,72 @@ function hasLoginReadinessBlockers(report: LaunchReadinessReport) {
   return !report.atlasLoggedIn || !report.microsoftLoggedIn || !report.accountsLinked;
 }
 
+async function persistIncomingOnboardingIntent(intent: OnboardingIntent) {
+  if (onboardingIntentMatches(settings.value.pendingIntent, intent)) {
+    return;
+  }
+  const nextSettings = {
+    ...settings.value,
+    pendingIntent: intent
+  };
+  await updateSettings(nextSettings);
+  setStatus("Invite handoff received. Preparing your pack in Atlas Launcher.");
+}
+
+function findAtlasInstanceByPackId(packId: string) {
+  return instances.value.find(
+    (instance) => instance.source === "atlas" && instance.atlasPack?.packId === packId
+  ) ?? null;
+}
+
+async function applyPendingOnboardingIntent() {
+  const intent = settings.value.pendingIntent;
+  if (!intent || onboardingIntentApplying.value) {
+    return false;
+  }
+
+  const matchedInstance = findAtlasInstanceByPackId(intent.packId);
+  if (!matchedInstance) {
+    return false;
+  }
+
+  onboardingIntentApplying.value = true;
+  try {
+    if (matchedInstance.atlasPack && matchedInstance.atlasPack.channel !== intent.channel) {
+      await updateInstance(matchedInstance.id, {
+        atlasPack: {
+          ...matchedInstance.atlasPack,
+          channel: intent.channel,
+          buildId: null,
+          buildVersion: null,
+          artifactKey: null
+        }
+      });
+    }
+
+    if (settings.value.selectedInstanceId !== matchedInstance.id) {
+      await selectInstance(matchedInstance.id);
+    }
+
+    activeTab.value = "library";
+    libraryView.value = "detail";
+    await refreshLaunchReadiness();
+    if (launchReadiness.value && hasLoginReadinessBlockers(launchReadiness.value)) {
+      readinessWizardOpen.value = true;
+    }
+    setStatus(`Invite ready for ${matchedInstance.name}. Install files and press Play.`);
+
+    const nextSettings = {
+      ...settings.value,
+      pendingIntent: null
+    };
+    await updateSettings(nextSettings);
+    return true;
+  } finally {
+    onboardingIntentApplying.value = false;
+  }
+}
+
 async function persistReadinessWizardState(state: { dismissedAt?: string | null; completedAt?: string | null }) {
   const nextSettings = {
     ...settings.value,
@@ -345,7 +439,10 @@ function buildDefaultLauncherSettings(): AppSettings {
     launchReadinessWizard: {
       dismissedAt: null,
       completedAt: null
-    }
+    },
+    pendingIntent: null,
+    firstLaunchCompletedAt: null,
+    firstLaunchNoticeDismissedAt: null
   };
 }
 
@@ -813,6 +910,10 @@ async function syncAtlasPacks() {
     }
     const remotePacks = await invoke<AtlasRemotePack[]>("list_atlas_remote_packs");
     await syncAtlasRemotePacks(remotePacks);
+    const onboardingHandled = await applyPendingOnboardingIntent();
+    if (onboardingHandled) {
+      return;
+    }
     setStatus(`Atlas packs synced (${remotePacks.length}).`);
   } catch (err) {
     setStatus(`Failed to sync Atlas packs: ${String(err)}`);
@@ -1002,6 +1103,40 @@ onMounted(async () => {
 onUnmounted(() => {
   stopHourlyUpdateChecks();
 });
+
+watch(
+  () => incomingOnboardingIntent.value,
+  async (intent) => {
+    if (!intent) {
+      return;
+    }
+    await persistIncomingOnboardingIntent(intent);
+    incomingOnboardingIntent.value = null;
+    if (atlasProfile.value) {
+      await syncAtlasPacks();
+    }
+  }
+);
+
+watch(
+  () => [
+    appBootstrapped.value,
+    settings.value.pendingIntent?.packId ?? null,
+    settings.value.pendingIntent?.channel ?? null,
+    instances.value
+      .map(
+        (instance) =>
+          `${instance.id}:${instance.source}:${instance.atlasPack?.packId ?? ""}:${instance.atlasPack?.channel ?? ""}`
+      )
+      .join("|")
+  ],
+  async ([bootstrapped, pendingPackId]) => {
+    if (!bootstrapped || !pendingPackId) {
+      return;
+    }
+    await applyPendingOnboardingIntent();
+  }
+);
 
 watch(
   () => [

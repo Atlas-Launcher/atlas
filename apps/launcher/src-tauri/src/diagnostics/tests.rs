@@ -18,6 +18,9 @@ fn sample_settings() -> AppSettings {
         selected_instance_id: None,
         theme_mode: Some("system".to_string()),
         launch_readiness_wizard: Default::default(),
+        pending_intent: None,
+        first_launch_completed_at: None,
+        first_launch_notice_dismissed_at: None,
     }
 }
 
