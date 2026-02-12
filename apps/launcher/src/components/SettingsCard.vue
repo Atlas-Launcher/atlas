@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import Button from "./ui/button/Button.vue";
 import Card from "./ui/card/Card.vue";
 import CardHeader from "./ui/card/CardHeader.vue";
@@ -61,15 +61,42 @@ function updateDefaultJvmArgs(event: Event) {
 function updateThemeMode(value: string) {
   emit("update:settingsThemeMode", value as "light" | "dark" | "system");
 }
+
+const updaterPrimaryText = computed(() => {
+  if (props.updaterInstallComplete) {
+    return "Update is ready to apply.";
+  }
+  if (props.updaterUpdateVersion) {
+    return `Version ${props.updaterUpdateVersion} is available.`;
+  }
+  if (props.updaterBusy) {
+    return "Checking for updates...";
+  }
+  return "Check for updates when you need one.";
+});
+
+const updaterDetailText = computed(() => {
+  const status = (props.updaterStatusText ?? "").trim();
+  if (!status) {
+    return null;
+  }
+  if (props.updaterUpdateVersion && status === `Update ${props.updaterUpdateVersion} is available.`) {
+    return null;
+  }
+  if (props.updaterInstallComplete && status === "Update installed. Relaunch to finish.") {
+    return null;
+  }
+  return status;
+});
 </script>
 
 <template>
-  <Card class="glass">
-    <CardHeader>
+  <Card class="glass h-full min-h-0 rounded-2xl flex flex-col">
+    <CardHeader class="pt-7">
       <CardTitle>Settings</CardTitle>
       <CardDescription>Set launcher defaults and account options.</CardDescription>
     </CardHeader>
-    <CardContent class="space-y-4">
+    <CardContent class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-3 pb-5 pt-1 [scrollbar-gutter:stable]">
       <Tabs v-model="settingsTab" class="space-y-4">
         <TabsList class="grid w-full grid-cols-3">
           <TabsTrigger value="runtime">Runtime</TabsTrigger>
@@ -146,18 +173,7 @@ function updateThemeMode(value: string) {
             <div class="flex items-center justify-between gap-3">
               <div class="space-y-1">
                 <p class="text-xs uppercase tracking-widest text-muted-foreground">App updates</p>
-                <p class="text-sm">
-                  <template v-if="props.updaterInstallComplete">
-                    Update installed.
-                    <span class="text-primary font-medium">Restart is required.</span>
-                  </template>
-                  <template v-else-if="props.updaterUpdateVersion">
-                    Update {{ props.updaterUpdateVersion }} is available.
-                  </template>
-                  <template v-else>
-                  Check for launcher updates manually.
-                  </template>
-                </p>
+                <p class="text-sm">{{ updaterPrimaryText }}</p>
               </div>
               <Button
                 size="sm"
@@ -165,10 +181,10 @@ function updateThemeMode(value: string) {
                 :disabled="props.updaterBusy"
                 @click="emit('check-updates')"
               >
-                {{ props.updaterBusy ? "Checking..." : "Check for updates" }}
+                {{ props.updaterBusy ? "Checking..." : "Check now" }}
               </Button>
             </div>
-            <p class="text-xs text-muted-foreground">{{ props.updaterStatusText }}</p>
+            <p v-if="updaterDetailText" class="text-xs text-muted-foreground">{{ updaterDetailText }}</p>
           </div>
 
           <div class="space-y-2">
@@ -197,7 +213,7 @@ function updateThemeMode(value: string) {
         </TabsContent>
       </Tabs>
     </CardContent>
-    <CardFooter>
+    <CardFooter class="pt-0">
       <div class="flex w-full items-center justify-between gap-3">
         <div />
         <Button :disabled="props.working" variant="secondary" @click="emit('save-settings')">Save</Button>

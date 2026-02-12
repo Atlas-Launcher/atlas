@@ -82,7 +82,7 @@ const launchBlockedReason = computed(() => {
 <template>
   <!-- Fill available height so the tabs area can scroll internally -->
   <section class="flex-1 min-h-0 flex flex-col gap-6 overflow-visible">
-    <div class="glass rounded-2xl px-6 py-4">
+    <div class="glass relative z-[1] mx-1 rounded-2xl px-6 py-4">
       <div class="flex flex-wrap items-center gap-4">
         <Button size="icon-sm" variant="ghost" @click="emit('back')"><ChevronLeftIcon /></Button>
         <div class="flex items-center gap-3">
@@ -128,13 +128,20 @@ const launchBlockedReason = computed(() => {
         <!-- Logs are available in Settings -->
       </TabsList>
       <TabsContent value="content" class="mt-0 flex-1 min-h-0 overflow-hidden">
-        <div class="h-full overflow-auto pr-2 pl-1 pb-2 pt-2">
+        <div
+          :class="
+            isRemoteInstance
+              ? 'h-full min-h-0 overflow-y-auto mr-1 pr-1 pb-2 pt-2 [scrollbar-gutter:stable]'
+              : 'h-full min-h-0 overflow-hidden px-1 pb-2 pt-2'
+          "
+        >
           <div
             class="space-y-6"
             :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
           >
             <RemoteManageCard
               v-if="isRemoteInstance"
+              class="mx-1"
               :instance="props.instance"
               :working="props.working"
               :installed-versions="props.installedVersions"
@@ -143,6 +150,7 @@ const launchBlockedReason = computed(() => {
             />
             <ModsCard
               v-else
+              class="mx-1 h-full min-h-0"
               :instance="props.instance"
               :mods="props.mods"
               :mods-dir="props.modsDir"
@@ -156,13 +164,14 @@ const launchBlockedReason = computed(() => {
         </div>
       </TabsContent>
       <TabsContent value="setup" class="mt-0 flex-1 min-h-0 overflow-hidden">
-        <div class="h-full overflow-auto pr-2 pl-1 pb-2 pt-2">
+        <div class="h-full min-h-0 overflow-y-auto mr-1 pr-1 pb-2 pt-2 [scrollbar-gutter:stable]">
           <div
             class="flex flex-col gap-6"
             :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
           >
             <VersionsCard
               v-if="!isRemoteInstance"
+              class="mx-1"
               :instance="props.instance"
               :available-versions="props.availableVersions"
               :latest-release="props.latestRelease"
@@ -175,6 +184,7 @@ const launchBlockedReason = computed(() => {
               @refresh="emit('refresh-versions')"
             />
             <InstanceSettingsCard
+              class="mx-1"
               :instance="props.instance"
               :instances-count="props.instancesCount"
               :default-memory-mb="props.defaultMemoryMb"
