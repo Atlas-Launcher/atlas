@@ -133,8 +133,13 @@ jobs:
           VERSION="${GITHUB_REF_NAME#cli-v}"
           MACHINE="$(uname -m)"
 
-          # Find downloaded binary (arch naming differs)
-          BIN="$(ls -1 dist/cli/atlas-Darwin-* | head -n 1)"
+          # Find downloaded binary; artifact naming is atlas-${runner.os}-${runner.arch}.
+          BIN="$(find dist/cli -maxdepth 1 -type f -name 'atlas-*' ! -name '*.exe' | head -n 1)"
+          if [[ -z "${BIN}" ]]; then
+            echo "No macOS CLI binary found in dist/cli." >&2
+            ls -lah dist/cli || true
+            exit 1
+          fi
           chmod +x "$BIN"
 
           ROOT_DIR="staging/pkgroot"
