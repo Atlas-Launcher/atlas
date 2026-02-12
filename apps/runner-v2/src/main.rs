@@ -2,6 +2,7 @@ use atlas_client::hub::{DistributionReleaseAsset, DistributionReleaseResponse, H
 use clap::{Parser, Subcommand};
 use runner_core_v2::proto::{LogLine, LogStream};
 use runner_v2_utils::runtime_paths_v2;
+use semver::Version;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::time::{sleep, Duration};
@@ -9,6 +10,7 @@ use tokio::time::{sleep, Duration};
 mod client;
 
 #[derive(Parser)]
+#[command(version = env!("ATLAS_BUILD_VERSION"))]
 struct Args {
     #[command(subcommand)]
     cmd: Cmd,
@@ -252,6 +254,11 @@ async fn install_systemd(
     }
 
     let service_user = user.unwrap_or_else(current_user);
+    let runner_update = ensure_runner_binary_up_to_date().await?;
+    if runner_update {
+        println!("Updated /usr/local/bin/atlas-runner to the latest available version.");
+    }
+
     let runnerd = if let Some(path) = runnerd_path.as_ref() {
         path.display().to_string()
     } else {
@@ -260,28 +267,34 @@ async fn install_systemd(
     };
 
     let service_path = Path::new("/etc/systemd/system/atlas-runnerd.service");
-    let contents = format!(
-        "[Unit]\n\
-Description=Atlas Runner Daemon\n\
-After=network-online.target\n\
-Wants=network-online.target\n\n\
-[Service]\n\
-Type=simple\n\
-User={service_user}\n\
-ExecStart={runnerd}\n\
-Restart=always\n\
-RestartSec=5\n\
-Environment=RUST_LOG=info\n\n\
-[Install]\n\
-WantedBy=multi-user.target\n"
-    );
-
-    std::fs::write(service_path, contents)
-        .map_err(|err| anyhow::anyhow!("Failed to write {}: {err}", service_path.display()))?;
+    reconcile_runnerd_service_file(service_path, &runnerd, &service_user)?;
 
     run_systemctl(["daemon-reload"])?;
     run_systemctl(["enable", "--now", "atlas-runnerd.service"])?;
     Ok(())
+}
+
+async fn ensure_runner_binary_up_to_date() -> anyhow::Result<bool> {
+    let hub_url = resolve_install_hub_url()?;
+    let mut hub = HubClient::new(&hub_url)?;
+    if let Ok(token) = std::env::var("ATLAS_TOKEN") {
+        if !token.trim().is_empty() {
+            hub.set_token(token);
+        }
+    }
+
+    let arch = normalize_distribution_arch(std::env::consts::ARCH)?;
+    let release = hub
+        .get_latest_distribution_release("runner", "linux", arch)
+        .await?;
+    if !is_outdated_version(env!("ATLAS_BUILD_VERSION"), &release.version) {
+        return Ok(false);
+    }
+
+    let asset = select_runner_asset(&release)?;
+    let bytes = hub.download_distribution_asset(&asset.download_id).await?;
+    write_binary_to_install_path(&PathBuf::from("/usr/local/bin/atlas-runner"), &bytes)?;
+    Ok(true)
 }
 
 async fn download_runnerd_via_distribution_api() -> anyhow::Result<PathBuf> {
@@ -301,25 +314,7 @@ async fn download_runnerd_via_distribution_api() -> anyhow::Result<PathBuf> {
     let bytes = hub.download_distribution_asset(&asset.download_id).await?;
 
     let install_path = PathBuf::from("/usr/local/bin/atlas-runnerd");
-    std::fs::write(&install_path, &bytes).map_err(|err| {
-        anyhow::anyhow!(
-            "Failed to write runnerd binary to {}: {err}",
-            install_path.display()
-        )
-    })?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&install_path, std::fs::Permissions::from_mode(0o755)).map_err(
-            |err| {
-                anyhow::anyhow!(
-                    "Failed to set executable permissions on {}: {err}",
-                    install_path.display()
-                )
-            },
-        )?;
-    }
+    write_binary_to_install_path(&install_path, &bytes)?;
 
     Ok(install_path)
 }
@@ -340,6 +335,66 @@ fn select_runnerd_asset(
         .ok_or_else(|| {
             anyhow::anyhow!("No runnerd binary/installer asset found in distribution release")
         })
+}
+
+fn select_runner_asset(
+    release: &DistributionReleaseResponse,
+) -> anyhow::Result<&DistributionReleaseAsset> {
+    release
+        .assets
+        .iter()
+        .find(|asset| asset.kind == "binary")
+        .or_else(|| {
+            release
+                .assets
+                .iter()
+                .find(|asset| asset.kind == "installer")
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!("No runner binary/installer asset found in distribution release")
+        })
+}
+
+fn normalize_version_for_compare(value: &str) -> String {
+    value.trim().trim_start_matches('v').to_string()
+}
+
+fn is_outdated_version(current: &str, latest: &str) -> bool {
+    let current_norm = normalize_version_for_compare(current);
+    let latest_norm = normalize_version_for_compare(latest);
+    match (Version::parse(&current_norm), Version::parse(&latest_norm)) {
+        (Ok(current_semver), Ok(latest_semver)) => current_semver < latest_semver,
+        _ => current_norm != latest_norm,
+    }
+}
+
+fn write_binary_to_install_path(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+    let temp_path = path.with_extension("tmp");
+    std::fs::write(&temp_path, bytes).map_err(|err| {
+        anyhow::anyhow!("Failed to write binary to {}: {err}", temp_path.display())
+    })?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o755)).map_err(
+            |err| {
+                anyhow::anyhow!(
+                    "Failed to set executable permissions on {}: {err}",
+                    temp_path.display()
+                )
+            },
+        )?;
+    }
+
+    std::fs::rename(&temp_path, path).map_err(|err| {
+        anyhow::anyhow!(
+            "Failed to move binary into place at {}: {err}",
+            path.display()
+        )
+    })?;
+
+    Ok(())
 }
 
 fn resolve_install_hub_url() -> anyhow::Result<String> {
@@ -406,6 +461,147 @@ fn run_systemctl<const N: usize>(args: [&str; N]) -> anyhow::Result<()> {
         anyhow::bail!("systemctl failed with exit code: {status}");
     }
     Ok(())
+}
+
+fn reconcile_runnerd_service_file(
+    path: &Path,
+    runnerd: &str,
+    service_user: &str,
+) -> anyhow::Result<()> {
+    let contents = if path.exists() {
+        std::fs::read_to_string(path)
+            .map_err(|err| anyhow::anyhow!("Failed to read {}: {err}", path.display()))?
+    } else {
+        String::new()
+    };
+
+    let updated = reconcile_runnerd_service_content(&contents, runnerd, service_user);
+    if normalize_newline(&contents) != normalize_newline(&updated) {
+        std::fs::write(path, updated)
+            .map_err(|err| anyhow::anyhow!("Failed to write {}: {err}", path.display()))?;
+    }
+
+    Ok(())
+}
+
+fn reconcile_runnerd_service_content(existing: &str, runnerd: &str, service_user: &str) -> String {
+    if existing.trim().is_empty() {
+        return format!(
+            "[Unit]\n\
+Description=Atlas Runner Daemon\n\
+After=network-online.target\n\
+Wants=network-online.target\n\n\
+[Service]\n\
+Type=simple\n\
+User={service_user}\n\
+ExecStart={runnerd}\n\
+Restart=always\n\
+RestartSec=5\n\
+Environment=RUST_LOG=info\n\
+Environment=ATLAS_SYSTEMD_MANAGED=1\n\n\
+[Install]\n\
+WantedBy=multi-user.target\n"
+        );
+    }
+
+    let lines = existing
+        .lines()
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>();
+    let Some(service_start) = lines
+        .iter()
+        .position(|line| line.trim().eq_ignore_ascii_case("[Service]"))
+    else {
+        return format!(
+            "{}\n\n[Service]\nType=simple\nUser={service_user}\nExecStart={runnerd}\nRestart=always\nRestartSec=5\nEnvironment=RUST_LOG=info\nEnvironment=ATLAS_SYSTEMD_MANAGED=1\n",
+            normalize_newline(existing).trim_end()
+        );
+    };
+
+    let service_end = lines
+        .iter()
+        .enumerate()
+        .skip(service_start + 1)
+        .find_map(|(idx, line)| {
+            let trimmed = line.trim();
+            if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(lines.len());
+
+    let mut has_user = false;
+    let mut has_type = false;
+    let mut kept_service_lines = Vec::new();
+    for line in &lines[service_start + 1..service_end] {
+        if let Some((key, value)) = parse_service_key_value(line) {
+            if key.eq_ignore_ascii_case("User") {
+                has_user = true;
+            }
+            if key.eq_ignore_ascii_case("Type") && value.eq_ignore_ascii_case("simple") {
+                has_type = true;
+            }
+            if is_managed_service_line(key, value) {
+                continue;
+            }
+        }
+        kept_service_lines.push(line.clone());
+    }
+
+    if !has_type {
+        kept_service_lines.push("Type=simple".to_string());
+    }
+    if !has_user {
+        kept_service_lines.push(format!("User={service_user}"));
+    }
+    kept_service_lines.push(format!("ExecStart={runnerd}"));
+    kept_service_lines.push("Restart=always".to_string());
+    kept_service_lines.push("RestartSec=5".to_string());
+    kept_service_lines.push("Environment=RUST_LOG=info".to_string());
+    kept_service_lines.push("Environment=ATLAS_SYSTEMD_MANAGED=1".to_string());
+
+    let mut merged = Vec::new();
+    merged.extend(lines[..service_start + 1].iter().cloned());
+    merged.extend(kept_service_lines);
+    merged.extend(lines[service_end..].iter().cloned());
+
+    normalize_newline(&merged.join("\n"))
+}
+
+fn parse_service_key_value(line: &str) -> Option<(&str, &str)> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(';') {
+        return None;
+    }
+    let (key, value) = trimmed.split_once('=')?;
+    Some((key.trim(), value.trim()))
+}
+
+fn is_managed_service_line(key: &str, value: &str) -> bool {
+    if key.eq_ignore_ascii_case("ExecStart")
+        || key.eq_ignore_ascii_case("Restart")
+        || key.eq_ignore_ascii_case("RestartSec")
+    {
+        return true;
+    }
+
+    if key.eq_ignore_ascii_case("Environment") {
+        let normalized = value.trim().trim_matches('"').trim_matches('\'').trim();
+        return normalized.starts_with("RUST_LOG=")
+            || normalized.starts_with("ATLAS_SYSTEMD_MANAGED=");
+    }
+
+    false
+}
+
+fn normalize_newline(value: &str) -> String {
+    let mut output = value.to_string();
+    if !output.ends_with('\n') {
+        output.push('\n');
+    }
+    output
 }
 
 fn current_user() -> String {

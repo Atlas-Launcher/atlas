@@ -18,11 +18,12 @@ pub async fn serve(listener: UnixListener, logs: LogStore) -> std::io::Result<()
     let state: SharedState = Arc::new(Mutex::new(ServerState::new(logs)));
     // Start daily backup scheduler (non-blocking)
     let server_root_for_scheduler = crate::supervisor::default_server_root("default");
-    crate::backup::start_daily_scheduler(server_root_for_scheduler, state.clone());
+    crate::backup::start_daily_scheduler(server_root_for_scheduler.clone(), state.clone());
     let start_ms = crate::supervisor::now_millis();
     let auto_state = state.clone();
     // Run auto-start synchronously in this task to avoid requiring `start_server_from_deploy` to be Send.
     start_server_from_deploy(auto_state).await;
+    crate::self_update::start_background_update_loop(server_root_for_scheduler, state.clone());
 
     // Signal handler for SIGTERM (graceful shutdown)
     let state_for_signal = state.clone();
@@ -157,7 +158,7 @@ async fn handle_conn(
 
             Request::Ping { protocol_version, .. } => {
                 let resp = Response::Pong {
-                    daemon_version: env!("CARGO_PKG_VERSION").to_string(),
+                    daemon_version: env!("ATLAS_BUILD_VERSION").to_string(),
                     protocol_version,
                 };
                 let out = Outbound::Response(Envelope { id: req_id, payload: resp });

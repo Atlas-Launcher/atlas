@@ -14,7 +14,7 @@ pub async fn ping() -> anyhow::Result<String> {
     let req = Envelope {
         id: 1,
         payload: Request::Ping {
-            client_version: env!("CARGO_PKG_VERSION").to_string(),
+            client_version: env!("ATLAS_BUILD_VERSION").to_string(),
             protocol_version: PROTOCOL_VERSION,
         },
     };

@@ -8,6 +8,31 @@ export async function GET(request: NextRequest) {
   const script = `#!/usr/bin/env bash
 set -euo pipefail
 
+install_daemon=1
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --no-daemon-install)
+      install_daemon=0
+      ;;
+    -h|--help)
+      cat <<'USAGE'
+Usage: atlas-runner-install.sh [--no-daemon-install]
+
+Options:
+  --no-daemon-install   Skip 'atlas-runner install' daemon setup.
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      echo "Use --help for usage." >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
 if ! command -v curl >/dev/null 2>&1; then
   echo "curl is required." >&2
   exit 1
@@ -60,6 +85,14 @@ install -m 0755 "\${tmp}" /usr/local/bin/atlas-runner
 
 echo "Installed /usr/local/bin/atlas-runner"
 echo "Verify with: atlas-runner --version"
+
+if [ "\${install_daemon}" -eq 1 ]; then
+  echo "Installing atlas-runnerd systemd daemon via atlas-runner install..."
+  ATLAS_HUB_URL="${origin}" atlas-runner install
+  echo "Daemon install complete."
+else
+  echo "Skipping daemon install (--no-daemon-install)."
+fi
 `;
 
   return new NextResponse(script, {

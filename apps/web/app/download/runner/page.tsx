@@ -102,8 +102,8 @@ export default async function RunnerDownloadPage() {
     requestHeaders.get("x-forwarded-proto"),
   );
 
-  const installCommand = `curl -fsSL ${hubOrigin}/download/runner/install | sudo bash`;
-  const wslCommand = `wsl -e bash -lc '${installCommand}'`;
+  const installCommand = `curl -fsSL ${hubOrigin}/download/runner/install | sudo bash -s --`;
+  const wslCommand = `wsl -e bash -lc 'curl -fsSL ${hubOrigin}/download/runner/install | sudo bash -s -- --no-daemon-install'`;
 
   const [runnerReleases, runnerdReleases] = await Promise.all([
     resolvePlatformReleases("runner", releaseTargets),
@@ -122,76 +122,81 @@ export default async function RunnerDownloadPage() {
     {
       id: "linux",
       label: "Linux",
-      detail: "Recommended for VPS",
+      detail: "Recommended for servers",
       action: {
         type: "command",
         label: "Install with one command",
         command: installCommand,
-        note: "Uses your Hub origin from NEXT_PUBLIC_BETTER_AUTH_URL.",
+        note: "Installs Atlas Runner and has it start when your system does.",
       },
-      installTitle: "Install Atlas Runner on Linux VPS",
+      installTitle: "Install Atlas Runner on Linux",
       installSteps: [
-        "Run the one-command install in your VPS shell.",
-        "Verify with `atlas-runner --version`.",
-        "Continue with runner auth/install workflow for daemon setup.",
+        "Open your server terminal.",
+        "Run the install command above.",
+        "Verify: `atlas-runner --version`.",
+        "Link: `atlas-runner auth`.",
+        "Launch: `atlas-runner up`.",
       ],
       manualTitle: "Manual Linux downloads (runner + runnerd)",
       manualDownloads: linuxManual,
-      manualEmptyLabel: "No stable Linux runner artifacts available yet.",
+      manualEmptyLabel: "No stable Linux builds available yet.",
       nextSteps: [
-        "Run `atlas-runner auth` to connect your host.",
-        "Use install/up commands to initialize runtime state.",
-        "Use stable channel builds for production.",
+        "Run `atlas-runner auth` to link this machine.",
+        "Run `atlas-runner up` to initialize/apply runner state.",
+        "Use the stable channel for production systems.",
       ],
     },
+
     {
       id: "macos",
       label: "macOS",
-      detail: "Native manual install",
+      detail: "Manual install",
       action: {
         type: "info",
-        label: "Manual download required",
-        note: "Download both atlas-runner and atlas-runnerd below for your architecture.",
+        label: "Download binaries",
+        note: "Download both `atlas-runner` and `atlas-runnerd` for your architecture.",
       },
       installTitle: "Install Atlas Runner on macOS",
       installSteps: [
-        "Download both `atlas-runner` and `atlas-runnerd` binaries.",
-        "Move binaries into your PATH and mark executable.",
-        "Verify with `atlas-runner --version` and start runner workflow commands.",
+        "Download `atlas-runner` and `atlas-runnerd`.",
+        "Move them into a folder in your PATH (for example `/usr/local/bin`).",
+        "Make them executable: `chmod +x atlas-runner atlas-runnerd`.",
+        "Verify: `atlas-runner --version`.",
+        "Link: `atlas-runner auth`",
+        "Launch: `atlas-runner up`.",
       ],
       manualTitle: "Manual macOS downloads (runner + runnerd)",
       manualDownloads: macosManual,
-      manualEmptyLabel: "No stable macOS runner artifacts available yet.",
+      manualEmptyLabel: "No stable macOS builds available yet.",
       nextSteps: [
-        "Keep runner and runnerd versions aligned.",
-        "Run auth and install flows from atlas-runner.",
-        "Track release updates on this page.",
+        "Keep runner and runnerd on the same version.",
+        "Run `atlas-runner auth` and then `atlas-runner up`.",
+        "Update both binaries together when upgrading.",
       ],
     },
+
     {
       id: "windows",
-      label: "Windows",
+      label: "Windows (WSL)",
       detail: "Use WSL",
       action: {
         type: "command",
-        label: "Run install in WSL",
+        label: "Install and Atlas Runner inside the Windows Subsystem for Linux (WSL).",
         command: wslCommand,
-        note: "Windows deployment is supported through WSL Linux environments.",
+        note: "WSL installs do not start with your system by default. For always-on hosts, prefer Linux install.",
       },
       installTitle: "Install Atlas Runner on Windows (WSL)",
       installSteps: [
-        "Install WSL and open a Linux distro shell.",
-        "Run the WSL command shown above inside your distro.",
-        "Verify in WSL with `atlas-runner --version`.",
+        "Install WSL and open a Linux distro (Ubuntu, Debian, etc.).",
+        "Run the install command on your Windows host.",
+        "Verify in WSL: `atlas-runner --version`.",
+        "Link the host in WSL: `atlas-runner auth`.",
+        "Apply setup in WSL: `atlas-runner up`.",
       ],
       manualTitle: "Manual downloads",
       manualDownloads: [],
       manualEmptyLabel: "Use WSL and follow the Linux install flow.",
-      nextSteps: [
-        "Keep runner workloads inside Linux/WSL context.",
-        "Use Linux binaries rather than native Windows execution.",
-        "Follow Linux VPS docs for operational guidance.",
-      ],
+      nextSteps: [],
     },
   ];
 

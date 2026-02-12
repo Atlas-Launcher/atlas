@@ -31,6 +31,10 @@ pub struct ServerState {
     pub(crate) watcher_done: Option<Arc<AtomicBool>>,
     // Serialize start/stop/update operations so only one lifecycle operation runs at once
     pub(crate) lifecycle_lock: Arc<tokio::sync::Mutex<()>>,
+    pub(crate) self_update_last_checked_ms: Option<u64>,
+    pub(crate) self_update_last_applied_ms: Option<u64>,
+    pub(crate) self_update_staged_version: Option<String>,
+    pub(crate) self_update_last_error: Option<String>,
 }
 
 impl ServerState {
@@ -53,6 +57,10 @@ impl ServerState {
             watcher_stop: None,
             watcher_done: None,
             lifecycle_lock: Arc::new(Mutex::new(())),
+            self_update_last_checked_ms: None,
+            self_update_last_applied_ms: None,
+            self_update_staged_version: None,
+            self_update_last_error: None,
         }
     }
 
