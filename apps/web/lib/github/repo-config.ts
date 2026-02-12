@@ -4,6 +4,9 @@
  * This module provides functions to configure repositories for Atlas CI,
  * including checking for and updating atlas.toml, and managing workflows.
  */
+import sodium from "libsodium-wrappers";
+
+import { rotateManagedPackDeployToken } from "@/lib/auth/deploy-tokens";
 
 export type GithubContentFile = {
     sha: string;
@@ -19,6 +22,13 @@ export type GithubWorkflow = {
 export type GithubWorkflowListResponse = {
     workflows?: GithubWorkflow[];
 };
+
+type GithubActionsPublicKey = {
+    key_id: string;
+    key: string;
+};
+
+const MANAGED_PACK_DEPLOY_TOKEN_NAME = "github_actions_pack_deploy";
 
 /**
  * Makes an authenticated request to the GitHub API.
@@ -321,6 +331,85 @@ export async function setRepositoryActionsPermissions({
     );
 }
 
+async function upsertRepositoryActionsSecret({
+    token,
+    owner,
+    repo,
+    secretName,
+    secretValue,
+}: {
+    token: string;
+    owner: string;
+    repo: string;
+    secretName: string;
+    secretValue: string;
+}) {
+    const keyPayload = await githubRequest<GithubActionsPublicKey>(
+        token,
+        `https://api.github.com/repos/${owner}/${repo}/actions/secrets/public-key`
+    );
+
+    await sodium.ready;
+    const publicKey = sodium.from_base64(
+        keyPayload.key,
+        sodium.base64_variants.ORIGINAL
+    );
+    const encrypted = sodium.crypto_box_seal(
+        sodium.from_string(secretValue),
+        publicKey
+    );
+    const encryptedValue = sodium.to_base64(
+        encrypted,
+        sodium.base64_variants.ORIGINAL
+    );
+
+    await githubRequest<null>(
+        token,
+        `https://api.github.com/repos/${owner}/${repo}/actions/secrets/${encodeURIComponent(secretName)}`,
+        {
+            method: "PUT",
+            body: JSON.stringify({
+                encrypted_value: encryptedValue,
+                key_id: keyPayload.key_id,
+            }),
+        }
+    );
+}
+
+async function ensureRepositoryAtlasSecrets({
+    token,
+    owner,
+    repo,
+    packId,
+    hubUrl,
+}: {
+    token: string;
+    owner: string;
+    repo: string;
+    packId: string;
+    hubUrl: string;
+}) {
+    const packDeployToken = await rotateManagedPackDeployToken(
+        packId,
+        MANAGED_PACK_DEPLOY_TOKEN_NAME
+    );
+
+    await upsertRepositoryActionsSecret({
+        token,
+        owner,
+        repo,
+        secretName: "ATLAS_HUB_URL",
+        secretValue: hubUrl,
+    });
+    await upsertRepositoryActionsSecret({
+        token,
+        owner,
+        repo,
+        secretName: "ATLAS_PACK_DEPLOY_TOKEN",
+        secretValue: packDeployToken,
+    });
+}
+
 /**
  * Lists workflows in a repository.
  */
@@ -389,6 +478,7 @@ export async function enableRepositoryWorkflows({
  * Full configuration for an imported repository.
  * - Updates atlas.toml with pack_id and hub_url
  * - Adds/replaces atlas-build.yml workflow
+ * - Creates/rotates repository deploy secrets
  * - Enables Actions and workflows
  */
 export async function configureRepoForAtlas({
@@ -418,6 +508,9 @@ export async function configureRepoForAtlas({
 
     // Add/replace the workflow
     await ensureAtlasBuildWorkflow({ token, owner, repo });
+
+    // Ensure required repo secrets for pack deploy automation
+    await ensureRepositoryAtlasSecrets({ token, owner, repo, packId, hubUrl });
 
     // Enable Actions
     await setRepositoryActionsPermissions({ token, owner, repo });

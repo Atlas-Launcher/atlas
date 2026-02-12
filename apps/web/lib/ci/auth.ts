@@ -5,10 +5,11 @@ import { packMembers, packs, users } from "@/lib/db/schema";
 import { getAuthenticatedUserIdFromBearerToken } from "@/lib/auth/request-user";
 import { toRepositorySlug } from "@/lib/github";
 import { verifyGithubOidcToken, type GithubOidcClaims } from "@/lib/ci/oidc";
+import { resolvePackDeployToken, touchPackDeployToken } from "@/lib/auth/deploy-tokens";
 
 type CiAuthContext = {
   packId: string;
-  method: "github_oidc" | "launcher_user";
+  method: "github_oidc" | "pack_deploy_token" | "launcher_user";
   repository?: string;
   oidcClaims?: GithubOidcClaims;
   userId?: string;
@@ -42,12 +43,43 @@ export async function resolveCiAuthContext(
     return authorizeGithubOidcToken(requestedPackId, oidcToken);
   }
 
+  const packDeployToken = getHeaderToken(request, "x-atlas-pack-deploy-token");
+  if (packDeployToken) {
+    return authorizePackDeployToken(requestedPackId, packDeployToken);
+  }
+
   const bearer = parseBearerToken(request);
   if (bearer) {
     return authorizeLauncherUserToken(requestedPackId, bearer);
   }
 
   throw new Error("Missing CI credentials.");
+}
+
+async function authorizePackDeployToken(
+  requestedPackId: string | null,
+  token: string
+): Promise<CiAuthContext> {
+  const packId = requestedPackId?.toString().trim();
+  if (!packId) {
+    throw new Error("packId is required when using pack deploy token credentials.");
+  }
+
+  const record = await resolvePackDeployToken(token);
+  if (!record?.packId) {
+    throw new Error("Invalid pack deploy token.");
+  }
+
+  if (record.packId !== packId) {
+    throw new Error("Pack deploy token does not grant access to this pack.");
+  }
+
+  await touchPackDeployToken(record.id);
+
+  return {
+    packId,
+    method: "pack_deploy_token",
+  };
 }
 
 async function authorizeLauncherUserToken(
