@@ -1139,7 +1139,7 @@ watch(
       />
 
       <!-- Main Content: Floating Pane -->
-      <main class="flex flex-col min-h-0 overflow-visible">
+      <main class="flex flex-col min-h-0 overflow-visible gap-4">
         <UpdaterBanner
           :visible="showUpdaterBanner"
           :open="updaterDialogOpen"

@@ -58,9 +58,9 @@ function formatBytes(value: number) {
 </script>
 
 <template>
-  <div v-if="props.visible" class="px-4">
+  <div v-if="props.visible" class="px-4 pr-1">
     <Card class="glass border-primary/40">
-      <CardHeader class="pb-3">
+      <CardHeader class="space-y-1 pb-2">
         <CardTitle class="text-sm">
           <template v-if="props.installComplete">
             Update installed
@@ -78,30 +78,25 @@ function formatBytes(value: number) {
           </template>
         </CardDescription>
       </CardHeader>
-      <CardContent class="flex flex-wrap items-center gap-2">
-        <Button
-          v-if="props.installComplete"
-          size="sm"
-          :disabled="props.checking || props.installing"
-          @click="emit('restart')"
-        >
-          Restart now
-        </Button>
-        <Button
-          v-else
-          size="sm"
-          :disabled="props.checking || props.installing"
-          @click="emit('install')"
-        >
-          {{ props.installing ? "Installing..." : "Install update" }}
-        </Button>
-        <Button variant="outline" size="sm" @click="emit('open')">
-          View details
-        </Button>
-        <Button variant="ghost" size="sm" @click="emit('dismiss')">
-          Dismiss
-        </Button>
-
+      <CardContent class="space-y-3 pt-0">
+        <div class="flex flex-wrap items-center mt-2 gap-2">
+          <Button
+            v-if="props.installComplete"
+            size="sm"
+            :disabled="props.checking || props.installing"
+            @click="emit('restart')"
+          >
+            Restart now
+          </Button>
+          <Button
+            v-else
+            size="sm"
+            :disabled="props.checking || props.installing"
+            @click="emit('install')"
+          >
+            {{ props.installing ? "Installing..." : "Install update" }}
+          </Button>
+        </div>
         <div v-if="props.installing" class="w-full space-y-2 pt-1">
           <Progress :model-value="props.progressPercent" />
           <p class="text-xs text-muted-foreground">
@@ -124,13 +119,13 @@ function formatBytes(value: number) {
     @click.self="emit('close')"
   >
     <Card class="w-full max-w-2xl max-h-[85vh] overflow-y-auto border-primary/40">
-      <CardHeader class="space-y-2">
+      <CardHeader class="space-y-1 pb-2">
         <CardTitle>Application Update</CardTitle>
         <CardDescription v-if="props.updateInfo">
           Atlas Launcher {{ props.updateInfo.currentVersion }} -> {{ props.updateInfo.version }}
         </CardDescription>
       </CardHeader>
-      <CardContent class="space-y-4">
+      <CardContent class="space-y-5 pt-0">
         <p v-if="releaseDate" class="text-xs text-muted-foreground">Published: {{ releaseDate }}</p>
         <div
           v-if="props.updateInfo?.body"
