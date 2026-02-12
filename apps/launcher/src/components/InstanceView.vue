@@ -128,73 +128,74 @@ const launchBlockedReason = computed(() => {
         <!-- Logs are available in Settings -->
       </TabsList>
       <TabsContent value="content" class="mt-0 flex-1 min-h-0 overflow-hidden">
-        <div
-          :class="
-            isRemoteInstance
-              ? 'h-full min-h-0 overflow-y-auto mr-1 pr-1 pb-2 pt-2 [scrollbar-gutter:stable]'
-              : 'h-full min-h-0 overflow-hidden px-1 pb-2 pt-2'
-          "
-        >
+        <div class="h-full min-h-0 pr-2 pb-2 pt-2">
           <div
-            class="space-y-6"
-            :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
+            :class="
+              isRemoteInstance
+                ? 'h-full min-h-0 overflow-y-auto px-1 pr-1 [scrollbar-gutter:stable]'
+                : 'h-full min-h-0 overflow-hidden px-1'
+            "
           >
-            <RemoteManageCard
-              v-if="isRemoteInstance"
-              class="mx-1"
-              :instance="props.instance"
-              :working="props.working"
-              :installed-versions="props.installedVersions"
-              @uninstall="emit('uninstall-instance')"
-              @update-channel="emit('update-channel', $event)"
-            />
-            <ModsCard
-              v-else
-              class="mx-1 h-full min-h-0"
-              :instance="props.instance"
-              :mods="props.mods"
-              :mods-dir="props.modsDir"
-              :working="props.working"
-              @toggle="emit('toggle-mod', $event)"
-              @delete="emit('delete-mod', $event)"
-              @refresh="emit('refresh-mods')"
-              @open-folder="emit('open-mods-folder')"
-            />
+            <div
+              class="space-y-6"
+              :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
+            >
+              <RemoteManageCard
+                v-if="isRemoteInstance"
+                :instance="props.instance"
+                :working="props.working"
+                :installed-versions="props.installedVersions"
+                @uninstall="emit('uninstall-instance')"
+                @update-channel="emit('update-channel', $event)"
+              />
+              <ModsCard
+                v-else
+                class="h-full min-h-0"
+                :instance="props.instance"
+                :mods="props.mods"
+                :mods-dir="props.modsDir"
+                :working="props.working"
+                @toggle="emit('toggle-mod', $event)"
+                @delete="emit('delete-mod', $event)"
+                @refresh="emit('refresh-mods')"
+                @open-folder="emit('open-mods-folder')"
+              />
+            </div>
           </div>
         </div>
       </TabsContent>
       <TabsContent value="setup" class="mt-0 flex-1 min-h-0 overflow-hidden">
-        <div class="h-full min-h-0 overflow-y-auto mr-1 pr-1 pb-2 pt-2 [scrollbar-gutter:stable]">
-          <div
-            class="flex flex-col gap-6"
-            :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
-          >
-            <VersionsCard
-              v-if="!isRemoteInstance"
-              class="mx-1"
-              :instance="props.instance"
-              :available-versions="props.availableVersions"
-              :latest-release="props.latestRelease"
-              :installed-versions="props.installedVersions"
-              :fabric-loader-versions="props.fabricLoaderVersions"
-              :neoforge-loader-versions="props.neoforgeLoaderVersions"
-              :working="props.working"
-              @update="emit('update-instance', $event)"
-              @install="emit('install-version')"
-              @refresh="emit('refresh-versions')"
-            />
-            <InstanceSettingsCard
-              class="mx-1"
-              :instance="props.instance"
-              :instances-count="props.instancesCount"
-              :default-memory-mb="props.defaultMemoryMb"
-              :default-jvm-args="props.defaultJvmArgs"
-              :working="props.working"
-              :managed-by-atlas="isRemoteInstance"
-              @duplicate="emit('duplicate-instance', $event)"
-              @remove="emit('remove-instance', $event)"
-              @update="emit('update-instance', $event)"
-            />
+        <div class="h-full min-h-0 pr-2 pb-2 pt-2">
+          <div class="h-full min-h-0 overflow-y-auto px-1 pr-1 [scrollbar-gutter:stable]">
+            <div
+              class="flex flex-col gap-6"
+              :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
+            >
+              <VersionsCard
+                v-if="!isRemoteInstance"
+                :instance="props.instance"
+                :available-versions="props.availableVersions"
+                :latest-release="props.latestRelease"
+                :installed-versions="props.installedVersions"
+                :fabric-loader-versions="props.fabricLoaderVersions"
+                :neoforge-loader-versions="props.neoforgeLoaderVersions"
+                :working="props.working"
+                @update="emit('update-instance', $event)"
+                @install="emit('install-version')"
+                @refresh="emit('refresh-versions')"
+              />
+              <InstanceSettingsCard
+                :instance="props.instance"
+                :instances-count="props.instancesCount"
+                :default-memory-mb="props.defaultMemoryMb"
+                :default-jvm-args="props.defaultJvmArgs"
+                :working="props.working"
+                :managed-by-atlas="isRemoteInstance"
+                @duplicate="emit('duplicate-instance', $event)"
+                @remove="emit('remove-instance', $event)"
+                @update="emit('update-instance', $event)"
+              />
+            </div>
           </div>
         </div>
       </TabsContent>
