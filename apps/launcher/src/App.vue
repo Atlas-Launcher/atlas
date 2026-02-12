@@ -1344,26 +1344,6 @@ watch(
       @open-readiness-wizard="openReadinessWizard"
     />
     
-    <div v-if="showUpdaterBanner" class="fixed left-[104px] right-4 top-14 z-[55]">
-      <UpdaterBanner
-        :visible="showUpdaterBanner"
-        :open="updaterDialogOpen"
-        :checking="updaterChecking"
-        :installing="updaterInstalling"
-        :install-complete="updaterInstallComplete"
-        :progress-percent="updaterProgressPercent"
-        :downloaded-bytes="updaterDownloadedBytes"
-        :total-bytes="updaterTotalBytes"
-        :update-info="updateInfo"
-        :error-message="updaterErrorMessage"
-        @open="openUpdaterDialog"
-        @close="closeUpdaterDialog"
-        @dismiss="dismissUpdaterBanner"
-        @install="installLauncherUpdate"
-        @restart="restartLauncherAfterUpdate"
-      />
-    </div>
-
     <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-8">
       <!-- SidebarNav: Floating Aside -->
       <SidebarNav
@@ -1377,7 +1357,25 @@ watch(
 
       <!-- Main Content: Floating Pane -->
       <main class="flex flex-col min-h-0 overflow-visible gap-4">
-        <div v-if="showUpdaterBanner" class="h-40"></div>
+        <div v-if="showUpdaterBanner" class="sticky top-0 z-[55] px-4 pt-1">
+          <UpdaterBanner
+            :visible="showUpdaterBanner"
+            :open="updaterDialogOpen"
+            :checking="updaterChecking"
+            :installing="updaterInstalling"
+            :install-complete="updaterInstallComplete"
+            :progress-percent="updaterProgressPercent"
+            :downloaded-bytes="updaterDownloadedBytes"
+            :total-bytes="updaterTotalBytes"
+            :update-info="updateInfo"
+            :error-message="updaterErrorMessage"
+            @open="openUpdaterDialog"
+            @close="closeUpdaterDialog"
+            @dismiss="dismissUpdaterBanner"
+            @install="installLauncherUpdate"
+            @restart="restartLauncherAfterUpdate"
+          />
+        </div>
         <FirstLaunchSuccessPanel
           :open="showFirstLaunchSuccessPanel"
           :pack-name="firstLaunchPackName"
@@ -1408,7 +1406,7 @@ watch(
           </div>
           <div
             v-if="libraryView === 'grid'"
-            class="flex-1 min-h-0 overflow-y-auto px-4 pr-1"
+            class="flex-1 min-h-0 overflow-y-auto"
           >
             <LibraryView
               :instances="instances"
