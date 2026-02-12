@@ -2,6 +2,7 @@ use anyhow::{bail, Context, Result};
 use atlas_client::device_code::{normalize_hub_url, DEFAULT_ATLAS_HUB_URL};
 use atlas_client::hub::{HubClient, LauncherPack};
 use dialoguer::{theme::ColorfulTheme, FuzzySelect, Input};
+use serde_json::Value;
 use std::io::{self, IsTerminal};
 use std::time::Duration;
 
@@ -11,7 +12,7 @@ pub async fn exec(
     token_name: Option<String>,
     channel: Option<String>,
 ) -> Result<String> {
-    let hub_url = normalize_hub_url(hub_url.as_deref().unwrap_or(DEFAULT_ATLAS_HUB_URL));
+    let hub_url = resolve_hub_url(hub_url)?;
 
     let mut hub = HubClient::new(&hub_url)?;
     let device_code = hub.login().await?;
@@ -59,6 +60,44 @@ pub async fn exec(
         "Saved deploy key for pack {} (channel {}, prefix {}).",
         resolved_pack_id, channel, created.prefix
     ))
+}
+
+fn resolve_hub_url(cli_hub_url: Option<String>) -> Result<String> {
+    if let Some(value) = cli_hub_url {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Ok(normalize_hub_url(trimmed));
+        }
+    }
+
+    if let Ok(value) = std::env::var("ATLAS_HUB_URL") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Ok(normalize_hub_url(trimmed));
+        }
+    }
+
+    if let Some(value) = read_hub_url_from_deploy_config()? {
+        return Ok(normalize_hub_url(&value));
+    }
+
+    Ok(normalize_hub_url(DEFAULT_ATLAS_HUB_URL))
+}
+
+fn read_hub_url_from_deploy_config() -> Result<Option<String>> {
+    let base = match dirs::data_dir().or_else(dirs::home_dir) {
+        Some(value) => value,
+        None => return Ok(None),
+    };
+    let path = base.join("atlas").join("runnerd").join("deploy.json");
+    let content = match std::fs::read_to_string(path) {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+    let value: Value = serde_json::from_str(&content)
+        .context("Failed to parse existing runner deploy config while resolving hub URL")?;
+    let hub_url = value.get("hub_url").and_then(|v| v.as_str()).map(str::trim);
+    Ok(hub_url.filter(|value| !value.is_empty()).map(ToString::to_string))
 }
 
 async fn save_deploy_key(

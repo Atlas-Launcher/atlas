@@ -28,6 +28,12 @@ Top-level commands:
 - `install` (Linux-only)
 - `backup`
 
+`auth --hub-url` resolution order:
+- CLI flag `--hub-url`
+- env `ATLAS_HUB_URL`
+- existing `deploy.json` `hub_url`
+- default `https://atlas.nathanm.org`
+
 ## Runtime Model
 
 - CLI connects to daemon over local socket (runner IPC v2).

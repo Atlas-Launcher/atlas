@@ -27,6 +27,7 @@ Major subsystems:
 - Detects existing Minecraft process and exits to avoid conflict.
 - Applies launch plan with Java memory flags and normalization behavior.
 - Uses `runner-provision-v2` for apply/provision logic.
+- Update/whitelist watcher loops use `deploy.json` `hub_url` for runner token exchange and polling.
 
 ## Platform Notes
 
