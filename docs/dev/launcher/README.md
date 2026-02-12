@@ -34,6 +34,9 @@ Key backend modules:
 - Launch Assist is unified:
   - Readiness phase for pre-launch blockers.
   - Recovery phase for post-readiness findings/fixes/support bundle.
+- Instance detail view keeps setup focused:
+  - `Setup` tab is game setup only.
+  - `Profile` tab contains profile/runtime override settings.
 - Updater uses an in-banner flow (no separate overlay dialog) and surfaces actionable errors inline.
 - Signature verification failures are surfaced with a targeted message to check release signing key and launcher updater pubkey alignment.
 - Launcher performs an automatic updater check on boot and then every hour while the app remains open.
