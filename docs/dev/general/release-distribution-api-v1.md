@@ -63,3 +63,5 @@ Where:
 - Upload presign for distribution artifact keys (`artifacts/{launcher|cli|runner|runnerd}/...`) requires admin session or `x-atlas-app-deploy-token`.
 - Publishing is platform-scoped; each `{os,arch}` group is registered in a separate publish call.
 - Existing GitHub release publishing remains in place for public release assets.
+- `ATLAS_HUB_URL` may include a trailing slash; the release action normalizes it before calling Hub APIs.
+- The release action publishes artifact payloads using `key` (raw object key) + `provider` from presign responses.
