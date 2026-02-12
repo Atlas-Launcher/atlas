@@ -38,11 +38,18 @@ Launch Assist replaces split readiness + troubleshooter navigation.
 
 - Readiness mode:
   - Shows blockers and one primary next action.
+  - When sign-in/link blockers exist, Launch Assist switches to a sign-in-first state:
+    - Auth-only checklist is shown.
+    - Recovery tab is hidden until auth blockers are cleared.
 - Recovery mode:
   - Runs diagnostics, surfaces top finding, supports fix actions.
   - Supports "Fix & Retry".
   - Re-runs diagnostics after each fix.
   - Allows support bundle generation and log access.
+
+Modal layering behavior:
+- Launch Assist and updater dialogs use full-window blur backdrops.
+- macOS window controls and their control background remain visible above overlays.
 
 Entry points:
 - Title bar readiness button.
