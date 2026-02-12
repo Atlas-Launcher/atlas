@@ -33,6 +33,8 @@ Use your Hub deployment URL (Vercel).
 | `GET` | `/api/v1/packs` | List packs visible to current user. |
 | `POST` | `/api/v1/packs` | Create pack. |
 | `GET` | `/api/v1/packs/{packId}` | Read pack metadata. |
+| `PATCH` | `/api/v1/packs/{packId}` | Update pack metadata (friendly name). |
+| `DELETE` | `/api/v1/packs/{packId}` | Delete pack and cascading Atlas records. |
 | `GET` | `/api/v1/packs/{packId}/access` | Effective user access for pack. |
 | `GET` | `/api/v1/packs/{packId}/members` | List pack members. |
 | `PATCH` | `/api/v1/packs/{packId}/members/{userId}` | Update member role/access. |
