@@ -91,19 +91,20 @@ jobs:
           set -euo pipefail
           mkdir -p dist/release
           # Tauri may emit bundles in target/release/bundle or target/<triple>/release/bundle.
-          mapfile -t bundle_files < <(
+          found=0
+          while IFS= read -r f; do
+            cp "$f" dist/release/
+            found=1
+          done < <(
             find apps/launcher/src-tauri/target apps/launcher/target -type f \
               -path '*/release/bundle/*' \
               \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.sig' \) 2>/dev/null
           )
-          if [[ ${#bundle_files[@]} -eq 0 ]]; then
+          if [[ "${found}" -eq 0 ]]; then
             echo "No launcher bundles found under apps/launcher/**/target/**/release/bundle." >&2
             find apps/launcher -maxdepth 5 -type d -name bundle 2>/dev/null || true
             exit 1
           fi
-          for f in "${bundle_files[@]}"; do
-            cp "$f" dist/release/
-          done
           ls -lah dist/release
 
       - name: Upload launcher bundles

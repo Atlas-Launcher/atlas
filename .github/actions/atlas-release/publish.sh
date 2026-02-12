@@ -142,9 +142,10 @@ while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
   artifact_ref="$(echo "${presign_body}" | jq -r '.key')"
   artifact_provider="$(echo "${presign_body}" | jq -r '.provider // empty')"
   artifact_key="${artifact_ref#*::}"
-  mapfile -t upload_headers < <(
-    echo "${presign_body}" | jq -r '.uploadHeaders // {} | to_entries[] | "\(.key): \(.value)"'
-  )
+  upload_headers=()
+  while IFS= read -r header; do
+    upload_headers+=("${header}")
+  done < <(echo "${presign_body}" | jq -r '.uploadHeaders // {} | to_entries[] | "\(.key): \(.value)"')
 
   if [[ -z "${upload_url}" || "${upload_url}" == "null" || -z "${artifact_key}" || "${artifact_key}" == "null" || -z "${artifact_provider}" ]]; then
     echo "Invalid presign response: ${presign_body}" >&2
@@ -188,7 +189,10 @@ if [[ ${file_count} -eq 0 ]]; then
   exit 1
 fi
 
-mapfile -t platforms < <(jq -r -s 'map(.os + "|" + .arch) | unique[]' "${entries_file}")
+platforms=()
+while IFS= read -r platform; do
+  platforms+=("${platform}")
+done < <(jq -r -s 'map(.os + "|" + .arch) | unique[]' "${entries_file}")
 
 for platform in "${platforms[@]}"; do
   os="${platform%%|*}"
