@@ -169,9 +169,13 @@ export async function POST(request: Request) {
           hubUrl: getAtlasHubUrl(request),
           existingAtlasToml,
         });
-      } catch {
+      } catch (error) {
+        const details =
+          error instanceof Error && error.message
+            ? ` ${error.message}`
+            : "";
         return NextResponse.json(
-          { error: "Failed to configure repository for Atlas." },
+          { error: `Failed to configure repository for Atlas.${details}` },
           { status: 500 }
         );
       }
