@@ -17,19 +17,56 @@ const primaryTask = computed(() => activeTasks.value[0] ?? null);
 const primaryPercent = computed(() => {
   return Math.min(100, Math.max(0, primaryTask.value?.percent ?? 0));
 });
-const showIndeterminateProgress = computed(() => primaryPercent.value < 10);
+const showIndeterminateProgress = computed(
+  () => (primaryTask.value?.indeterminate ?? false) || primaryPercent.value < 5
+);
 const hasMultipleTasks = computed(() => activeTasks.value.length > 1);
 const secondaryTasks = computed(() => activeTasks.value.slice(1, 4));
 const hiddenSecondaryCount = computed(() => {
   return Math.max(0, activeTasks.value.length - 1 - secondaryTasks.value.length);
 });
+const primaryTaskStage = computed(() => {
+  if (!primaryTask.value) {
+    return "No active tasks";
+  }
+  return primaryTask.value.stageLabel || "Preparing files";
+});
 const primaryTaskHeadline = computed(() => {
   if (!primaryTask.value) {
     return "No active tasks";
   }
-  const verb = primaryTask.value.phase.toLowerCase() === "launch" ? "Launching" : "Installing";
-  const packName = props.packName?.trim() || "pack";
-  return `${verb} ${packName}`;
+  const packName = props.packName?.trim();
+  if (!packName) {
+    return primaryTaskStage.value;
+  }
+  return `${primaryTaskStage.value} ${packName}`;
+});
+const primaryTaskStatusText = computed(() => {
+  if (!primaryTask.value) {
+    return "";
+  }
+  if (primaryTask.value.indeterminate && primaryTask.value.statusText.trim().length === 0) {
+    return "Working through setup. Time remaining will appear once progress is measurable.";
+  }
+  return primaryTask.value.statusText;
+});
+const primaryTaskEtaText = computed(() => {
+  const eta = primaryTask.value?.etaSeconds ?? null;
+  if (!eta || eta <= 0) {
+    if (primaryTask.value?.indeterminate) {
+      return "Estimating time remaining...";
+    }
+    return null;
+  }
+  const minutes = Math.floor(eta / 60);
+  const seconds = eta % 60;
+  if (minutes <= 0) {
+    return `ETA ${seconds}s`;
+  }
+  if (seconds === 0) {
+    return `ETA ${minutes}m`;
+  }
+  return `ETA ${minutes}m ${seconds}s`;
 });
 
 </script>
@@ -45,9 +82,15 @@ const primaryTaskHeadline = computed(() => {
               <div class="text-sm font-semibold text-foreground">
                 {{ primaryTaskHeadline }}
               </div>
+              <div v-if="primaryTaskStatusText" class="mt-1 text-xs text-muted-foreground">
+                {{ primaryTaskStatusText }}
+              </div>
             </div>
             <div v-if="hasMultipleTasks" class="text-xs text-muted-foreground">
               {{ activeTasks.length }} tasks running
+            </div>
+            <div v-else-if="primaryTaskEtaText" class="text-xs text-muted-foreground">
+              {{ primaryTaskEtaText }}
             </div>
             <div v-else-if="!activeTasks.length" class="text-xs text-muted-foreground/40 italic">
               No active tasks
@@ -71,14 +114,14 @@ const primaryTaskHeadline = computed(() => {
 
           <div v-if="activeTasks.length" class="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <span class="glass rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider">
-              {{ primaryTask.message }}
+              {{ primaryTask.stageLabel }}
             </span>
             <span
               v-for="task in secondaryTasks"
               :key="task.id"
               class="glass rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider"
             >
-              {{ task.message }}
+              {{ task.stageLabel || task.message }}
             </span>
             <span v-if="hiddenSecondaryCount > 0" class="self-center px-1">
               +{{ hiddenSecondaryCount }} more

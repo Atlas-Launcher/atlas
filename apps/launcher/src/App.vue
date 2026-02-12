@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, ProgressBarStatus, Window } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import ActivityCard from "./components/ActivityCard.vue";
+import FirstLaunchSuccessPanel from "./components/FirstLaunchSuccessPanel.vue";
 import GlobalProgressBar from "./components/GlobalProgressBar.vue";
 import InstanceView from "./components/InstanceView.vue";
 import LaunchAssistWizard from "./components/LaunchAssistWizard.vue";
@@ -35,7 +36,8 @@ const {
   setStatus,
   setProgress,
   runTask,
-  upsertTaskFromEvent
+  upsertTaskFromEvent,
+  latestLaunchSuccessAt
 } = useStatus();
 const { working, run } = useWorking();
 const incomingOnboardingIntent = ref<OnboardingIntent | null>(null);
@@ -199,6 +201,12 @@ const homeStatusMessage = computed(() => {
   }
   return null;
 });
+const showFirstLaunchSuccessPanel = computed(
+  () =>
+    !!settings.value.firstLaunchCompletedAt &&
+    !settings.value.firstLaunchNoticeDismissedAt
+);
+const firstLaunchPackName = computed(() => activeInstance.value?.name ?? null);
 
 const modsDir = computed(() => {
   const base = resolveInstanceGameDir(activeInstance.value);
@@ -1002,6 +1010,22 @@ async function retryLaunchFromAssist() {
   await launchActiveInstance();
 }
 
+async function markFirstLaunchSuccessNoticeDismissed() {
+  if (settings.value.firstLaunchNoticeDismissedAt) {
+    return;
+  }
+  await updateSettings({
+    ...settings.value,
+    firstLaunchNoticeDismissedAt: new Date().toISOString()
+  });
+}
+
+async function openLaunchAssistRecoveryFromSuccess() {
+  troubleshooterTrigger.value = "help";
+  launchAssistMode.value = "recovery";
+  launchAssistOpen.value = true;
+}
+
 async function handleReadinessSignOut(scope: "microsoft" | "all") {
   await runTask("Signing out", async () => {
     if (scope === "all") {
@@ -1286,6 +1310,20 @@ watch(
 );
 
 watch(
+  () => latestLaunchSuccessAt.value,
+  async (value) => {
+    if (!value || settings.value.firstLaunchCompletedAt) {
+      return;
+    }
+    await updateSettings({
+      ...settings.value,
+      firstLaunchCompletedAt: new Date(value).toISOString(),
+      firstLaunchNoticeDismissedAt: null
+    });
+  }
+);
+
+watch(
   () => tasks.value.length,
   (count, previousCount) => {
     // Manual control only: removed auto-open logic
@@ -1335,6 +1373,13 @@ watch(
           @dismiss="dismissUpdaterBanner"
           @install="installLauncherUpdate"
           @restart="restartLauncherAfterUpdate"
+        />
+        <FirstLaunchSuccessPanel
+          :open="showFirstLaunchSuccessPanel"
+          :pack-name="firstLaunchPackName"
+          @retry-launch="retryLaunchFromAssist"
+          @open-assist="openLaunchAssistRecoveryFromSuccess"
+          @dismiss="markFirstLaunchSuccessNoticeDismissed"
         />
         <section
           v-if="activeTab === 'library'"
