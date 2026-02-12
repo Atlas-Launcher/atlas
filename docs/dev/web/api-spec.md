@@ -111,6 +111,8 @@ Use your Hub deployment URL (Vercel).
 | `GET` | `/api/v1/download/{downloadId}` | Universal immutable artifact resolver (302 redirect to storage). |
 | `GET` | `/download/app/installer/latest` | Latest launcher installer (generic). |
 | `GET` | `/download/app/installer/latest/{os}/{arch}` | Latest launcher installer by platform. |
+| `GET` | `/download/cli/latest` | Latest CLI raw binary (generic). |
+| `GET` | `/download/cli/latest/{os}/{arch}` | Latest CLI raw binary by platform. |
 | `GET` | `/download/cli/installer/latest` | Latest CLI installer (generic). |
 | `GET` | `/download/cli/installer/latest/{os}/{arch}` | Latest CLI installer by platform. |
 | `GET` | `/download/runner/install` | Hosted Linux runner install script (`curl ... | sudo bash -s --`); pass `--no-daemon-install` to skip daemon setup (WSL). |

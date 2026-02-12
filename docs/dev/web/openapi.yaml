@@ -778,6 +778,31 @@ paths:
         '200':
           description: Installer payload/redirect
 
+  /download/cli/latest:
+    get:
+      summary: Resolve latest CLI raw binary
+      responses:
+        '200':
+          description: Binary payload/redirect
+
+  /download/cli/latest/{os}/{arch}:
+    parameters:
+      - name: os
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: arch
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Resolve latest CLI raw binary by platform
+      responses:
+        '200':
+          description: Binary payload/redirect
+
   /download/cli/installer/latest/{os}/{arch}:
     parameters:
       - name: os
