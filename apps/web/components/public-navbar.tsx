@@ -1,18 +1,25 @@
+import Image from "next/image";
 import Link from "next/link";
 
 const navLinks = [
   { href: "/", label: "Overview" },
   { href: "/download/app", label: "Launcher" },
   { href: "/download/cli", label: "CLI" },
+  { href: "/download/runner", label: "Runner" },
 ];
 
 export default function PublicNavbar() {
   return (
     <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
       <Link href="/" className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--atlas-ink)] text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)]">
-          A
-        </div>
+        <Image
+          src="/atlas-mark.svg"
+          alt="Atlas"
+          width={34}
+          height={34}
+          className="h-[34px] w-[34px] rounded-xl"
+          priority
+        />
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[var(--atlas-ink-muted)]">
             Atlas Hub
