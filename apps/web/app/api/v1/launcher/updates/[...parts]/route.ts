@@ -4,6 +4,7 @@ import {
   isDistributionArch,
   isDistributionChannel,
   isDistributionOs,
+  resolveDownloadRedirect,
   resolveRelease,
 } from "@/lib/distribution";
 
@@ -21,7 +22,26 @@ function normalizeUpdaterArch(value: string) {
   return normalized;
 }
 
-function buildTauriResponse(release: NonNullable<Awaited<ReturnType<typeof resolveRelease>>>) {
+function toTauriPlatformKey(
+  os: "windows" | "macos" | "linux",
+  arch: "x64" | "arm64"
+) {
+  const tauriOs = os === "macos" ? "darwin" : os;
+  const tauriArch = arch === "x64" ? "x86_64" : "aarch64";
+  return `${tauriOs}-${tauriArch}`;
+}
+
+async function buildTauriResponse({
+  release,
+  os,
+  arch,
+  requestOrigin,
+}: {
+  release: NonNullable<Awaited<ReturnType<typeof resolveRelease>>>;
+  os: "windows" | "macos" | "linux";
+  arch: "x64" | "arm64";
+  requestOrigin: string;
+}) {
   const primaryAsset =
     release.assets.find((asset) => asset.kind === "installer") ??
     release.assets.find((asset) => asset.kind === "binary") ??
@@ -32,7 +52,21 @@ function buildTauriResponse(release: NonNullable<Awaited<ReturnType<typeof resol
     return null;
   }
 
-  const platformKey = `${release.platform.os}-${release.platform.arch}`;
+  const signatureUrl = await resolveDownloadRedirect(signatureAsset.download_id);
+  if (!signatureUrl) {
+    return null;
+  }
+
+  const signatureResponse = await fetch(signatureUrl, { cache: "no-store" });
+  if (!signatureResponse.ok) {
+    return null;
+  }
+  const signature = (await signatureResponse.text()).trim();
+  if (!signature) {
+    return null;
+  }
+
+  const platformKey = toTauriPlatformKey(os, arch);
 
   return {
     version: release.version,
@@ -40,15 +74,15 @@ function buildTauriResponse(release: NonNullable<Awaited<ReturnType<typeof resol
     pub_date: release.published_at,
     platforms: {
       [platformKey]: {
-        url: `/api/v1/download/${primaryAsset.download_id}`,
-        signature: `/api/v1/download/${signatureAsset.download_id}`,
+        url: `${requestOrigin}/api/v1/download/${primaryAsset.download_id}`,
+        signature,
       },
     },
   };
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ parts: string[] }> }
 ) {
   const { parts } = await params;
@@ -85,7 +119,12 @@ export async function GET(
     return NextResponse.json({ error: "Release not found." }, { status: 404 });
   }
 
-  const response = buildTauriResponse(release);
+  const response = await buildTauriResponse({
+    release,
+    os,
+    arch,
+    requestOrigin: new URL(request.url).origin,
+  });
   if (!response) {
     return NextResponse.json(
       { error: "Release is missing updater-compatible assets." },
