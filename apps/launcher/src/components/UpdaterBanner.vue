@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { X } from "lucide-vue-next";
 import Button from "./ui/button/Button.vue";
 import Card from "./ui/card/Card.vue";
 import CardContent from "./ui/card/CardContent.vue";
@@ -23,7 +22,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "open"): void;
   (event: "close"): void;
-  (event: "dismiss"): void;
   (event: "install"): void;
   (event: "restart"): void;
 }>();
@@ -45,7 +43,7 @@ function formatBytes(value: number) {
 
 <template>
   <div v-if="props.visible" class="pointer-events-auto">
-    <Card class="glass border-primary/40 bg-background/95">
+    <Card class="glass">
       <CardContent class="px-5 py-4">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0">
@@ -83,15 +81,6 @@ function formatBytes(value: number) {
             >
               {{ props.installing ? "Installing..." : "Install update" }}
             </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="h-7 w-7 text-muted-foreground hover:text-foreground"
-              aria-label="Dismiss update banner"
-              @click="emit('dismiss')"
-            >
-              <X class="h-4 w-4" />
-            </Button>
           </div>
         </div>
         <div v-if="props.installing" class="mt-3 w-full space-y-2">
@@ -115,7 +104,7 @@ function formatBytes(value: number) {
     class="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-[6px] p-4"
     @click.self="emit('close')"
   >
-    <Card class="glass relative w-full max-w-4xl max-h-[85vh] overflow-y-auto border-primary/40 bg-background/95">
+    <Card class="glass relative w-full max-w-4xl max-h-[85vh] overflow-y-auto">
       <CardContent class="space-y-5 px-6 py-6">
         <div class="space-y-1">
           <p class="text-lg font-semibold text-foreground">Launcher update available</p>

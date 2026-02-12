@@ -128,8 +128,7 @@ const {
   installUpdate,
   restartNow,
   openDialog: openUpdaterDialog,
-  closeDialog: closeUpdaterDialog,
-  dismissBanner: dismissUpdaterBanner
+  closeDialog: closeUpdaterDialog
 } = useUpdater({ setStatus, pushLog });
 
 const activeTab = ref<"library" | "settings">("library");
@@ -1344,7 +1343,7 @@ watch(
       @open-readiness-wizard="openReadinessWizard"
     />
     
-    <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-8">
+    <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-11">
       <!-- SidebarNav: Floating Aside -->
       <SidebarNav
         :active-tab="activeTab"
@@ -1357,7 +1356,7 @@ watch(
 
       <!-- Main Content: Floating Pane -->
       <main class="flex flex-col min-h-0 overflow-visible gap-4">
-        <div v-if="showUpdaterBanner" class="sticky top-0 z-[55] px-4 pt-1">
+        <div v-if="showUpdaterBanner" class="sticky top-0 z-[55]">
           <UpdaterBanner
             :visible="showUpdaterBanner"
             :open="updaterDialogOpen"
@@ -1371,7 +1370,6 @@ watch(
             :error-message="updaterErrorMessage"
             @open="openUpdaterDialog"
             @close="closeUpdaterDialog"
-            @dismiss="dismissUpdaterBanner"
             @install="installLauncherUpdate"
             @restart="restartLauncherAfterUpdate"
           />

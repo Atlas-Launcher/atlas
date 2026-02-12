@@ -84,10 +84,20 @@ const AUTH_FINDING_CODES = new Set([
 ]);
 
 const checklist = computed(() => props.readiness?.checklist ?? []);
-const blockingItems = computed(() => checklist.value.filter((item) => !item.ready));
+const hasAuthBlockers = computed(() =>
+  checklist.value.some((item) => LOGIN_KEYS.has(item.key) && !item.ready)
+);
+const visibleChecklist = computed(() => {
+  if (!hasAuthBlockers.value) {
+    return checklist.value;
+  }
+  return checklist.value.filter((item) => LOGIN_KEYS.has(item.key));
+});
+const blockingItems = computed(() => visibleChecklist.value.filter((item) => !item.ready));
 const activeBlocking = computed(() => blockingItems.value[0] ?? null);
 const allReady = computed(() => props.readiness?.readyToLaunch ?? false);
 const signedIn = computed(() => props.atlasSignedIn || props.microsoftSignedIn);
+const canUseRecovery = computed(() => !hasAuthBlockers.value);
 
 const findings = computed(() =>
   (report.value?.findings ?? []).filter((finding) => !AUTH_FINDING_CODES.has(finding.code))
@@ -268,6 +278,9 @@ function revealLinkCode() {
 }
 
 function openRecovery() {
+  if (!canUseRecovery.value) {
+    return;
+  }
   mode.value = "recovery";
   void refreshTroubleshooter();
 }
@@ -324,6 +337,15 @@ watch(
     }
   }
 );
+
+watch(
+  () => canUseRecovery.value,
+  (enabled) => {
+    if (!enabled && mode.value === "recovery") {
+      mode.value = "readiness";
+    }
+  }
+);
 </script>
 
 <template>
@@ -359,6 +381,7 @@ watch(
               Readiness
             </Button>
             <Button
+              v-if="canUseRecovery"
               size="sm"
               variant="outline"
               :class="mode === 'recovery' ? 'border-primary text-primary' : ''"
@@ -384,7 +407,7 @@ watch(
             </div>
 
             <div
-              v-for="item in checklist"
+              v-for="item in visibleChecklist"
               :key="item.key"
               class="rounded-xl border bg-background/30 p-4"
               :class="item.ready ? 'border-emerald-500/40' : item.key === activeBlocking?.key ? 'border-amber-500/60' : 'border-border/50'"
@@ -451,7 +474,10 @@ watch(
                 @click="runPrimaryReadinessAction"
               >
                 <Wrench class="mr-1 h-3.5 w-3.5" />
-                {{ props.nextActionLabels[activeBlocking.key] ?? "Open guided recovery" }}
+                {{
+                  props.nextActionLabels[activeBlocking.key] ??
+                  (canUseRecovery ? "Open guided recovery" : "Continue setup")
+                }}
               </Button>
               <Button v-else variant="secondary" :disabled="props.working" @click="emit('complete')">
                 Continue
