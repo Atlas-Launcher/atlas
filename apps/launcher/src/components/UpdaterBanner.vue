@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { X } from "lucide-vue-next";
 import Button from "./ui/button/Button.vue";
 import Card from "./ui/card/Card.vue";
 import CardContent from "./ui/card/CardContent.vue";
@@ -58,17 +59,28 @@ function formatBytes(value: number) {
 </script>
 
 <template>
-  <div v-if="props.visible" class="px-4 pr-1">
-    <Card class="glass border-primary/40">
+  <div v-if="props.visible" class="pointer-events-auto">
+    <Card class="glass border-primary/40 bg-background/85 shadow-[0_24px_50px_-30px_rgba(0,0,0,0.75)] backdrop-blur-xl">
       <CardHeader class="space-y-1 pb-2">
-        <CardTitle class="text-sm">
+        <div class="flex items-start justify-between gap-3">
+          <CardTitle class="text-sm">
           <template v-if="props.installComplete">
             Update installed
           </template>
           <template v-else>
             Launcher update available
           </template>
-        </CardTitle>
+          </CardTitle>
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-7 w-7 text-muted-foreground hover:text-foreground"
+            aria-label="Dismiss update banner"
+            @click="emit('dismiss')"
+          >
+            <X class="h-4 w-4" />
+          </Button>
+        </div>
         <CardDescription v-if="props.updateInfo">
           <template v-if="props.installComplete">
             Restart Atlas Launcher to apply version {{ props.updateInfo.version }}.
@@ -80,6 +92,14 @@ function formatBytes(value: number) {
       </CardHeader>
       <CardContent class="space-y-3 pt-0">
         <div class="flex flex-wrap items-center mt-2 gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            :disabled="props.checking || props.installing"
+            @click="emit('open')"
+          >
+            Details
+          </Button>
           <Button
             v-if="props.installComplete"
             size="sm"
@@ -115,10 +135,10 @@ function formatBytes(value: number) {
 
   <div
     v-if="props.open"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+    class="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-[6px] p-4"
     @click.self="emit('close')"
   >
-    <Card class="w-full max-w-2xl max-h-[85vh] overflow-y-auto border-primary/40">
+    <Card class="glass w-full max-w-2xl max-h-[85vh] overflow-y-auto border-primary/40 bg-background/90">
       <CardHeader class="space-y-1 pb-2">
         <CardTitle>Launcher update</CardTitle>
         <CardDescription v-if="props.updateInfo">

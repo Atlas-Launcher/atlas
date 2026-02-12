@@ -1344,6 +1344,26 @@ watch(
       @open-readiness-wizard="openReadinessWizard"
     />
     
+    <div v-if="showUpdaterBanner" class="fixed left-[104px] right-4 top-14 z-[55]">
+      <UpdaterBanner
+        :visible="showUpdaterBanner"
+        :open="updaterDialogOpen"
+        :checking="updaterChecking"
+        :installing="updaterInstalling"
+        :install-complete="updaterInstallComplete"
+        :progress-percent="updaterProgressPercent"
+        :downloaded-bytes="updaterDownloadedBytes"
+        :total-bytes="updaterTotalBytes"
+        :update-info="updateInfo"
+        :error-message="updaterErrorMessage"
+        @open="openUpdaterDialog"
+        @close="closeUpdaterDialog"
+        @dismiss="dismissUpdaterBanner"
+        @install="installLauncherUpdate"
+        @restart="restartLauncherAfterUpdate"
+      />
+    </div>
+
     <div class="h-full grid grid-cols-[76px_1fr] gap-4 pt-8">
       <!-- SidebarNav: Floating Aside -->
       <SidebarNav
@@ -1357,23 +1377,7 @@ watch(
 
       <!-- Main Content: Floating Pane -->
       <main class="flex flex-col min-h-0 overflow-visible gap-4">
-        <UpdaterBanner
-          :visible="showUpdaterBanner"
-          :open="updaterDialogOpen"
-          :checking="updaterChecking"
-          :installing="updaterInstalling"
-          :install-complete="updaterInstallComplete"
-          :progress-percent="updaterProgressPercent"
-          :downloaded-bytes="updaterDownloadedBytes"
-          :total-bytes="updaterTotalBytes"
-          :update-info="updateInfo"
-          :error-message="updaterErrorMessage"
-          @open="openUpdaterDialog"
-          @close="closeUpdaterDialog"
-          @dismiss="dismissUpdaterBanner"
-          @install="installLauncherUpdate"
-          @restart="restartLauncherAfterUpdate"
-        />
+        <div v-if="showUpdaterBanner" class="h-40"></div>
         <FirstLaunchSuccessPanel
           :open="showFirstLaunchSuccessPanel"
           :pack-name="firstLaunchPackName"
