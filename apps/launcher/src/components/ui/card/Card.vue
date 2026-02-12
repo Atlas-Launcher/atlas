@@ -4,7 +4,7 @@ import type { ClassValue } from "clsx";
 import { cn } from "../../../lib/utils";
 
 const attrs = useAttrs();
-const classes = computed(() => cn("rounded-xl border border-border bg-card text-card-foreground shadow-sm", attrs.class as ClassValue));
+const classes = computed(() => cn("rounded-xl border border-border bg-card text-card-foreground", attrs.class as ClassValue));
 </script>
 
 <template>

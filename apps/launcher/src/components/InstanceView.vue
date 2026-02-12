@@ -46,7 +46,7 @@ const emit = defineEmits<{
   (event: "update-channel", value: "dev" | "beta" | "production"): void;
 }>();
 
-const detailTab = ref<"content" | "setup">("content");
+const detailTab = ref<"content" | "setup" | "profile">("content");
 
 const activeLoaderLabel = computed(() => {
   const instance = props.instance;
@@ -125,6 +125,7 @@ const launchBlockedReason = computed(() => {
           {{ contentTabLabel }}
         </TabsTrigger>
         <TabsTrigger :disabled="remoteControlsDisabled" value="setup">Setup</TabsTrigger>
+        <TabsTrigger :disabled="remoteControlsDisabled" value="profile">Profile</TabsTrigger>
         <!-- Logs are available in Settings -->
       </TabsList>
       <TabsContent value="content" class="mt-0 flex-1 min-h-0 overflow-hidden">
@@ -165,14 +166,15 @@ const launchBlockedReason = computed(() => {
         </div>
       </TabsContent>
       <TabsContent value="setup" class="mt-0 flex-1 min-h-0 overflow-hidden">
-        <div class="h-full min-h-0 pr-2 pb-2 pt-2">
-          <div class="h-full min-h-0 overflow-y-auto px-1 pr-1 [scrollbar-gutter:stable]">
+        <div class="h-full min-h-0 px-1 pb-2 pt-2">
+          <div class="h-full min-h-0 overflow-hidden rounded-2xl pr-2 [scrollbar-gutter:stable]">
             <div
-              class="flex flex-col gap-6"
+              class="h-full"
               :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
             >
               <VersionsCard
                 v-if="!isRemoteInstance"
+                class="h-full min-h-0"
                 :instance="props.instance"
                 :available-versions="props.availableVersions"
                 :latest-release="props.latestRelease"
@@ -184,7 +186,19 @@ const launchBlockedReason = computed(() => {
                 @install="emit('install-version')"
                 @refresh="emit('refresh-versions')"
               />
+            </div>
+          </div>
+        </div>
+      </TabsContent>
+      <TabsContent value="profile" class="mt-0 flex-1 min-h-0 overflow-hidden">
+        <div class="h-full min-h-0 px-1 pb-2 pt-2">
+          <div class="h-full min-h-0 overflow-hidden rounded-2xl pr-2 [scrollbar-gutter:stable]">
+            <div
+              class="h-full"
+              :class="remoteControlsDisabled ? 'pointer-events-none select-none opacity-50' : ''"
+            >
               <InstanceSettingsCard
+                class="h-full min-h-0"
                 :instance="props.instance"
                 :instances-count="props.instancesCount"
                 :default-memory-mb="props.defaultMemoryMb"

@@ -104,7 +104,7 @@ function updateNeoForgeVersion(value: string | number) {
 </script>
 
 <template>
-  <Card class="glass rounded-2xl flex flex-col">
+  <Card class="glass h-full min-h-0 rounded-2xl flex flex-col">
     <CardHeader class="pt-7">
       <CardTitle>Game setup</CardTitle>
       <CardDescription>
@@ -115,7 +115,7 @@ function updateNeoForgeVersion(value: string | number) {
         }}
       </CardDescription>
     </CardHeader>
-    <CardContent class="space-y-4">
+    <CardContent class="flex-1 min-h-0 overflow-y-auto space-y-4 pr-3 pb-5 pt-1 [scrollbar-gutter:stable]">
       <div v-if="!props.instance" class="text-sm text-muted-foreground">
         Select a profile to manage game setup.
       </div>
