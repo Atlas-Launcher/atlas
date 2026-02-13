@@ -1,0 +1,4 @@
+interface:
+  display_name: "Next Styling"
+  short_description: "Hub visual language, theming, and shared surface styling"
+  default_prompt: "Apply Atlas Hub styling system consistently in Next.js UI"

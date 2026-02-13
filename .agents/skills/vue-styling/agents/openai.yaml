@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vue Styling"
+  short_description: "Launcher visual language, themes, and glass styling"
+  default_prompt: "Apply Atlas launcher styling patterns consistently in Vue UI"

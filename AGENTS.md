@@ -77,3 +77,7 @@ Atlas is a platform for managing and distributing Minecraft modpacks using a Sou
 
 ## Lucide icons
 - Use Lucide icons for a consistent iconography style, wherever possible.
+
+## Skills
+- `next-styling`: Atlas Hub Next.js styling system for centralized theme tokens, launcher-aligned backgrounds, glass surfaces, and shared UI visual consistency. (`.agents/skills/next-styling/SKILL.md`)
+- `vue-styling`: Atlas Launcher Vue styling system for dark/light/system behavior, glass cards, elevation, and token-driven component styling. (`.agents/skills/vue-styling/SKILL.md`)
