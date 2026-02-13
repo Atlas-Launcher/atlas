@@ -17,7 +17,7 @@ export default async function LauncherLinkPage({ searchParams }: LauncherLinkPag
   const signedIn = Boolean(session?.user);
 
   return (
-    <div className="min-h-screen bg-[var(--atlas-cream)] px-6 py-16 text-[var(--atlas-ink)]">
+    <div className="min-h-screen bg-transparent px-6 py-16 text-[var(--atlas-ink)]">
       <div className="mx-auto w-full max-w-3xl">
         <LauncherLinkClient code={code ?? null} signedIn={signedIn} />
       </div>

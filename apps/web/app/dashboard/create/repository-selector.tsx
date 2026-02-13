@@ -11,7 +11,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 function useDebounce<T>(value: T, delay: number): T {
     const [debouncedValue, setDebouncedValue] = useState(value);
@@ -124,7 +123,7 @@ export function RepositorySelector({
 
                 <div className="space-y-4">
                     <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--atlas-ink-muted)]" />
                         <Input
                             placeholder="Search repositories"
                             value={search}
@@ -136,7 +135,7 @@ export function RepositorySelector({
                     <div className="min-h-[300px]">
                         {loading ? (
                             <div className="flex h-[300px] items-center justify-center">
-                                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                                <Loader2 className="h-8 w-8 animate-spin text-[var(--atlas-ink-muted)]" />
                             </div>
                         ) : error ? (
                             <div className="flex h-[300px] flex-col items-center justify-center gap-3 text-center px-4">
@@ -164,7 +163,7 @@ export function RepositorySelector({
                             </div>
                         ) : repos.length === 0 ? (
                             <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-center">
-                                <p className="text-sm text-gray-500">
+                                <p className="text-sm text-[var(--atlas-ink-muted)]">
                                     {search
                                         ? "No repositories found matching your search."
                                         : "No repositories found."}
@@ -187,21 +186,21 @@ export function RepositorySelector({
                                     <button
                                         key={repo.html_url}
                                         onClick={() => onSelect(repo)}
-                                        className="flex flex-col items-start rounded-xl border border-gray-200 p-4 text-left transition hover:border-blue-500 hover:bg-blue-50/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="flex flex-col items-start rounded-xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] p-4 text-left transition hover:border-[hsl(var(--primary)/0.5)] hover:bg-[var(--atlas-surface-strong)] hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
                                     >
                                         <div className="mb-2 flex items-center gap-2">
                                             {repo.owner ? (
-                                                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gray-100 font-mono text-xs font-bold text-gray-600">
+                                                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--atlas-surface-strong)] font-mono text-xs font-bold text-[var(--atlas-ink-muted)]">
                                                     {repo.owner.login?.slice(0, 1).toUpperCase()}
                                                 </div>
                                             ) : (
-                                                <Book className="h-4 w-4 text-gray-400" />
+                                                <Book className="h-4 w-4 text-[var(--atlas-ink-muted)]" />
                                             )}
-                                            <span className="truncate text-sm font-medium text-gray-900">
+                                            <span className="truncate text-sm font-medium text-[var(--atlas-ink)]">
                                                 {repo.name}
                                             </span>
                                         </div>
-                                        <p className="truncate text-xs text-gray-500">{repo.full_name}</p>
+                                        <p className="truncate text-xs text-[var(--atlas-ink-muted)]">{repo.full_name}</p>
                                     </button>
                                 ))}
                             </div>
@@ -218,7 +217,7 @@ export function RepositorySelector({
                             <ChevronLeft className="mr-2 h-4 w-4" />
                             Previous
                         </Button>
-                        <span className="text-xs text-gray-500">Page {page}</span>
+                        <span className="text-xs text-[var(--atlas-ink-muted)]">Page {page}</span>
                         <Button
                             variant="outline"
                             size="sm"
@@ -236,7 +235,7 @@ export function RepositorySelector({
                                 href={`https://github.com/apps/${githubAppSlug}/installations/new`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-gray-500 hover:text-blue-600 hover:underline transition-colors"
+                                className="text-[var(--atlas-ink-muted)] hover:text-[hsl(var(--primary))] hover:underline transition-colors"
                             >
                                 Don&apos;t see your repository? Configure access.
                             </a>

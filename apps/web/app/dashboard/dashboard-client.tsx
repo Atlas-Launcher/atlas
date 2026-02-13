@@ -282,7 +282,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
 
   return (
-    <div className="min-h-screen bg-[var(--atlas-cream)] px-6 py-12 text-[var(--atlas-ink)]">
+    <div className="min-h-screen bg-transparent px-6 py-12 text-[var(--atlas-ink)]">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <Tabs value={tabValue} onValueChange={(value) => setTabValue(value as typeof tabValue)} className="space-y-6">
           <DashboardHeader

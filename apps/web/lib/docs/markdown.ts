@@ -37,9 +37,14 @@ export function extractHeadings(markdown: string): DocHeading[] {
       continue;
     }
 
+    const level = match[1].length;
+    if (level === 1) {
+      continue;
+    }
+
     const text = match[2].trim();
     headings.push({
-      level: match[1].length,
+      level,
       text,
       id: slugifyHeading(text),
     });
@@ -114,6 +119,9 @@ export function renderMarkdown(markdown: string) {
       flushParagraph(paragraphBuffer, output);
       closeLists();
       const level = headingMatch[1].length;
+      if (level === 1) {
+        continue;
+      }
       const text = headingMatch[2].trim();
       output.push(`<h${level} id="${slugifyHeading(text)}">${renderInline(text)}</h${level}>`);
       continue;

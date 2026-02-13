@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 
@@ -12,6 +12,7 @@ type DocsSearchProps = {
   activePersona?: PersonaId | "all";
   showResultsWhenEmpty?: boolean;
   priorityPaths?: string[];
+  collapsedByDefault?: boolean;
 };
 
 const personaLabels: Record<PersonaId, string> = {
@@ -42,15 +43,19 @@ export default function DocsSearch({
   activePersona = "all",
   showResultsWhenEmpty = false,
   priorityPaths = [],
+  collapsedByDefault = true,
 }: DocsSearchProps) {
+  const containerRef = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
   const [selectedPersona, setSelectedPersona] = useState<PersonaId | "all">(activePersona);
+  const [isExpanded, setIsExpanded] = useState(!collapsedByDefault);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         const input = document.getElementById("docs-search-input") as HTMLInputElement | null;
+        setIsExpanded(true);
         input?.focus();
       }
     };
@@ -58,6 +63,21 @@ export default function DocsSearch({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (!collapsedByDefault) {
+      return;
+    }
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node) && query.trim().length === 0) {
+        setIsExpanded(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [collapsedByDefault, query]);
 
   const results = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -104,114 +124,119 @@ export default function DocsSearch({
       .map((entry) => entry.item);
   }, [items, priorityPaths, query, selectedPersona, showResultsWhenEmpty]);
 
+  const showExpandedPanel = isExpanded || query.trim().length > 0;
+
   return (
-    <section className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/75 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.08)]">
-      <div className="flex flex-col gap-3">
-        <label htmlFor="docs-search-input" className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
-          Search docs
-        </label>
-
-        <div className="flex items-center gap-2 rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)] px-3 py-2">
-          <Search className="h-4 w-4 text-[var(--atlas-ink-muted)]" aria-hidden="true" />
-          <input
-            id="docs-search-input"
-            type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search steps, commands, and troubleshooting"
-            className="w-full bg-transparent text-sm text-[var(--atlas-ink)] outline-none"
-          />
-          {query.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--atlas-ink-muted)] transition hover:bg-[var(--atlas-ink)]/10"
-              aria-label="Clear search"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          ) : null}
-          <kbd className="hidden rounded-md border border-[var(--atlas-ink)]/10 bg-white px-2 py-0.5 text-[10px] text-[var(--atlas-ink-muted)] md:inline-block">
-            Ctrl/⌘K
-          </kbd>
-        </div>
-
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Persona filter">
+    <section
+      ref={containerRef}
+      className={cn(
+        "relative overflow-visible rounded-lg",
+        showExpandedPanel ? "z-20" : "z-0"
+      )}
+    >
+      <label htmlFor="docs-search-input" className="sr-only">
+        Search docs
+      </label>
+      <div className="flex items-center gap-2 rounded-md border border-[hsl(var(--border)/0.7)] bg-[var(--atlas-surface)] px-3 py-2">
+        <Search className="h-4 w-4 text-[var(--atlas-ink-muted)]" aria-hidden="true" />
+        <input
+          id="docs-search-input"
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => setIsExpanded(true)}
+          placeholder="Search docs"
+          className="w-full bg-transparent text-sm text-[var(--atlas-ink)] outline-none"
+        />
+        {query.length > 0 ? (
           <button
             type="button"
-            onClick={() => setSelectedPersona("all")}
-            className={cn(
-              "rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] transition",
-              selectedPersona === "all"
-                ? "border-[var(--atlas-ink)] bg-[var(--atlas-ink)] text-[var(--atlas-cream)]"
-                : "border-[var(--atlas-ink)]/15 bg-white text-[var(--atlas-ink-muted)] hover:text-[var(--atlas-ink)]"
-            )}
+            onClick={() => setQuery("")}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[var(--atlas-ink-muted)] transition hover:bg-[var(--atlas-surface-soft)]"
+            aria-label="Clear search"
           >
-            All
+            <X className="h-4 w-4" />
           </button>
-          {(Object.keys(personaLabels) as PersonaId[]).map((persona) => (
-            <button
-              key={persona}
-              type="button"
-              onClick={() => setSelectedPersona(persona)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] transition",
-                selectedPersona === persona
-                  ? "border-[var(--atlas-ink)] bg-[var(--atlas-ink)] text-[var(--atlas-cream)]"
-                  : "border-[var(--atlas-ink)]/15 bg-white text-[var(--atlas-ink-muted)] hover:text-[var(--atlas-ink)]"
-              )}
-            >
-              {personaLabels[persona]}
-            </button>
-          ))}
-        </div>
+        ) : null}
+      </div>
 
-        <div className="space-y-2" aria-live="polite">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
-              {query.trim().length > 0 ? "Most relevant" : "Recommended"}
-            </p>
-            {results.length > 0 ? (
-              <p className="text-[10px] uppercase tracking-[0.15em] text-[var(--atlas-ink-muted)]">
-                {results.length} result{results.length === 1 ? "" : "s"}
-              </p>
-            ) : null}
+      {showExpandedPanel ? (
+        <div className="atlas-panel-soft absolute left-0 right-0 top-full mt-2 overflow-hidden rounded-lg border border-[hsl(var(--border)/0.85)] shadow-[0_14px_26px_-20px_rgba(0,0,0,0.55)]">
+          <div className="border-b border-[hsl(var(--border)/0.8)] px-4 py-3">
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Persona filter">
+              <button
+                type="button"
+                onClick={() => setSelectedPersona("all")}
+                className={cn(
+                  "rounded-md border px-2.5 py-1 text-xs font-medium transition",
+                  selectedPersona === "all"
+                    ? "border-[hsl(var(--primary)/0.2)] bg-[var(--atlas-inverse-bg)] text-[var(--atlas-inverse-fg)]"
+                    : "border-[hsl(var(--border)/0.85)] bg-[var(--atlas-surface-strong)] text-[var(--atlas-ink-muted)] hover:text-[var(--atlas-ink)]"
+                )}
+              >
+                All
+              </button>
+              {(Object.keys(personaLabels) as PersonaId[]).map((persona) => (
+                <button
+                  key={persona}
+                  type="button"
+                  onClick={() => setSelectedPersona(persona)}
+                  className={cn(
+                    "rounded-md border px-2.5 py-1 text-xs font-medium transition",
+                    selectedPersona === persona
+                      ? "border-[hsl(var(--primary)/0.2)] bg-[var(--atlas-inverse-bg)] text-[var(--atlas-inverse-fg)]"
+                      : "border-[hsl(var(--border)/0.85)] bg-[var(--atlas-surface-strong)] text-[var(--atlas-ink-muted)] hover:text-[var(--atlas-ink)]"
+                  )}
+                >
+                  {personaLabels[persona]}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {results.length === 0 ? (
-            <p className="rounded-2xl bg-[var(--atlas-cream)]/80 px-3 py-2 text-sm text-[var(--atlas-ink-muted)]">
-              {query.trim().length > 0
-                ? "No docs matched. Try a product name, command, or troubleshooting keyword."
-                : "Type to search docs by task, command, or error."}
-            </p>
-          ) : (
-            results.map((result) => (
-              <Link
-                key={result.id}
-                href={result.path}
-                className="block rounded-2xl border border-[var(--atlas-ink)]/10 bg-white px-3 py-2 transition hover:-translate-y-0.5 hover:border-[var(--atlas-ink)]/25"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <p
-                    className="text-sm font-semibold text-[var(--atlas-ink)]"
-                    dangerouslySetInnerHTML={{ __html: highlight(result.title, query) }}
-                  />
-                  <span className="rounded-full bg-[var(--atlas-cream)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--atlas-ink-muted)]">
-                    {personaLabels[result.persona]}
-                  </span>
-                </div>
-                <p
-                  className="mt-1 text-xs text-[var(--atlas-ink-muted)]"
-                  dangerouslySetInnerHTML={{ __html: highlight(result.summary, query) }}
-                />
-                <p className="mt-1 text-[10px] uppercase tracking-[0.15em] text-[var(--atlas-ink-muted)]">
-                  {result.path}
-                </p>
-              </Link>
-            ))
-          )}
+          <div aria-live="polite">
+            <div className="flex items-center justify-between px-4 py-2 text-[11px] uppercase tracking-[0.14em] text-[var(--atlas-ink-muted)]">
+              <p>{query.trim().length > 0 ? "Most relevant" : "Recommended"}</p>
+              {results.length > 0 ? <p>{results.length} result{results.length === 1 ? "" : "s"}</p> : null}
+            </div>
+
+            {results.length === 0 ? (
+              <p className="border-t border-[hsl(var(--border)/0.8)] px-4 py-4 text-sm text-[var(--atlas-ink-muted)]">
+                {query.trim().length > 0
+                  ? "No docs matched. Try a command, feature name, or troubleshooting term."
+                  : "Type to search docs by task, command, or error."}
+              </p>
+            ) : (
+              <div className="max-h-[420px] overflow-y-auto">
+                {results.map((result) => (
+                  <Link
+                    key={result.id}
+                    href={result.path}
+                    className="block border-t border-[hsl(var(--border)/0.8)] px-4 py-3 transition hover:bg-[var(--atlas-surface-soft)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p
+                        className="text-sm font-semibold text-[var(--atlas-ink)]"
+                        dangerouslySetInnerHTML={{ __html: highlight(result.title, query) }}
+                      />
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--atlas-ink-muted)]">
+                        {personaLabels[result.persona]}
+                      </span>
+                    </div>
+                    <p
+                      className="mt-1 text-xs text-[var(--atlas-ink-muted)]"
+                      dangerouslySetInnerHTML={{ __html: highlight(result.summary, query) }}
+                    />
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--atlas-ink-muted)]">
+                      {result.path}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }

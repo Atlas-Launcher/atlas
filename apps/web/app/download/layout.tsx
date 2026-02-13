@@ -4,7 +4,7 @@ import PublicNavbar from "@/components/public-navbar";
 
 export default function DownloadLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="atlas-grid relative min-h-screen overflow-hidden bg-[var(--atlas-cream)] text-[var(--atlas-ink)]">
+    <div className="atlas-app-shell atlas-grid relative min-h-screen overflow-hidden">
       <div
         className="pointer-events-none absolute -top-40 left-[-25%] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle,_rgba(120,198,163,0.25)_0%,_rgba(120,198,163,0)_70%)] blur-3xl"
         aria-hidden="true"
@@ -22,7 +22,7 @@ export default function DownloadLayout({ children }: { children: ReactNode }) {
 
       <main className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-24">{children}</main>
 
-      <footer className="relative z-10 border-t border-[var(--atlas-ink)]/10 bg-white/60">
+      <footer className="atlas-footer relative z-10">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-6 px-6 py-8 text-xs text-[var(--atlas-ink-muted)]">
           <span>Atlas Hub downloads</span>
           <span>Fast installs. Reliable updates.</span>

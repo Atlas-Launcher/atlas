@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import DocsShell from "@/components/docs/docs-shell";
 import DocsSearch from "@/components/docs/docs-search";
 import DocsSidebar from "@/components/docs/docs-sidebar";
+import PersonaContextTabs from "@/components/docs/persona-context-tabs";
 import PersonaQuickActions from "@/components/docs/persona-quick-actions";
 import { assertDocsConfiguration, getPersonaDocs, getPersonaSection, getSearchIndex } from "@/lib/docs/content";
 import { PERSONAS, type PersonaId } from "@/lib/docs/types";
@@ -52,67 +54,69 @@ export default async function PersonaDocsPage({ params }: PersonaPageProps) {
     `/docs/${section.id}/${section.startSlug}`,
     `/docs/${section.id}/${section.troubleshootingSlug}`,
   ];
-
-  return (
-    <div className="grid gap-6 pb-4 pt-8 lg:grid-cols-[260px_1fr] xl:grid-cols-[280px_1fr]">
-      <aside className="space-y-4 lg:sticky lg:top-6 lg:h-fit">
-        <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">{section.title}</p>
-          <p className="mt-2 text-sm text-[var(--atlas-ink-muted)]">{section.description}</p>
-        </div>
-        <DocsSidebar section={section} activeSlug="" />
-        <PersonaQuickActions section={section} />
-      </aside>
-
-      <section className="space-y-4">
+  const sidebar = (
+    <>
+      <PersonaContextTabs activePersona={personaId} />
+      <div>
         <DocsSearch
           items={searchIndex}
           activePersona={personaId}
           showResultsWhenEmpty
           priorityPaths={priorityPaths}
         />
+      </div>
+      <section className="atlas-panel-soft rounded-lg p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--atlas-ink-muted)]">Pages</p>
+        <DocsSidebar section={section} activeSlug="" />
+      </section>
+      <div>
+        <PersonaQuickActions section={section} />
+      </div>
+    </>
+  );
 
-        <article className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/80 p-6">
-          <h1 className="text-3xl font-semibold">{section.title} Docs</h1>
-          <p className="mt-2 text-sm text-[var(--atlas-ink-muted)]">
-            Start with essentials first, then use the reference guides as needed.
-          </p>
+  return (
+    <DocsShell sidebar={sidebar}>
+      <article className="atlas-panel rounded-xl p-6 lg:p-8">
+        <h1 className="text-4xl font-semibold leading-tight">{section.title} docs</h1>
+        <p className="mt-3 text-sm text-[var(--atlas-ink-muted)]">
+          Start with the onboarding and troubleshooting guides, then use the references for daily workflows.
+        </p>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-2">
+        <div className="mt-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--atlas-ink-muted)]">Recommended start</p>
+          <div className="mt-3 grid gap-2">
             {essentials.map((doc) => (
               <Link
                 key={doc.id}
                 href={doc.routePath}
-                className="rounded-2xl border border-[var(--atlas-ink)]/20 bg-gradient-to-b from-[rgba(120,198,163,0.18)] to-white p-4 transition hover:-translate-y-0.5 hover:border-[var(--atlas-ink)]/30"
+                className="atlas-panel-soft rounded-md px-4 py-3 transition hover:border-[hsl(var(--border)/0.95)]"
               >
                 <p className="text-sm font-semibold text-[var(--atlas-ink)]">{doc.title}</p>
                 <p className="mt-1 text-xs text-[var(--atlas-ink-muted)]">{doc.summary}</p>
-                <p className="mt-2 text-[10px] uppercase tracking-[0.15em] text-[var(--atlas-ink-muted)]">{doc.intent}</p>
               </Link>
             ))}
           </div>
+        </div>
 
-          {secondary.length > 0 ? (
-            <div className="mt-7">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
-                Reference guides
-              </p>
-              <div className="mt-2 grid gap-2">
-                {secondary.map((doc) => (
-                  <Link
-                    key={doc.id}
-                    href={doc.routePath}
-                    className="rounded-xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/45 px-4 py-3 transition hover:border-[var(--atlas-ink)]/20"
-                  >
-                    <p className="text-sm font-semibold text-[var(--atlas-ink)]">{doc.title}</p>
-                    <p className="mt-1 text-xs text-[var(--atlas-ink-muted)]">{doc.summary}</p>
-                  </Link>
-                ))}
-              </div>
+        {secondary.length > 0 ? (
+          <div className="mt-10">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--atlas-ink-muted)]">Reference docs</p>
+            <div className="atlas-panel-soft mt-3 overflow-hidden rounded-lg">
+              {secondary.map((doc, index) => (
+                <Link
+                  key={doc.id}
+                  href={doc.routePath}
+                  className={`block px-4 py-3 transition hover:bg-[var(--atlas-surface-strong)] ${index > 0 ? "border-t border-[hsl(var(--border)/0.8)]" : ""}`}
+                >
+                  <p className="text-sm font-semibold text-[var(--atlas-ink)]">{doc.title}</p>
+                  <p className="mt-1 text-xs text-[var(--atlas-ink-muted)]">{doc.summary}</p>
+                </Link>
+              ))}
             </div>
-          ) : null}
-        </article>
-      </section>
-    </div>
+          </div>
+        ) : null}
+      </article>
+    </DocsShell>
   );
 }

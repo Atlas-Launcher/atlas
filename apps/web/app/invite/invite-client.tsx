@@ -304,7 +304,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
   return (
     <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr]">
       <aside className="space-y-6">
-        <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-6 shadow-[0_20px_50px_rgba(16,20,24,0.1)]">
+        <div className="atlas-panel rounded-3xl p-6 shadow-[0_20px_50px_rgba(16,20,24,0.1)]">
           <Badge variant="secondary">Invite</Badge>
           <h2 className="mt-4 text-3xl font-semibold">{playerWebCopy.invite.title}</h2>
           <p className="mt-3 text-sm text-[var(--atlas-ink-muted)]">
@@ -313,7 +313,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
               : "We'll connect your account and send you to Atlas Launcher."}
           </p>
           {preview?.pack?.name ? (
-            <div className="mt-5 rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
+            <div className="mt-5 rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
               <p className="text-sm font-semibold text-[var(--atlas-ink)]">{preview.pack.name}</p>
               <p className="mt-1">
                 {preview.creator?.name ? `Created by ${preview.creator.name}` : "Pack creator"}
@@ -322,7 +322,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
           ) : null}
         </div>
 
-        <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-6">
+        <div className="atlas-panel rounded-3xl p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-ink-muted)]">
             Onboarding steps
           </p>
@@ -336,20 +336,20 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                   key={item.id}
                   className={`rounded-2xl border px-4 py-3 ${
                     isActive
-                      ? "border-[var(--atlas-ink)] bg-[var(--atlas-cream)]"
+                      ? "border-[hsl(var(--border)/0.95)] bg-[var(--atlas-cream)]"
                       : isComplete
-                        ? "border-[var(--atlas-ink)]/20 bg-white/60"
-                        : "border-[var(--atlas-ink)]/10 bg-white/40"
+                        ? "border-[hsl(var(--border)/0.95)] bg-white/60"
+                        : "border-[hsl(var(--border)/0.8)] bg-white/40"
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <div
                       className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
                         isComplete
-                          ? "bg-[var(--atlas-ink)] text-[var(--atlas-cream)]"
+                          ? "bg-[var(--atlas-inverse-bg)] text-[var(--atlas-inverse-fg)]"
                           : isActive
-                            ? "border border-[var(--atlas-ink)] text-[var(--atlas-ink)]"
-                            : "border border-[var(--atlas-ink)]/20 text-[var(--atlas-ink-muted)]"
+                            ? "border border-[hsl(var(--border)/0.95)] text-[var(--atlas-ink)]"
+                            : "border border-[hsl(var(--border)/0.95)] text-[var(--atlas-ink-muted)]"
                       }`}
                     >
                       {index + 1}
@@ -476,7 +476,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-4 text-sm text-[var(--atlas-ink-muted)]">
+              <div className="rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-4 py-4 text-sm text-[var(--atlas-ink-muted)]">
                 Atlas Launcher opens on your invited pack so you can install and play.
               </div>
 
@@ -487,7 +487,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                 <a
                   href="/download/app/installer/latest"
                   ref={launcherDownloadRef}
-                  className="inline-flex items-center rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
+                  className="inline-flex items-center rounded-full border border-[hsl(var(--border)/0.95)] bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
                   rel="noreferrer"
                   target="_blank"
                 >

@@ -45,7 +45,7 @@ export function formatBytes(bytes: number) {
 
 export function DownloadBadge({ children }: { children: ReactNode }) {
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-[var(--atlas-ink)]/10 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
+    <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--border)/0.8)] bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
       {children}
     </div>
   );
@@ -61,7 +61,7 @@ export function PrimaryLink({
   return (
     <Link
       href={href}
-      className="rounded-full bg-[var(--atlas-ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
+      className="rounded-full bg-[var(--atlas-inverse-bg)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-inverse-fg)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
     >
       {children}
     </Link>
@@ -78,7 +78,7 @@ export function SecondaryLink({
   return (
     <Link
       href={href}
-      className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
+      className="rounded-full border border-[hsl(var(--border)/0.95)] bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
     >
       {children}
     </Link>
@@ -97,11 +97,11 @@ export function LatestReleasePanel({
   emptyMessage: string;
 }) {
   return (
-    <div className="space-y-4 rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-6 shadow-[0_24px_60px_rgba(16,20,24,0.1)]">
+    <div className="space-y-4 atlas-panel rounded-3xl p-6 shadow-[0_24px_60px_rgba(16,20,24,0.1)]">
       <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-ink-muted)]">
         {heading}
       </p>
-      <div className="rounded-2xl bg-[var(--atlas-cream)]/70 p-4">
+      <div className="rounded-2xl bg-[var(--atlas-surface-soft)] p-4">
         <p className="text-sm font-semibold text-[var(--atlas-ink)]">{productName}</p>
         <p className="text-xs text-[var(--atlas-ink-muted)]">
           {release ? `Latest stable v${release.version}` : "No stable release yet"} ·{" "}
@@ -125,7 +125,7 @@ export function PlatformDownloadCards({
   return (
     <section className="grid gap-6 lg:grid-cols-3">
       {groups.map((platform) => (
-        <div key={platform.id} className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-6">
+        <div key={platform.id} className="atlas-panel rounded-3xl p-6">
           <p className="text-sm font-semibold text-[var(--atlas-ink)]">{platform.label}</p>
           <p className="text-xs text-[var(--atlas-ink-muted)]">{platform.detail}</p>
           <div className="mt-4 flex flex-col gap-3 text-sm">
@@ -134,7 +134,7 @@ export function PlatformDownloadCards({
                 <a
                   key={asset.id}
                   href={`/api/v1/download/${asset.downloadId}`}
-                  className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"
+                  className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-4 py-3 text-[var(--atlas-ink)] transition hover:border-[hsl(var(--border))]"
                   rel="noreferrer"
                   target="_blank"
                 >
@@ -146,7 +146,7 @@ export function PlatformDownloadCards({
                 </a>
               ))
             ) : (
-              <span className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
+              <span className="rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
                 {emptyLabel}
               </span>
             )}

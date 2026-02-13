@@ -12,7 +12,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex items-center gap-2 rounded-full border border-[var(--atlas-ink)]/10 bg-white/70 p-1",
+      "atlas-glass inline-flex items-center gap-2 rounded-full p-1",
       className
     )}
     {...props}
@@ -27,7 +27,9 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)] transition data-[state=active]:bg-[var(--atlas-ink)] data-[state=active]:text-[var(--atlas-cream)]",
+      "rounded-full border border-transparent px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)] transition",
+      "hover:bg-[var(--atlas-surface-strong)] hover:text-[var(--atlas-ink)]",
+      "data-[state=active]:border-[hsl(var(--primary)/0.2)] data-[state=active]:bg-[hsl(var(--primary))] data-[state=active]:text-[hsl(var(--primary-foreground))] data-[state=active]:shadow-[var(--atlas-shadow-button)]",
       className
     )}
     {...props}

@@ -10,15 +10,15 @@ export default function DocsToc({ headings }: DocsTocProps) {
   }
 
   return (
-    <section className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/75 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">On this page</p>
-      <ul className="mt-3 space-y-2">
+    <section className="atlas-panel rounded-lg p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--atlas-ink-muted)]">On this page</p>
+      <ul className="mt-3 space-y-1.5">
         {headings.map((heading) => (
           <li key={heading.id}>
             <a
               href={`#${heading.id}`}
-              className="text-sm text-[var(--atlas-ink-muted)] transition hover:text-[var(--atlas-ink)]"
-              style={{ paddingLeft: `${Math.max(0, heading.level - 1) * 10}px` }}
+              className="block text-sm leading-6 text-[var(--atlas-ink-muted)] transition hover:text-[var(--atlas-ink)]"
+              style={{ paddingLeft: `${Math.max(0, heading.level - 2) * 10}px` }}
             >
               {heading.text}
             </a>

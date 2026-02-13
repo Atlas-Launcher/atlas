@@ -169,12 +169,12 @@ export default function SystemTab() {
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-white/70 p-8 text-sm text-[var(--atlas-ink-muted)]">
+        <div className="atlas-panel rounded-2xl p-8 text-sm text-[var(--atlas-ink-muted)]">
           No users found.
         </div>
       )}
 
-      <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-white/70 p-4">
+      <div className="atlas-panel rounded-2xl p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">App Deploy Keys</h2>

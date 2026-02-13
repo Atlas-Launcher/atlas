@@ -64,7 +64,7 @@ export default function PacksTab({
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-white/70 p-8 text-sm text-[var(--atlas-ink-muted)]">
+        <div className="atlas-panel rounded-2xl p-8 text-sm text-[var(--atlas-ink-muted)]">
           No packs match your search.
         </div>
       )}

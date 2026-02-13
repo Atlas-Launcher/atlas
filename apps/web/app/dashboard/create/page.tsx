@@ -34,7 +34,7 @@ export default async function CreatePackPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--atlas-cream)] px-6 py-12 text-[var(--atlas-ink)]">
+    <div className="min-h-screen bg-transparent px-6 py-12 text-[var(--atlas-ink)]">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <CreatePackClient />
       </div>

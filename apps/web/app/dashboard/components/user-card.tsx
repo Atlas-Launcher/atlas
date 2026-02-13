@@ -18,7 +18,7 @@ const roleLabels: Record<Role, string> = {
 
 export default function UserCard({ user }: UserCardProps) {
   return (
-    <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-white/70 p-4">
+    <div className="atlas-panel rounded-2xl p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">{user.name}</p>

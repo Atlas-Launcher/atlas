@@ -105,9 +105,9 @@ export function PlatformGuidedDownload({
 
   return (
     <div className="space-y-12 pt-10">
-      <section className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-8 shadow-[0_24px_60px_rgba(16,20,24,0.1)]">
+      <section className="atlas-panel rounded-3xl p-8 shadow-[0_24px_60px_rgba(16,20,24,0.1)]">
         <div className="mx-auto max-w-4xl text-center">
-          <p className="inline-flex items-center rounded-full border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
+          <p className="inline-flex items-center rounded-full border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
             {badge}
           </p>
           <h1 className="mt-4 text-4xl font-semibold leading-tight md:text-6xl">{title}</h1>
@@ -128,12 +128,12 @@ export function PlatformGuidedDownload({
                 }}
                 className={`rounded-2xl border px-4 py-4 text-left transition ${
                   isActive
-                    ? "border-[var(--atlas-ink)] bg-[var(--atlas-ink)] text-[var(--atlas-cream)]"
-                    : "border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 text-[var(--atlas-ink)] hover:border-[var(--atlas-ink)]/30"
+                    ? "border-[hsl(var(--border)/0.95)] bg-[var(--atlas-inverse-bg)] text-[var(--atlas-inverse-fg)]"
+                    : "border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] text-[var(--atlas-ink)] hover:border-[hsl(var(--border))]"
                 }`}
               >
                 <p className="text-sm font-semibold">{platform.label}</p>
-                <p className={`mt-1 text-xs ${isActive ? "text-[var(--atlas-cream)]/80" : "text-[var(--atlas-ink-muted)]"}`}>
+                <p className={`mt-1 text-xs ${isActive ? "text-[var(--atlas-inverse-muted)]" : "text-[var(--atlas-ink-muted)]"}`}>
                   {platform.detail}
                 </p>
               </button>
@@ -146,7 +146,7 @@ export function PlatformGuidedDownload({
             <>
               <a
                 href={selected.action.href}
-                className="inline-flex rounded-full bg-[var(--atlas-ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
+                className="inline-flex rounded-full bg-[var(--atlas-inverse-bg)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-inverse-fg)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
               >
                 {selected.action.label}
               </a>
@@ -159,7 +159,7 @@ export function PlatformGuidedDownload({
           {selected.action.type === "command" ? (
             <>
               <p className="text-lg font-semibold text-[var(--atlas-ink)]">{selected.action.label}</p>
-              <div className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 p-3 text-left">
+              <div className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] p-3 text-left">
                 <code className="block flex-1 overflow-x-auto text-xs text-[var(--atlas-ink)]">
                   {selected.action.command}
                 </code>
@@ -171,7 +171,7 @@ export function PlatformGuidedDownload({
                       ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
                       : copyState === "error"
                         ? "border-red-500/40 bg-red-500/10 text-red-700"
-                        : "border-[var(--atlas-ink)]/20 text-[var(--atlas-ink)]"
+                        : "border-[hsl(var(--border)/0.95)] text-[var(--atlas-ink)]"
                   }`}
                 >
                   {copyState === "ok" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy"}
@@ -196,7 +196,7 @@ export function PlatformGuidedDownload({
           ) : null}
 
           {selected.action.type === "info" ? (
-            <div className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-sm text-[var(--atlas-ink-muted)]">
+            <div className="rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-4 py-3 text-sm text-[var(--atlas-ink-muted)]">
               <p className="font-semibold text-[var(--atlas-ink)]">{selected.action.label}</p>
               <p className="mt-2">{selected.action.note}</p>
             </div>
@@ -205,7 +205,7 @@ export function PlatformGuidedDownload({
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-6">
+        <div className="atlas-panel rounded-3xl p-6">
           <h2 className="text-2xl font-semibold text-[var(--atlas-ink)]">{selected.installTitle}</h2>
           <ol className="mt-4 space-y-3 text-sm text-[var(--atlas-ink-muted)]">
             {selected.installSteps.map((step, index) => (
@@ -214,11 +214,11 @@ export function PlatformGuidedDownload({
           </ol>
         </div>
 
-        <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-ink)] p-6 text-[var(--atlas-cream)]">
+        <div className="rounded-3xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-inverse-bg)] p-6 text-[var(--atlas-inverse-fg)]">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-accent-light)]">
             Next steps
           </p>
-          <ul className="mt-4 space-y-2 text-sm text-[var(--atlas-cream)]/80">
+          <ul className="mt-4 space-y-2 text-sm text-[var(--atlas-inverse-muted)]">
             {selected.nextSteps.map((step, index) => (
               <li key={`${selected.id}-next-${index + 1}`}>{step}</li>
             ))}
@@ -226,7 +226,7 @@ export function PlatformGuidedDownload({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-6">
+      <section className="atlas-panel rounded-3xl p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-ink-muted)]">
           {selected.manualTitle}
         </p>
@@ -236,7 +236,7 @@ export function PlatformGuidedDownload({
               <a
                 key={asset.id}
                 href={asset.href}
-                className="flex items-center justify-between rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-[var(--atlas-ink)] transition hover:border-[var(--atlas-ink)]"
+                className="flex items-center justify-between rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-4 py-3 text-[var(--atlas-ink)] transition hover:border-[hsl(var(--border))]"
                 rel="noreferrer"
                 target="_blank"
               >
@@ -248,7 +248,7 @@ export function PlatformGuidedDownload({
               </a>
             ))
           ) : (
-            <span className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
+            <span className="rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-4 py-3 text-xs text-[var(--atlas-ink-muted)]">
               {selected.manualEmptyLabel}
             </span>
           )}

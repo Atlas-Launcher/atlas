@@ -62,7 +62,7 @@ export default function AdminUserClient({ session, user, memberships }: AdminUse
   };
 
   return (
-    <div className="min-h-screen bg-[var(--atlas-cream)] px-6 py-12 text-[var(--atlas-ink)]">
+    <div className="min-h-screen bg-transparent px-6 py-12 text-[var(--atlas-ink)]">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <DashboardHeader
           workspaceName="System"
@@ -108,7 +108,7 @@ export default function AdminUserClient({ session, user, memberships }: AdminUse
                 <select
                   value={role}
                   onChange={(event) => setRole(event.target.value as Role)}
-                  className="mt-2 h-11 w-full rounded-2xl border border-[var(--atlas-ink)]/20 bg-white px-3 text-sm"
+                  className="mt-2 h-11 w-full rounded-2xl border border-[hsl(var(--border)/0.95)] bg-white px-3 text-sm"
                   disabled={saving || isSelf}
                 >
                   <option value="player">Player</option>
@@ -132,7 +132,7 @@ export default function AdminUserClient({ session, user, memberships }: AdminUse
                 memberships.map((membership) => (
                   <div
                     key={membership.packId}
-                    className="rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/60 px-4 py-3"
+                    className="rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-cream)]/60 px-4 py-3"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>

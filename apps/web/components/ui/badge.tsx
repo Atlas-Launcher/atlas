@@ -8,9 +8,9 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-[var(--atlas-ink)] text-[var(--atlas-cream)]",
-        secondary: "bg-[var(--atlas-cream)]/70 text-[var(--atlas-ink)] border-[var(--atlas-ink)]/10",
-        outline: "border-[var(--atlas-ink)]/20 text-[var(--atlas-ink)]",
+        default: "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]",
+        secondary: "atlas-panel-soft text-[var(--atlas-ink)] border-[hsl(var(--border)/0.65)]",
+        outline: "border-[hsl(var(--border)/0.8)] text-[var(--atlas-ink)]",
       },
     },
     defaultVariants: {

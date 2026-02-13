@@ -72,7 +72,7 @@ export default function ManageTab({
         <CardDescription>Update pack settings and service tokens.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="inline-block w-[42rem] max-w-full rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 p-4">
+        <div className="inline-block w-[42rem] max-w-full rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] p-4">
           <h3 className="text-sm font-semibold">Pack name</h3>
           {canManageFriendlyName ? (
             <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -92,7 +92,7 @@ export default function ManageTab({
         </div>
 
         {canDeletePack ? (
-          <div className="inline-block w-[42rem] max-w-full space-y-4 rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 p-4">
+          <div className="inline-block w-[42rem] max-w-full space-y-4 rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] p-4">
             <h3 className="text-lg font-semibold">Delete pack</h3>
             <div className="inline-block w-[42rem] max-w-full rounded-2xl border border-amber-300 bg-amber-50 p-4">
               <p className="text-sm text-amber-800">
@@ -120,7 +120,7 @@ export default function ManageTab({
           </p>
         )}
 
-        <div className="inline-block w-[48rem] max-w-full rounded-2xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 p-4">
+        <div className="inline-block w-[48rem] max-w-full rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">Runner Service Tokens</h3>

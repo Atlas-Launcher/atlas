@@ -41,7 +41,7 @@ export default function PublicNavbar() {
       <div className="flex items-center gap-3">
         <Link
           href="/sign-up"
-          className="rounded-full border border-[var(--atlas-ink)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5 hover:bg-[var(--atlas-ink)] hover:text-[var(--atlas-cream)]"
+          className="rounded-full border border-[hsl(var(--border)/0.95)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5 hover:bg-[var(--atlas-inverse-bg)] hover:text-[var(--atlas-inverse-fg)]"
         >
           Create account
         </Link>

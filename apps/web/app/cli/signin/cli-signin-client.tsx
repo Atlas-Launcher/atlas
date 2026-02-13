@@ -47,7 +47,7 @@ export default function CliSigninClient() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--atlas-cream)] px-6 py-16 text-[var(--atlas-ink)]">
+    <div className="min-h-screen bg-transparent px-6 py-16 text-[var(--atlas-ink)]">
       <div className="mx-auto max-w-md">
         <Card>
           <CardHeader>

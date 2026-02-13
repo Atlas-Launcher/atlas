@@ -67,7 +67,7 @@ const reliabilityPills = [
 
 export default function Home() {
   return (
-    <div className="atlas-grid relative min-h-screen overflow-hidden bg-[var(--atlas-cream)] text-[var(--atlas-ink)]">
+    <div className="atlas-app-shell atlas-grid relative min-h-screen overflow-hidden">
       <div
         className="pointer-events-none absolute -top-40 left-[-20%] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle,_rgba(60,132,109,0.35)_0%,_rgba(60,132,109,0)_70%)] blur-2xl"
         aria-hidden="true"
@@ -86,7 +86,7 @@ export default function Home() {
       <main className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-24">
         <section className="grid gap-12 pb-16 pt-12 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--atlas-ink)]/10 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
+            <div className="atlas-panel-soft inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink-muted)]">
               Creator-friendly pack delivery
             </div>
             <h1 className="text-4xl font-semibold leading-tight text-[var(--atlas-ink)] md:text-6xl">
@@ -99,13 +99,13 @@ export default function Home() {
             <div className="flex flex-wrap gap-4">
               <Link
                 href="/dashboard"
-                className="rounded-full bg-[var(--atlas-ink)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
+                className="rounded-full bg-[var(--atlas-inverse-bg)] px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-inverse-fg)] shadow-[0_12px_30px_rgba(16,20,24,0.25)] transition hover:-translate-y-0.5"
               >
                 Create a Pack
               </Link>
               <Link
                 href="/download"
-                className="rounded-full border border-[var(--atlas-ink)]/20 bg-white/70 px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5"
+                className="atlas-panel-soft rounded-full px-6 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--atlas-ink)] transition hover:-translate-y-0.5 hover:bg-[var(--atlas-surface-strong)]"
               >
                 View install options
               </Link>
@@ -113,7 +113,7 @@ export default function Home() {
           </div>
 
           <div className="space-y-6">
-            <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-6">
+            <div className="atlas-panel rounded-3xl p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-ink-muted)]">
                 Pack Snapshot
               </p>
@@ -123,19 +123,19 @@ export default function Home() {
               </p>
               <div className="mt-5 space-y-3">
                 {formatHighlights.map((highlight) => (
-                  <div key={highlight.title} className="rounded-2xl bg-[var(--atlas-cream)]/70 p-4">
+                  <div key={highlight.title} className="rounded-2xl bg-[var(--atlas-surface-soft)] p-4">
                     <p className="text-sm font-semibold text-[var(--atlas-ink)]">{highlight.title}</p>
                     <p className="text-xs text-[var(--atlas-ink-muted)]">{highlight.detail}</p>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-ink)] p-6 text-[var(--atlas-cream)] shadow-[0_30px_80px_rgba(15,23,42,0.25)]">
+            <div className="rounded-3xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-inverse-bg)] p-6 text-[var(--atlas-inverse-fg)] shadow-[0_30px_80px_rgba(15,23,42,0.25)]">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-accent-light)]">
                 Release Manager
               </p>
               <h2 className="mt-4 text-2xl font-semibold">Release Channels</h2>
-              <p className="mt-3 text-sm text-[var(--atlas-cream)]/70">
+              <p className="mt-3 text-sm text-[var(--atlas-inverse-muted)]">
                 Move a tested build live in seconds, or roll back just as fast.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
@@ -152,7 +152,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="grid gap-6 rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-8">
+        <section className="grid gap-6 atlas-panel rounded-3xl p-8">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-ink-muted)]">
               Hub Capabilities
@@ -161,7 +161,7 @@ export default function Home() {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {hubFeatures.map((feature) => (
-              <div key={feature.title} className="rounded-2xl bg-[var(--atlas-cream)]/70 p-5">
+              <div key={feature.title} className="rounded-2xl bg-[var(--atlas-surface-soft)] p-5">
                 <p className="text-sm font-semibold text-[var(--atlas-ink)]">{feature.title}</p>
                 <p className="mt-2 text-sm text-[var(--atlas-ink-muted)]">{feature.detail}</p>
               </div>
@@ -170,7 +170,7 @@ export default function Home() {
         </section>
 
         <section className="mt-16 grid gap-10 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="space-y-6 rounded-3xl border border-[var(--atlas-ink)]/10 bg-white/70 p-8">
+          <div className="space-y-6 atlas-panel rounded-3xl p-8">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-ink-muted)]">
               Core Workflow
             </p>
@@ -180,8 +180,8 @@ export default function Home() {
             </p>
             <div className="space-y-4">
               {workflowSteps.map((step) => (
-                <div key={step.step} className="flex items-start gap-4 rounded-2xl bg-[var(--atlas-cream)]/70 p-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--atlas-ink)] text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-cream)]">
+                <div key={step.step} className="flex items-start gap-4 rounded-2xl bg-[var(--atlas-surface-soft)] p-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--atlas-inverse-bg)] text-xs font-semibold uppercase tracking-[0.2em] text-[var(--atlas-inverse-fg)]">
                     {step.step}
                   </div>
                   <div>
@@ -193,12 +193,12 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-ink)] p-8 text-[var(--atlas-cream)]">
+          <div className="rounded-3xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-inverse-bg)] p-8 text-[var(--atlas-inverse-fg)]">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--atlas-accent-light)]">
               Reliability
             </p>
             <h3 className="mt-3 text-2xl font-semibold">Built for stable launches</h3>
-            <p className="mt-3 text-sm text-[var(--atlas-cream)]/70">
+            <p className="mt-3 text-sm text-[var(--atlas-inverse-muted)]">
               Keep releases smooth, updates quick, and players confident in every install.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
@@ -215,7 +215,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-[var(--atlas-ink)]/10 bg-white/60">
+      <footer className="atlas-footer relative z-10">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-6 px-6 py-8 text-xs text-[var(--atlas-ink-muted)]">
           <span>Atlas Hub - Reliable modpack delivery</span>
           <span>Build with confidence. Share with ease.</span>

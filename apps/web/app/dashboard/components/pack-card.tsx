@@ -17,8 +17,8 @@ export default function PackCard({ pack, selected, onSelect }: PackCardProps) {
 
   return (
     <div
-      className={`text-left rounded-2xl border bg-white/80 p-4 transition hover:border-[var(--atlas-ink)]/25 hover:bg-white ${
-        selected ? "border-[var(--atlas-ink)]/30 ring-2 ring-[var(--atlas-ink)]/15" : "border-[var(--atlas-ink)]/10"
+      className={`text-left rounded-2xl border bg-white/80 p-4 transition hover:border-[hsl(var(--border))] hover:bg-white ${
+        selected ? "border-[hsl(var(--border))] ring-2 ring-[var(--atlas-ink)]/15" : "border-[hsl(var(--border)/0.8)]"
       }`}
     >
       <button type="button" onClick={onSelect} className="w-full text-left">
@@ -27,12 +27,12 @@ export default function PackCard({ pack, selected, onSelect }: PackCardProps) {
             <p className="text-base font-semibold leading-tight">{pack.name}</p>
             <p className="mt-1 text-xs text-[var(--atlas-ink-muted)]">{pack.slug}</p>
           </div>
-          <span className="rounded-full border border-[var(--atlas-ink)]/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--atlas-ink-muted)]">
+          <span className="rounded-full border border-[hsl(var(--border)/0.85)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--atlas-ink-muted)]">
             Open
           </span>
         </div>
       </button>
-      <div className="mt-3 rounded-xl border border-[var(--atlas-ink)]/10 bg-[var(--atlas-cream)]/70 px-3 py-2 text-xs text-[var(--atlas-ink-muted)]">
+      <div className="mt-3 rounded-xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-3 py-2 text-xs text-[var(--atlas-ink-muted)]">
         {repoHref ? (
           <a
             href={repoHref}
