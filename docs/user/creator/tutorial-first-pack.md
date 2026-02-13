@@ -1,35 +1,36 @@
 ---
-title: Creator First Pack Tutorial
-summary: Step-by-step walkthrough from login and initialization through publish and promotion.
+title: Creator first pack tutorial
+summary: End-to-end command walkthrough from login to production promotion.
 persona: creator
 order: 2
 keywords: ["tutorial", "first pack", "publish", "promote"]
 intent: tutorial
 ---
 
-# Tutorial: First Pack Release (Creator)
+# Creator first pack tutorial
 
-This walkthrough takes you from repo setup to a production-ready channel promotion.
+Use this walkthrough to run one complete release with clear checkpoints.
 
 ## Step 1: Sign in
+
+Start by confirming your CLI session is valid.
 
 ```bash
 atlas login
 atlas status
 ```
 
-Expected result:
-- `atlas status` shows an active session.
+Expected result: `atlas status` shows an active session.
 
-## Step 2: Initialize or refresh pack config
+## Step 2: Prepare pack configuration
 
-New repo:
+Initialize new repos or refresh existing pack metadata.
 
 ```bash
 atlas init
 ```
 
-Existing repo needing version refresh:
+If the repo is already initialized and needs refresh:
 
 ```bash
 atlas reinit
@@ -41,51 +42,49 @@ Optional validation before building:
 atlas validate
 ```
 
-## Step 3: Build
+## Step 3: Build the artifact
+
+Create a release artifact from the current source state.
 
 ```bash
 atlas build
 ```
 
-Expected result:
-- A local build artifact is generated.
+Expected result: the build command completes without validation errors.
 
-## Step 4: Publish
+## Step 4: Publish to Hub
+
+Upload and register the build for channel use.
 
 ```bash
 atlas publish
 ```
 
-Expected result:
-- Build is uploaded and registered on your configured channel.
+Expected result: the build is available on the target channel.
 
-## Step 5: Promote
+## Step 5: Promote when testing passes
 
-When testing is complete, promote the selected build:
+Move a validated build to the next channel.
 
 ```bash
 atlas promote
 ```
 
-Interactive mode lets you choose pack/channel/build if not provided.
+Expected result: the selected channel points to the promoted build.
 
 ## Step 6: Commit and push source changes
 
+Store release-related source edits in Git after verification.
+
 ```bash
-atlas commit "Update pack content"
+atlas commit "Release update"
 atlas push
 ```
 
-## Optional: CI workflow bootstrap
+## Troubleshooting notes
 
-```bash
-atlas workflow init
-```
+Use these checks if a step fails in this tutorial flow.
 
-Use this once per repo to sync Atlas CI workflow scaffolding.
-
-## Troubleshooting
-
-- Not signed in: run `atlas login`.
-- Non-interactive errors: pass explicit IDs/flags (for example `--pack-id`, `--build-id`, `--channel`).
-- Push/pull auth issues: `atlas pull` and `atlas push` now use your system Git credentials.
+- Authentication failure: run `atlas login`.
+- Non-interactive execution: pass explicit IDs and channel flags.
+- Git sync error: run `atlas pull` before retrying `atlas push`.

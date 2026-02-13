@@ -1,87 +1,77 @@
 ---
-title: Server Host Getting Started
-summary: First-time Atlas Runner setup and operating flow for Linux VPS, macOS, and WSL.
+title: Server host getting started
+summary: First-time Atlas Runner setup and initial server operation flow.
 persona: host
 order: 1
 keywords: ["atlas-runner", "server start", "daemon", "install"]
 intent: getting-started
 ---
 
-# Server Host Getting Started
+# Server host getting started
 
-This guide covers first-time setup for Atlas Runner on Linux VPS, macOS, or WSL.
+Use this guide once to install Atlas Runner and launch your first server.
 
-## Recommended platform
+## Choose the host platform
 
-Use Linux VPS for always-on servers.
+Linux VPS is the recommended target for always-on server workloads.
 
-## Step 1: Install runner tooling
+- Linux VPS: recommended for production hosting.
+- macOS: supported for local or small-scale usage.
+- WSL: supported, usually with daemon install skipped.
 
-Linux one-command install:
+## Step 1: Install Atlas Runner
+
+Install the runner binary first.
+
+Linux install:
 
 ```bash
 curl -fsSL "${NEXT_PUBLIC_BETTER_AUTH_URL%/}/download/runner/install" | sudo bash -s --
 ```
 
-WSL (skip daemon install):
+WSL install without daemon registration:
 
 ```bash
 curl -fsSL "${NEXT_PUBLIC_BETTER_AUTH_URL%/}/download/runner/install" | sudo bash -s -- --no-daemon-install
 ```
 
-Verify:
+Verify installation:
 
 ```bash
 atlas-runner --version
 ```
 
-## Step 2: Link runner to your Atlas pack
+## Step 2: Link the host to Atlas
+
+Authenticate and select the pack/channel association.
 
 ```bash
 atlas-runner auth login
 ```
 
-Interactive mode will guide you through pack selection and token naming.
+## Step 3: Start the server
 
-## Step 3: Start server
+Use the start command to initialize and launch the server runtime.
 
 ```bash
 atlas-runner server start
 ```
 
-What this handles:
-- build retrieval by channel,
-- first-run setup prompts,
-- server process launch through runnerd.
+## Step 4: Run core operations
 
-## Step 4: Operate server
-
-Check server logs:
+Use these commands for immediate day-one operation.
 
 ```bash
 atlas-runner server logs --follow
-```
-
-Open interactive console:
-
-```bash
 atlas-runner server console
-```
-
-Stop server:
-
-```bash
 atlas-runner server stop
 ```
 
 ## Step 5: Check daemon health
 
+Verify daemon state when logs or commands look stale.
+
 ```bash
 atlas-runner daemon status
 atlas-runner daemon logs --follow
 ```
-
-## Notes
-
-- `atlas-runner host install` manages systemd setup on Linux.
-- Keep `atlas-runner` and `atlas-runnerd` on matching versions.

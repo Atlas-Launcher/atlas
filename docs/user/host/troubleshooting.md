@@ -1,63 +1,63 @@
 ---
-title: Server Host Troubleshooting
-summary: Diagnostics and recovery checklist for authentication, daemon, and startup issues.
+title: Server host troubleshooting
+summary: Recovery guidance for Atlas Runner authentication, daemon, and startup issues.
 persona: host
 order: 3
 keywords: ["troubleshooting", "daemon", "systemd", "auth login"]
 intent: troubleshooting
 ---
 
-# Server Host Troubleshooting
+# Server host troubleshooting
 
-## `atlas-runner auth login` fails
+Use this guide when runner commands fail or server state is inconsistent.
 
-Check:
-- You can reach Atlas Hub URL.
-- Your Atlas account has access to the target pack.
+## Authentication failures
 
-Try:
-- rerun login and choose the pack interactively,
-- pass `--hub-url` explicitly if needed.
+Resolve auth and access issues before server lifecycle retries.
 
-## `atlas-runner server start` stops for EULA/RAM prompts
+- Confirm Hub URL reachability.
+- Confirm your account has pack access.
+- Retry `atlas-runner auth login` with explicit `--hub-url` when needed.
 
-In non-interactive mode, first-run prompts are not available.
+## Startup blocked by prompts
 
-Use explicit flags:
-- `--accept-eula`
-- `--max-ram <MB>`
+Non-interactive runs require explicit first-run flags.
 
-## Logs are empty or stale
+- Add `--accept-eula`.
+- Add `--max-ram <MB>`.
 
-Check daemon status:
+## Empty or stale logs
+
+If server logs are stale, verify daemon connectivity first.
 
 ```bash
 atlas-runner daemon status
-```
-
-Then follow daemon logs:
-
-```bash
 atlas-runner daemon logs --follow
 ```
 
-## Server command/console cannot connect
+## Console or command connection failures
 
-Runner talks to local `atlas-runnerd`. Verify daemon is running and socket access is available for your user.
+Server console commands depend on a healthy local `atlas-runnerd` process.
 
-## systemd install issues (Linux)
+- Confirm daemon is running.
+- Confirm your current user can access the daemon socket.
 
-Run:
+## Linux service install issues
+
+Reinstall service registration when systemd state is invalid.
 
 ```bash
 atlas-runner host install
 ```
 
-If permissions fail, rerun with `sudo` and confirm `atlas-runner` is installed in `/usr/local/bin`.
+If permissions fail, rerun with `sudo` and verify
+`/usr/local/bin/atlas-runner` exists.
 
-## Recovery checklist
+## Minimal recovery checklist
 
-1. Confirm CLI version: `atlas-runner --version`.
-2. Confirm daemon health: `atlas-runner daemon status`.
-3. Confirm pack linkage: rerun `atlas-runner auth login`.
-4. Start server with explicit flags if non-interactive.
+Use this order to restore service quickly.
+
+1. Verify CLI version: `atlas-runner --version`.
+2. Verify daemon health: `atlas-runner daemon status`.
+3. Re-link pack auth: `atlas-runner auth login`.
+4. Retry start with explicit first-run flags when needed.

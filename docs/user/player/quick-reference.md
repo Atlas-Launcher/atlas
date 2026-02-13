@@ -1,48 +1,46 @@
 ---
-title: Player Quick Reference
-summary: Day-to-day launcher checklist and recovery actions for players.
+title: Player quick reference
+summary: Daily checklist and fast recovery actions for Atlas Launcher players.
 persona: player
 order: 2
 keywords: ["checklist", "play", "launcher", "quick reference"]
 intent: reference
 ---
 
-# Player Quick Reference
+# Player quick reference
 
-## Invite flow
+Use this page for routine launches after initial setup is complete.
 
-1. Open your invite link.
-2. Sign in or create your Atlas account.
-3. Select **Open Atlas Launcher**.
-4. If the launcher does not open, install it from the fallback download link and try again.
+## Daily launch checklist
 
-## First launch checklist
+Run this checklist before selecting **Play**.
 
-- Signed in to your Atlas account in launcher.
-- Signed in to your Microsoft account.
+- Signed in to Atlas.
+- Signed in to Microsoft.
 - Accounts linked in Launch Assist.
-- Selected pack is visible in Library.
-- Press **Play**.
+- Intended pack selected in Library.
 
-## What Play does
+## Common status labels
 
-`Play` handles setup automatically when needed:
-- syncs pack data,
-- prepares files,
-- starts Minecraft.
+These labels show where launcher is in the launch pipeline.
 
-You usually do not need separate install/update buttons.
+- `Syncing pack`: Resolving and downloading pack content.
+- `Preparing files`: Applying local files and runtime assets.
+- `Starting Minecraft`: Launch command is being executed.
+- `Launch Assist`: A readiness or recovery action is required.
 
-## Common labels you will see
+## Fast recovery flow
 
-- `Syncing pack`
-- `Preparing files`
-- `Starting Minecraft`
-- `Launch Assist`
-
-## If something fails
+Use this short sequence when launch fails.
 
 1. Open **Launch Assist**.
-2. Follow the single next action shown.
-3. If needed, use **Fix & Retry**.
-4. Export a support bundle from Launch Assist for support requests.
+2. Complete the top recommended action.
+3. Retry launch.
+4. Export a support bundle if failure continues.
+
+## Support bundle use
+
+Export the bundle only after at least one guided retry.
+
+- Attach it to your support request.
+- Include the approximate failure time and visible error text.

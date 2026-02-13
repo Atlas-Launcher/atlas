@@ -1,36 +1,47 @@
 ---
-title: Pack Lifecycle
-summary: Source-to-release lifecycle with immutable builds and channel-based promotion.
+title: Pack lifecycle
+summary: Build immutability and channel promotion model for Atlas pack releases.
 persona: creator
 order: 3
 keywords: ["lifecycle", "immutable builds", "channels", "rollback"]
 intent: reference
 ---
 
-# Pack Lifecycle (Creator)
+# Pack lifecycle
 
-## Author
+This page explains the release model that Atlas uses across creator workflows.
 
-Maintain pack config and assets in your repository.
+## Source in Git
 
-## Build
+Your repository is the source of truth for pack definitions and config.
 
-Compile source to artifact with `atlas build` or CI pipeline.
+- Commit content changes to Git.
+- Trigger builds from committed source.
 
-## Publish
+## Builds are immutable
 
-Use `atlas publish` (or CI) to upload and register a build.
+Each build artifact is fixed after creation.
 
-## Promote
+- You do not edit an existing build in place.
+- Rebuild from source for content changes.
 
-Move channel pointers (`dev` -> `beta` -> `production`) with `atlas promote`.
+## Channels are mutable pointers
 
-## Consume
+Channels map environments to specific build IDs.
 
-- Launcher resolves builds by channel for players.
-- Runner resolves builds by channel for servers.
+- Typical flow: `dev` -> `beta` -> `production`.
+- Promotion changes channel pointers, not build contents.
 
-## Rollback strategy
+## Consumer behavior
 
-Because builds are immutable, rollback is pointer-based:
-- Promote or repoint the channel to a known-good build.
+Launcher and runner resolve content through channel pointers.
+
+- Players receive whichever build the chosen channel currently points to.
+- Server hosts receive whichever build their configured channel points to.
+
+## Rollback approach
+
+Rollback is a channel operation, not a rebuild operation.
+
+- Repoint the affected channel to a known-good build.
+- Verify behavior, then continue forward promotion.

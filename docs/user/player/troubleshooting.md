@@ -1,38 +1,44 @@
 ---
-title: Player Troubleshooting
-summary: Launch Assist recovery modes, common failure signals, and support bundle guidance.
+title: Player troubleshooting
+summary: Guided recovery for readiness blockers and launch-time failures.
 persona: player
 order: 3
 keywords: ["troubleshooting", "launch assist", "support bundle", "retry"]
 intent: troubleshooting
 ---
 
-# Player Troubleshooting
+# Player troubleshooting
 
-## Launch Assist Modes
+Use this guide when launcher cannot reach a successful Minecraft start.
 
-- Readiness mode: resolves launch blockers (Atlas sign-in, Microsoft sign-in, account linking).
-- Recovery mode: analyzes failures after readiness is satisfied and suggests fixes.
+## Start with Launch Assist
 
-Launch Assist is the single recovery entrypoint in launcher UI.
+Launch Assist is the primary recovery entrypoint for player issues.
 
-## Common Signals
+1. Open **Launch Assist** from the failure prompt or sidebar.
+2. Complete the top action shown.
+3. Retry launch after each completed action.
 
-- Out of memory / heap errors: increase memory settings where applicable.
-- Missing metadata/runtime files: run the in-app repair step from Launch Assist.
-- Java not ready: launcher runtime repair/reinstall path should recover.
-- Account mismatch: relink Atlas + Microsoft identities.
+## Fix readiness blockers
 
-## Support Bundle
+Resolve identity blockers before investigating runtime failures.
 
-Launcher support bundle includes:
-- readiness state,
-- recent logs/status,
-- structured findings,
-- redacted sensitive values.
+- Atlas session expired: sign in again.
+- Microsoft session missing: complete Microsoft sign-in.
+- Account mismatch: complete the linking prompt again.
 
-Use this bundle when reporting issues.
+## Fix startup and runtime failures
 
-## Fix and Retry
+When readiness is complete, use targeted recovery actions.
 
-Launch Assist can apply a top fix action, rerun diagnostics, and retry launch from the same flow.
+- Runtime or metadata issue: run the in-app repair action.
+- Java/runtime drift: use launcher runtime repair or reinstall path.
+- Memory-related crash: increase memory allocation if your pack requires it.
+
+## Escalate with a support bundle
+
+Share a support bundle when guided fixes do not resolve the issue.
+
+1. Export the bundle from Launch Assist.
+2. Include what you already tried.
+3. Include any visible error text from the last failure.

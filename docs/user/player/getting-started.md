@@ -1,67 +1,58 @@
 ---
-title: Player Getting Started
-summary: End-to-end onboarding flow for players from invite acceptance to first successful launch.
+title: Player getting started
+summary: First-time flow from invite acceptance to successful first launch.
 persona: player
 order: 1
 keywords: ["invite", "launch assist", "sign in", "first launch"]
 intent: getting-started
 ---
 
-# Player Guide
+# Player getting started
 
-This guide is for players using Atlas Launcher.
+Use this guide once to move from invite link to a confirmed first launch.
 
-## 1. Platform Support
+## Before you begin
 
-Launcher supports:
-- Windows
-- macOS
-- Linux (best effort)
+Confirm your environment first so setup does not stall mid-flow.
 
-If your platform is not listed, it is unsupported.
+- Supported platforms: Windows, macOS, Linux (best effort).
+- You need an Atlas account and a Microsoft account.
+- Install Atlas Launcher if it is not already installed.
 
-## 2. Invite to Launcher Flow
+## Join a pack from an invite
 
-When you open an invite link in the web app:
-1. Create or sign in to your Atlas account.
-2. Invite acceptance happens automatically.
-3. Select **Open Atlas Launcher** on the invite page.
-4. If launcher protocol handoff fails, use **Download Atlas Launcher** and retry.
+Start in the web invite page and complete account acceptance.
 
-Launcher opens with your invited pack preselected. It does not auto-install.
+1. Open your invite link.
+2. Sign in or create your Atlas account.
+3. Select **Open Atlas Launcher**.
+4. If handoff fails, install launcher from the fallback link and retry.
 
-## 3. Sign-in and Link Readiness
+## Complete launch readiness
 
-Atlas uses a single Launch Assist flow to get you launch-ready:
-1. Sign in to Atlas.
+Launch Assist walks you through blockers one at a time.
+
+1. Sign in to Atlas in launcher.
 2. Sign in to Microsoft.
-3. Complete account linking so IDs match.
+3. Complete account linking when prompted.
 
-Launch Assist shows one next action at a time for blockers.
+## Start Minecraft
 
-## 4. Install and Launch
+When readiness is complete, run your first launch from the Library.
 
-Launcher will:
-- resolve pack/version data,
-- hydrate required files/assets/libraries,
-- verify and resolve Java runtime requirements,
-- install required loader/runtime metadata,
-- launch Minecraft with computed arguments.
+1. Confirm the invited pack is selected.
+2. Select **Play**.
+3. Wait for the phases: `Syncing pack`, `Preparing files`, `Starting Minecraft`.
 
-Progress is shown as:
-- Syncing pack
-- Preparing files
-- Starting Minecraft
+## Keep launcher current
 
-## 5. Updates
+Use the in-app update prompt when a launcher update is available.
 
-Launcher can check for launcher app updates and install them through in-app updater flow.
+- Apply updates before retrying repeated launch failures.
+- Relaunch Atlas Launcher after an update is installed.
 
-## 6. First Launch Completion
+## If launch fails
 
-After the first confirmed successful launch, Atlas shows a compact success panel with quick actions.
+If Minecraft does not start, switch to the troubleshooting playbook.
 
-## 7. If Launch Fails
-
-Open **Launch Assist** from the sidebar, settings activity card, or failure prompt.
-It includes readiness guidance, recovery actions, diagnostics reruns, logs, and support bundle generation.
+- Open `troubleshooting.md` and follow the recovery flow.

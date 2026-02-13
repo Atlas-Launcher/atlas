@@ -59,6 +59,60 @@ Player and creator copy constants are centralized under:
 
 Use these for repeated user-facing messaging to keep tone consistent.
 
+## Shared Visual System
+
+Atlas Hub now uses launcher-aligned visual primitives across public pages, docs, auth, and dashboard surfaces.
+
+- Theme tokens are centralized in:
+  - `apps/web/app/globals.css`
+- Theme mode runtime (`light` / `dark` / `system`) is centralized in:
+  - `apps/web/lib/theme/theme-mode.ts`
+  - `apps/web/components/theme/theme-mode-switcher.tsx`
+  - `apps/web/app/layout.tsx` (pre-hydration theme boot script + global switcher mount)
+- Dark token activation must target root explicitly:
+  - `:root.dark` / `:root[data-theme-mode="dark"]` in `apps/web/app/globals.css`
+  This prevents mode drift where text variables fail to swap while dark backgrounds are visible.
+- Shared visual utility classes are centralized in `globals.css`:
+  - `atlas-glass`
+  - `atlas-panel`
+  - `atlas-panel-soft`
+  - `atlas-panel-strong`
+  - `atlas-inverse-surface` (for dark cards/buttons that should stay dark in both theme modes)
+  - `atlas-shadow-button`
+  - `atlas-app-shell`
+- Inverse content colors are tokenized to avoid white backdrops in dark mode:
+  - `--atlas-inverse-bg`
+  - `--atlas-inverse-fg`
+  - `--atlas-inverse-muted`
+- Atlas tokens use explicit cross-browser color values (`hex`/`rgba`) for reliable rendering:
+  - `--atlas-cream`
+  - `--atlas-ink`
+  - `--atlas-ink-muted`
+  - `--atlas-surface-*`
+- Launcher line texture is centralized and shared across light/dark mode:
+  - `--atlas-lines-image` in `apps/web/app/globals.css`
+  - This should match launcher stripe values from `apps/launcher/src/assets/main.css`.
+- Footer styling is centralized through:
+  - `atlas-footer`
+  This keeps public page footers consistent across docs/download/home and avoids fixed white backgrounds in dark mode.
+- Brand mark consistency:
+  - `apps/web/public/atlas-mark.svg` should mirror `apps/launcher/src-tauri/icons/atlas-mark.svg` (no outer frame stroke) so the navbar icon renders cleanly at small sizes.
+- Glass/panel elevation was intentionally softened (reduced blur and shadow spread) for cleaner, less heavy UI density.
+- Contrast guardrail: use tokenized text colors (`--foreground`, `--muted-foreground`, inverse tokens) instead of low-opacity text-on-surface combinations.
+- Avoid fixed Tailwind gray scale utilities (`text-gray-*`, `bg-gray-*`) on app surfaces. Use Atlas tokens (`--atlas-ink`, `--atlas-ink-muted`, `--atlas-surface-*`) so text/surfaces remain legible in both light and dark modes.
+- Global utility guardrail:
+  - `text-foreground`, `text-muted-foreground`, and related placeholder/file text utilities are hard-mapped to Atlas tokens in `globals.css` to keep contrast consistent across pages.
+- Shared UI primitives consume these tokens/classes:
+  - `apps/web/components/ui/button.tsx`
+  - `apps/web/components/ui/card.tsx`
+  - `apps/web/components/ui/dialog.tsx`
+  - `apps/web/components/ui/tabs.tsx`
+  - `apps/web/components/ui/input.tsx`
+  - `apps/web/components/ui/textarea.tsx`
+  - `apps/web/components/ui/input-group.tsx`
+
+Implementation rule: add/adjust colors, shadows, and glass behavior in tokens/utilities first; only then patch leaf components.
+
 ## Distribution API v1
 
 The web app now exposes a unified distribution registry for launcher/cli/runner/runnerd:
@@ -105,8 +159,10 @@ User-facing docs now render directly in Hub under:
 - `/docs`
 - `/docs/{persona}`
 - `/docs/{persona}/{slug}`
-- `/docs/read/{persona}` (reader mode)
-- `/docs/read/{persona}/{slug}` (reader mode)
+
+Legacy reader-mode routes now redirect to the standard docs shell:
+- `/docs/read/{persona}` -> `/docs/{persona}`
+- `/docs/read/{persona}/{slug}` -> `/docs/{persona}/{slug}`
 
 Implementation lives in:
 - `apps/web/app/docs`
@@ -119,15 +175,24 @@ Content source and nav control live outside the app package:
 
 Local search index is generated from user docs content at runtime/build using `apps/web/lib/docs/content.ts` and scoped to `docs/user` only.
 Developer docs under `docs/dev` are intentionally not exposed by the public docs routes.
+Docs markdown parser ignores level-1 (`#`) headings because page chrome already renders document titles.
 
 ### Docs readability focus (current UX)
 
-- Persona pages prioritize two essential guides first:
-  - `startSlug`
-  - `troubleshootingSlug`
-- Remaining guides are grouped under a lighter "Reference guides" section to reduce visual noise.
-- Search ranking now favors title/keywords and optional priority paths (current page + key next steps).
-- Persona and doc pages can suppress low-value default result floods by controlling whether empty-query results are shown.
+- Docs now use a traditional documentation shell:
+  - left navigation sidebar
+  - central content column
+- docs layout keeps the branded Atlas grid + soft radial background accents
+- sidebar includes a persona context tab switcher (`Player`, `Creator`, `Server Host`) for quick context changes
+- sidebar section subtitle text is hidden in favor of the tab switcher
+- sidebar includes docs search (collapsed to input by default) with glass-style background for legibility
+  - doc pages place "On this page" TOC in the left sidebar under search, also with glass-style background
+- on desktop, docs default to dual-pane (`sidebar + content`) with a `Hide sidebar` / `Show sidebar` toggle in the content column
+- primary text panels use centralized glass/panel utility classes to improve readability on the patterned background
+- docs routes avoid fixed `bg-white*` backdrops in favor of `atlas-panel`/`atlas-panel-soft` surfaces so contrast stays consistent in both theme modes
+- Persona landing pages still prioritize the two essentials first (`startSlug` and `troubleshootingSlug`) before listing remaining references.
+- Search keeps the same scoring behavior (title/keywords + optional priority paths) and expands to filters/results on focus or query.
+- Doc pages no longer include a separate reader-mode toggle.
 
 ## Lint Guardrails
 

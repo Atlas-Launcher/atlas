@@ -1,15 +1,19 @@
 ---
-title: Server Host Quick Reference
-summary: Common Atlas Runner commands and operational runbooks for server hosts.
+title: Server host quick reference
+summary: Daily Atlas Runner command set for host operations.
 persona: host
 order: 2
 keywords: ["atlas-runner", "daemon", "backup", "console"]
 intent: reference
 ---
 
-# Server Host Quick Reference
+# Server host quick reference
 
-## Command layout (`atlas-runner`)
+Use this page as a command-first reference during normal operations.
+
+## Command index
+
+This list includes the most-used host commands.
 
 ```bash
 atlas-runner auth login
@@ -26,16 +30,18 @@ atlas-runner host install
 atlas-runner host path
 ```
 
-## Most common flows
+## First-time runbook
 
-### First-time setup
+Use this runbook to bring up a new host quickly.
 
 ```bash
 atlas-runner auth login
 atlas-runner server start
 ```
 
-### Daily operations
+## Daily runbook
+
+Use this runbook for normal monitoring and interaction.
 
 ```bash
 atlas-runner server logs --follow
@@ -43,22 +49,17 @@ atlas-runner server console
 atlas-runner server backup
 ```
 
-### Restart flow
+## Restart runbook
+
+Use this runbook for controlled service restart.
 
 ```bash
 atlas-runner server stop
 atlas-runner server start
 ```
 
-### Daemon checks
+## Non-interactive usage note
 
-```bash
-atlas-runner daemon status
-atlas-runner daemon logs --follow
-```
+Automation contexts should pass required flags explicitly.
 
-## Non-interactive usage tips
-
-If running in automation/non-interactive mode:
-- pass required flags up front (for example `--accept-eula`, `--max-ram`),
-- avoid prompt-dependent flows.
+- Include `--accept-eula` and `--max-ram` when prompts are unavailable.

@@ -1,24 +1,29 @@
 ---
-title: Creator Docs
-summary: Audience, tone, and reading order for Atlas pack creators.
+title: Creator overview
+summary: Reading order and scope for Atlas pack creator documentation.
 persona: creator
 order: 0
 keywords: ["creator", "atlas cli", "release workflow"]
 intent: reference
 ---
 
-# Creator Docs
+# Creator overview
 
-Audience:
-- Pack creators familiar with Minecraft/modpack concepts.
-- Limited assumptions about CLI, CI, or server internals.
+This section is for pack creators managing source in Git and releases in Hub.
 
-Tone:
-- Practical and concise.
-- Command-first with clear outcomes.
+## Read this section in order
 
-Read in order:
-1. `getting-started.md`
-2. `tutorial-first-pack.md`
-3. `pack-lifecycle.md`
-4. `quick-reference.md`
+Use this order to learn the workflow once, then operate from reference pages.
+
+1. `getting-started.md`: Learn the release workflow and required tools.
+2. `tutorial-first-pack.md`: Run one end-to-end release.
+3. `pack-lifecycle.md`: Understand channels, immutability, and rollback.
+4. `quick-reference.md`: Use command and flow shortcuts day to day.
+
+## What this section covers
+
+These guides focus on Atlas CLI workflows for pack release management.
+
+- Build and publish artifacts from source.
+- Promote channel pointers through release stages.
+- Operate routine creator workflows with minimal ceremony.
