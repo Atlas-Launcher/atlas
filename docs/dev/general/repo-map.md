@@ -11,6 +11,10 @@ This map is code-first and reflects current workspace members.
 - `apps/runnerd-v2`: Runner daemon (`atlas-runnerd`).
 - `apps/runner`: Legacy runner v1 (unsupported).
 
+## Repository governance
+
+- `LICENSE`: Atlas Proprietary License (non-commercial use only; no re-hosting).
+
 ## Shared Rust Crates
 
 - `crates/protocol`: pack/protobuf model + config handling.

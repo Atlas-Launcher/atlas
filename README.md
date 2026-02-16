@@ -26,3 +26,8 @@ Legacy status:
 
 - Developer docs: `docs/dev/README.md`
 - User docs: `docs/user/README.md`
+
+## License
+
+This repository is proprietary and source-available under `LICENSE`.
+Commercial use and re-hosting are not permitted.
