@@ -1,6 +1,7 @@
 use crate::models::AppSettings;
 
-pub const DEFAULT_MS_CLIENT_ID: &str = "REDACTED-MS-CLIENT-ID";
+pub const DEFAULT_MS_CLIENT_ID: &str = option_env!("ATLAS_MS_CLIENT_ID")
+    .unwrap_or("atlas-ms-client-id-not-configured");
 pub const DEFAULT_REDIRECT_URI: &str = "atlas://auth";
 pub const DEFAULT_ATLAS_HUB_URL: &str = atlas_client::device_code::DEFAULT_ATLAS_HUB_URL;
 pub const DEFAULT_ATLAS_CLIENT_ID: &str = atlas_client::device_code::DEFAULT_ATLAS_DEVICE_CLIENT_ID;

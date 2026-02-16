@@ -110,6 +110,7 @@ jobs:
       - name: Build launcher bundles
         uses: tauri-apps/tauri-action@5c73698991aa26946b2d232c344ea4d54b880ff7
         env:
+          ATLAS_MS_CLIENT_ID: ${{ secrets.ATLAS_MS_CLIENT_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
