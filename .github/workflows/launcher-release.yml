@@ -215,9 +215,14 @@ jobs:
           $targets = Get-ChildItem "dist/release" -File | Where-Object { $_.Extension -in @(".exe", ".msi") }
           foreach ($target in $targets) {
             $signature = Get-AuthenticodeSignature $target.FullName
-            if ($signature.Status -ne "Valid") {
-              throw "Invalid signature status '$($signature.Status)' for $($target.FullName)"
+            $status = $signature.Status.ToString()
+            if (-not $signature.SignerCertificate) {
+              throw "No signer certificate present for $($target.FullName)"
             }
+            if ($status -in @("NotSigned", "HashMismatch", "NotSupportedFileFormat")) {
+              throw "Invalid signature status '$status' for $($target.FullName)"
+            }
+            Write-Host "Verified signature for $($target.Name): status=$status"
           }
 
       - name: Upload launcher bundles

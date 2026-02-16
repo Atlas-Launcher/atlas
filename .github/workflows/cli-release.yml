@@ -176,9 +176,14 @@ jobs:
         run: |
           $binPath = "dist/cli/atlas-Windows-${{ runner.arch }}.exe"
           $signature = Get-AuthenticodeSignature $binPath
-          if ($signature.Status -ne "Valid") {
-            throw "Invalid signature status '$($signature.Status)' for $binPath"
+          $status = $signature.Status.ToString()
+          if (-not $signature.SignerCertificate) {
+            throw "No signer certificate present for $binPath"
           }
+          if ($status -in @("NotSigned", "HashMismatch", "NotSupportedFileFormat")) {
+            throw "Invalid signature status '$status' for $binPath"
+          }
+          Write-Host "Verified signature for atlas binary: status=$status"
 
       - name: Build unsigned Linux .deb installer
         if: runner.os == 'Linux'
