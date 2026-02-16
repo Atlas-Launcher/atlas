@@ -18,7 +18,7 @@ reqwest = { version = "0.13.1", features = ["form", "json", "stream", "rustls"] 
 tokio = { version = "1.36", features = ["time", "rt-multi-thread", "macros", "net", "io-util"] }
 sha1 = "0.10"
 hex = "0.4"
-zip = { version = "7.2.0", default-features = false, features = ["deflate"] }
+zip = { version = "8.0.0", default-features = false, features = ["deflate"] }
 dirs = "6"
 thiserror = "2.0.18"
 futures = "0.3"
