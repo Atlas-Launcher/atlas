@@ -26,6 +26,8 @@ One reusable publish path for all distributable products (`launcher`, `cli`, `ru
 - `ATLAS_APP_DEPLOY_TOKEN`: App deploy token for distribution release publishing (required)
 - `TAURI_SIGNING_PRIVATE_KEY`: Required by `launcher-release.yml` for signed Tauri updater artifacts
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: Password for `TAURI_SIGNING_PRIVATE_KEY` (launcher workflow only)
+- `WIN_B64_PFX`: Base64-encoded Windows code-signing `.pfx` used by launcher and CLI Windows release jobs
+- `WIN_PFX_PASSWORD`: Password for the Windows code-signing `.pfx` secret
 
 ## Required Repository Variables
 
@@ -46,6 +48,11 @@ One reusable publish path for all distributable products (`launcher`, `cli`, `ru
 - `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
   - Generate/export your Tauri updater signing keypair and password from your release key management process.
   - Save the private key and password as GitHub Actions repository secrets with those exact names.
+- `WIN_B64_PFX`
+  - Export your Windows code-signing certificate as a `.pfx`.
+  - Base64-encode the `.pfx` payload and save it as repository secret `WIN_B64_PFX`.
+  - Store the `.pfx` password as repository secret `WIN_PFX_PASSWORD`.
+  - Keep the raw `.pfx` file private; it grants signing authority for your Windows binaries.
 
 ## Manifest Format
 
@@ -88,6 +95,11 @@ Where:
   - Before publish, it fails the workflow if any `binary` payload in the manifest is missing its matching `.sig`.
   - Signature generation uses `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` from env (via `tauri signer sign <file>`), avoiding direct CLI passing of multiline secrets.
   - Signing now passes absolute payload paths because the signer runs in the launcher workspace (`apps/launcher`) while bundle discovery scans repo-root `target/**/release/bundle/**`.
+- Launcher and CLI Windows release jobs perform Authenticode signing with
+  `signtool.exe` using `WIN_B64_PFX` and `WIN_PFX_PASSWORD`:
+  - Launcher job signs discovered Windows `.exe` and `.msi` bundle artifacts before upload.
+  - CLI installer job signs the Windows `atlas.exe` binary before packaging the installer zip.
+  - Both jobs fail if Windows signatures are invalid after signing verification.
 - CLI release CI now requires both artifact classes in the publish manifest:
   - Raw CLI binaries (`kind=binary`) for direct machine/CI downloads.
   - Platform installers (`kind=installer`) for guided local installation paths.
