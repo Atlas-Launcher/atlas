@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { RunnerServiceToken } from "@/app/dashboard/types";
+import type { PackDeployToken, RunnerServiceToken } from "@/app/dashboard/types";
 
 interface ManageTabProps {
   packName: string;
@@ -38,6 +38,12 @@ interface ManageTabProps {
   onCreateRunnerToken: () => void;
   createdRunnerToken: string | null;
   onRevokeRunnerToken: (tokenId: string) => void;
+  packDeployTokens: PackDeployToken[];
+  packDeployTokenName: string;
+  onPackDeployTokenNameChange: (value: string) => void;
+  onCreatePackDeployToken: () => void;
+  createdPackDeployToken: string | null;
+  onRevokePackDeployToken: (tokenId: string) => void;
   loading: boolean;
 }
 
@@ -60,6 +66,12 @@ export default function ManageTab({
   onCreateRunnerToken,
   createdRunnerToken,
   onRevokeRunnerToken,
+  packDeployTokens,
+  packDeployTokenName,
+  onPackDeployTokenNameChange,
+  onCreatePackDeployToken,
+  createdPackDeployToken,
+  onRevokePackDeployToken,
   loading,
 }: ManageTabProps) {
   const formatDate = (value?: string | null) => {
@@ -210,6 +222,96 @@ export default function ManageTab({
                   <TableRow>
                     <TableCell colSpan={6} className="text-sm text-[var(--atlas-ink-muted)]">
                       No runner service tokens found for this pack.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        <div className="inline-block w-[48rem] max-w-full rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Pack Deploy Tokens</h3>
+              <p className="text-xs text-[var(--atlas-ink-muted)]">
+                Manage CI deploy tokens used by pack publish workflows.
+              </p>
+            </div>
+          </div>
+          {canManageRunnerTokens ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Input
+                placeholder="Token name (optional)"
+                value={packDeployTokenName}
+                onChange={(event) => onPackDeployTokenNameChange(event.target.value)}
+                className="max-w-sm"
+              />
+              <Button size="sm" onClick={onCreatePackDeployToken} disabled={loading}>
+                {loading ? "Creating..." : "Create pack deploy token"}
+              </Button>
+            </div>
+          ) : null}
+
+          {createdPackDeployToken ? (
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
+              <p className="text-xs font-semibold text-amber-900">New token (shown once):</p>
+              <p className="mt-1 break-all font-mono text-xs text-amber-900">
+                {createdPackDeployToken}
+              </p>
+            </div>
+          ) : null}
+          <div className="mt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Prefix</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Last Used</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[140px] text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {packDeployTokens.length ? (
+                  packDeployTokens.map((token) => (
+                    <TableRow key={token.id}>
+                      <TableCell className="font-medium">
+                        {token.name ?? "Unnamed token"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {token.tokenPrefix}
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
+                        {formatDate(token.createdAt)}
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
+                        {formatDate(token.lastUsedAt)}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {token.revokedAt ? "Revoked" : "Active"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {canManageRunnerTokens ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={loading || Boolean(token.revokedAt)}
+                            onClick={() => onRevokePackDeployToken(token.id)}
+                          >
+                            {token.revokedAt ? "Revoked" : "Revoke"}
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-[var(--atlas-ink-muted)]">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-sm text-[var(--atlas-ink-muted)]">
+                      No pack deploy tokens found for this pack.
                     </TableCell>
                   </TableRow>
                 )}

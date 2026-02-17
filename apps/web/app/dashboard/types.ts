@@ -92,3 +92,13 @@ export interface AppDeployToken {
   revokedAt?: string | null;
   expiresAt?: string | null;
 }
+
+export interface PackDeployToken {
+  id: string;
+  name?: string | null;
+  tokenPrefix: string;
+  createdAt?: string | null;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+  expiresAt?: string | null;
+}

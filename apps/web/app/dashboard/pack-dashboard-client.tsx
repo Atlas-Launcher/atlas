@@ -18,6 +18,7 @@ import type {
   Channel,
   Invite,
   Pack,
+  PackDeployToken,
   PackMember,
   Role,
   RunnerServiceToken,
@@ -42,8 +43,11 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const [invites, setInvites] = useState<Invite[]>([]);
   const [members, setMembers] = useState<PackMember[]>([]);
   const [runnerTokens, setRunnerTokens] = useState<RunnerServiceToken[]>([]);
+  const [packDeployTokens, setPackDeployTokens] = useState<PackDeployToken[]>([]);
   const [runnerTokenName, setRunnerTokenName] = useState("");
   const [createdRunnerToken, setCreatedRunnerToken] = useState<string | null>(null);
+  const [packDeployTokenName, setPackDeployTokenName] = useState("");
+  const [createdPackDeployToken, setCreatedPackDeployToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -86,11 +90,12 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
 
   useEffect(() => {
     const loadDetails = async () => {
-      const [buildRes, channelRes, memberRes, inviteRes] = await Promise.all([
+      const [buildRes, channelRes, memberRes, inviteRes, packDeployTokenRes] = await Promise.all([
         fetch(`/api/v1/packs/${packId}/builds`),
         fetch(`/api/v1/packs/${packId}/channels`),
         fetch(`/api/v1/packs/${packId}/members`),
         canManageInvites ? fetch(`/api/v1/packs/${packId}/invites`) : Promise.resolve(null),
+        canManage ? fetch(`/api/v1/packs/${packId}/deploy-tokens`) : Promise.resolve(null),
       ]);
 
       if (buildRes.ok) {
@@ -126,10 +131,17 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
           setRunnerTokens([]);
         }
       }
+
+      if (packDeployTokenRes && packDeployTokenRes.ok) {
+        const data = await packDeployTokenRes.json();
+        setPackDeployTokens(data.tokens ?? []);
+      } else {
+        setPackDeployTokens([]);
+      }
     };
 
     loadDetails().catch(() => setError("Unable to load pack details."));
-  }, [packId, canManageInvites, canManageRunnerTokens]);
+  }, [packId, canManage, canManageInvites, canManageRunnerTokens]);
 
   const handleCreateInvite = async () => {
     setLoading(true);
@@ -303,6 +315,72 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
       },
       ...prev,
     ]);
+  };
+
+  const handleCreatePackDeployToken = async () => {
+    setLoading(true);
+    setError(null);
+    setCreatedPackDeployToken(null);
+    const response = await fetch(`/api/v1/packs/${packId}/deploy-tokens`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: packDeployTokenName.trim() || null,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data?.error ?? "Unable to create pack deploy token.");
+      return;
+    }
+
+    setPackDeployTokenName("");
+    setCreatedPackDeployToken(data?.token?.toString() ?? null);
+    const created = data?.record;
+    if (created && typeof created.id === "string") {
+      setPackDeployTokens((prev) => [created as PackDeployToken, ...prev]);
+      return;
+    }
+
+    setPackDeployTokens((prev) => [
+      {
+        id: `new-${Date.now()}`,
+        name: packDeployTokenName.trim() || null,
+        tokenPrefix: "",
+        createdAt: new Date().toISOString(),
+        lastUsedAt: null,
+        revokedAt: null,
+        expiresAt: null,
+      },
+      ...prev,
+    ]);
+  };
+
+  const handleRevokePackDeployToken = async (tokenId: string) => {
+    setLoading(true);
+    setError(null);
+    const response = await fetch(`/api/v1/packs/${packId}/deploy-tokens`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tokenId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data?.error ?? "Unable to revoke pack deploy token.");
+      return;
+    }
+
+    setPackDeployTokens((prev) =>
+      prev.map((token) =>
+        token.id === tokenId
+          ? { ...token, revokedAt: data?.revokedAt ?? new Date().toISOString() }
+          : token
+      )
+    );
   };
 
   const handlePromoteMember = async (userId: string) => {
@@ -544,6 +622,12 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
                 onCreateRunnerToken={handleCreateRunnerToken}
                 createdRunnerToken={createdRunnerToken}
                 onRevokeRunnerToken={handleRevokeRunnerToken}
+                packDeployTokens={packDeployTokens}
+                packDeployTokenName={packDeployTokenName}
+                onPackDeployTokenNameChange={setPackDeployTokenName}
+                onCreatePackDeployToken={handleCreatePackDeployToken}
+                createdPackDeployToken={createdPackDeployToken}
+                onRevokePackDeployToken={handleRevokePackDeployToken}
                 loading={loading}
               />
           </TabsContent>
