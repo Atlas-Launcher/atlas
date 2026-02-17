@@ -42,3 +42,16 @@ Supported:
 - macOS
 - Linux
 - WSL
+
+## Troubleshooting
+
+If you see `HTTP status client error (401 Unauthorized)` for
+`/api/v1/runner/exchange`, runnerd cannot validate the configured service token.
+Common causes are:
+
+- The token in `deploy.json` is not a runner service token.
+- The token was revoked or expired.
+- The token was created on a different Hub environment than `hub_url`.
+
+Runner service tokens are created via `/api/v1/runner/tokens` and currently
+start with `atlas_runner_`.

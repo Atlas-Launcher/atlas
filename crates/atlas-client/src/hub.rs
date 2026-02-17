@@ -299,8 +299,24 @@ impl HubClient {
             .post(url)
             .header("x-atlas-service-token", token)
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            let prefix_hint = if token.trim_start().starts_with("atlas_runner_") {
+                ""
+            } else {
+                " (token does not start with expected runner prefix `atlas_runner_`)"
+            };
+            anyhow::bail!(
+                "Runner service token exchange failed (HTTP {}): {}{}. \
+Ensure you are using a runner service token from `/api/v1/runner/tokens`, not a pack/app deploy token.",
+                status.as_u16(),
+                body,
+                prefix_hint
+            );
+        }
 
         response
             .json()
