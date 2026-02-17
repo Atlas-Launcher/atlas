@@ -31,7 +31,7 @@ jobs:
         include:
           - platform: windows-latest
             tauri_args: --ci
-          - platform: macos-latest
+          - platform: macos-26
             tauri_args: --ci --no-sign
 
     steps:
