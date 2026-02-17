@@ -20,10 +20,11 @@ This document describes the direct-replacement onboarding flow for players joini
    - `onboarding.recommendedChannel`
 5. Primary CTA opens `atlas://onboarding?...`.
 6. If protocol handoff does not open launcher, user is shown installer fallback (`/download/app/installer/latest`).
+7. Web invite copy refers to "Atlas" (neutral wording) instead of hardcoding a specific app name.
 
 ## Launcher Intake and Intent Persistence
 
-1. Launcher keeps existing `atlas://auth` / `atlas://signin` handling.
+1. Launcher handles auth with device code flow (no auth callback deep link required).
 2. Non-auth deep links are parsed by onboarding deep-link parser.
 3. Onboarding intent is persisted in settings as `pendingIntent`.
 4. After Atlas pack sync, launcher matches remote instance by `packId`.
