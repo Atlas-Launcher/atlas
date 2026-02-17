@@ -53,12 +53,15 @@ pub struct OAuthDeviceTokenError {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct StandardDeviceTokenResponse {
+    #[serde(alias = "accessToken")]
     pub access_token: String,
-    pub token_type: String,
+    #[serde(default, alias = "tokenType")]
+    pub token_type: Option<String>,
+    #[serde(alias = "expiresIn")]
     pub expires_in: u64,
-    #[serde(default)]
+    #[serde(default, alias = "scope")]
     pub scope: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "refreshToken")]
     pub refresh_token: Option<String>,
 }
 

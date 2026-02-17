@@ -577,7 +577,9 @@ Ensure you are using a runner service token from `/api/v1/runner/tokens`, not a 
     }
 
     pub async fn list_pack_builds(&self, pack_id: &str) -> Result<Vec<PackBuild>> {
-        let url = self.base_url.join(&format!("/api/v1/packs/{pack_id}/builds"))?;
+        let url = self
+            .base_url
+            .join(&format!("/api/v1/packs/{pack_id}/builds"))?;
         let response = self
             .client
             .get(url)
@@ -795,7 +797,10 @@ Ensure you are using a runner service token from `/api/v1/runner/tokens`, not a 
         Ok(response.json().await?)
     }
 
-    pub async fn poll_token(&mut self, device_code: &str) -> Result<Option<String>> {
+    pub async fn poll_token_response(
+        &mut self,
+        device_code: &str,
+    ) -> Result<Option<StandardDeviceTokenResponse>> {
         let url = hub_device_token_endpoint(self.base_url.as_str());
         let request = DeviceTokenRequest::new(DEFAULT_ATLAS_DEVICE_CLIENT_ID, device_code);
 
@@ -809,7 +814,7 @@ Ensure you are using a runner service token from `/api/v1/runner/tokens`, not a 
         match poll_status {
             DeviceTokenPollStatus::Success(token) => {
                 self.set_token(token.access_token.clone());
-                Ok(Some(token.access_token))
+                Ok(Some(token))
             }
             DeviceTokenPollStatus::AuthorizationPending | DeviceTokenPollStatus::SlowDown => {
                 Ok(None)
@@ -818,6 +823,13 @@ Ensure you are using a runner service token from `/api/v1/runner/tokens`, not a 
             DeviceTokenPollStatus::AccessDenied => anyhow::bail!("Access denied"),
             DeviceTokenPollStatus::Fatal(err) => anyhow::bail!("Authentication failed: {}", err),
         }
+    }
+
+    pub async fn poll_token(&mut self, device_code: &str) -> Result<Option<String>> {
+        Ok(self
+            .poll_token_response(device_code)
+            .await?
+            .map(|token| token.access_token))
     }
 
     pub async fn create_launcher_link_session(&self) -> Result<LauncherLinkSession> {
