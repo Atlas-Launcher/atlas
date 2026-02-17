@@ -77,7 +77,7 @@ fn signin(args: SignInArgs) -> Result<()> {
                 let now = auth_store::unix_timestamp();
                 let session = CliAuthSession {
                     access_token: token.access_token,
-                    token_type: token.token_type,
+                    token_type: token.token_type.unwrap_or_else(|| "Bearer".to_string()),
                     expires_at: now.saturating_add(token.expires_in),
                     hub_url: hub_url.clone(),
                     client_id: client_id.clone(),
