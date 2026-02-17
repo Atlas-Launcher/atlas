@@ -67,6 +67,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::settings::get_default_game_dir,
+            commands::settings::get_system_memory_mb,
             commands::library::get_version_manifest_summary,
             commands::library::get_fabric_loader_versions,
             commands::library::get_neoforge_loader_versions,
@@ -79,11 +80,15 @@ fn main() {
             commands::library::list_atlas_remote_packs,
             commands::library::sync_atlas_pack,
             commands::auth::start_device_code,
+            commands::auth::focus_main_window,
             commands::auth::begin_deeplink_login,
+            commands::auth::complete_loopback_login,
             commands::auth::complete_deeplink_login,
             commands::auth::complete_device_code,
             commands::auth::begin_atlas_login,
+            commands::auth::start_atlas_device_code,
             commands::auth::complete_atlas_login,
+            commands::auth::complete_atlas_device_code,
             commands::launcher::launch_minecraft,
             commands::launcher::download_minecraft_files,
             commands::auth::restore_session,

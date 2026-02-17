@@ -175,16 +175,6 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
             suggested_actions: vec![FixAction::RelinkAccount],
         });
     }
-    if !input.readiness.files_installed {
-        findings.push(TroubleshooterFinding {
-            code: "files_missing".to_string(),
-            title: "Game files need to be installed".to_string(),
-            detail: "This profile doesn’t appear to have its game files installed yet. Try syncing or repairing the pack."
-                .to_string(),
-            confidence: 95,
-            suggested_actions: vec![FixAction::ResyncPack, FixAction::FullRepair],
-        });
-    }
     if haystack.contains("out of memory") || haystack.contains("java heap space") {
         findings.push(TroubleshooterFinding {
             code: "memory_pressure".to_string(),

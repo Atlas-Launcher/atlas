@@ -19,6 +19,7 @@ interface CheckOptions {
 }
 
 export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
+  const updaterEnabled = !import.meta.env.DEV;
   const checking = ref(false);
   const installing = ref(false);
   const installComplete = ref(false);
@@ -56,9 +57,12 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
     const ratio = downloadedBytes.value / totalBytes.value;
     return Math.max(0, Math.min(100, Math.round(ratio * 100)));
   });
-  const showBanner = computed(() => hasUpdate.value && !bannerDismissed.value);
-  const updaterBusy = computed(() => checking.value || installing.value);
+  const showBanner = computed(() => updaterEnabled && hasUpdate.value && !bannerDismissed.value);
+  const updaterBusy = computed(() => updaterEnabled && (checking.value || installing.value));
   const statusText = computed(() => {
+    if (!updaterEnabled) {
+      return "Updater disabled in development builds.";
+    }
     if (installComplete.value) {
       return "Update installed. Restart required.";
     }
@@ -136,6 +140,12 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
   }
 
   async function checkForUpdates(options?: CheckOptions) {
+    if (!updaterEnabled) {
+      if (options?.userInitiated) {
+        setStatus("Updater is disabled in development builds.");
+      }
+      return false;
+    }
     if (updaterBusy.value) {
       return false;
     }
@@ -185,6 +195,13 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
   }
 
   async function installUpdate() {
+    if (!updaterEnabled) {
+      const message = "Updater is disabled in development builds.";
+      errorMessage.value = message;
+      setStatus(message);
+      pushLog(message);
+      return false;
+    }
     if (!updateHandle.value) {
       const message = "No pending update is available to install.";
       errorMessage.value = message;
@@ -232,6 +249,13 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
   }
 
   async function restartNow() {
+    if (!updaterEnabled) {
+      const message = "Updater restart is disabled in development builds.";
+      errorMessage.value = message;
+      setStatus(message);
+      pushLog(message);
+      return false;
+    }
     try {
       setStatus("Relaunching...");
       await invoke("restart_app");

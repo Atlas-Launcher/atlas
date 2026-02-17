@@ -31,15 +31,18 @@ import type {
   TroubleshooterFinding,
   TroubleshooterReport
 } from "@/types/diagnostics";
-import type { LauncherLinkSession } from "@/types/auth";
+import type { DeviceCodeResponse, LauncherLinkSession } from "@/types/auth";
 
 const props = defineProps<{
   open: boolean;
   mode: "readiness" | "recovery";
+  fixedMode?: "readiness" | "recovery";
   readiness: LaunchReadinessReport | null;
   atlasSignedIn: boolean;
   microsoftSignedIn: boolean;
   isSigningIn: boolean;
+  microsoftDeviceCode: DeviceCodeResponse | null;
+  atlasDeviceCode: DeviceCodeResponse | null;
   linkSession: LauncherLinkSession | null;
   hubUrl: string;
   working: boolean;
@@ -65,6 +68,7 @@ const emit = defineEmits<{
 const mode = ref<"readiness" | "recovery">("readiness");
 const copyStatus = ref<string | null>(null);
 const showLinkCode = ref(false);
+const showSignInCode = ref(false);
 const closeButtonRef = ref<HTMLButtonElement | null>(null);
 
 const loading = ref(false);
@@ -77,6 +81,7 @@ const supportBundleLoading = ref(false);
 const supportBundleError = ref<string | null>(null);
 
 const LOGIN_KEYS = new Set(["atlasLogin", "microsoftLogin", "accountLink"]);
+const HIDDEN_CHECKLIST_KEYS = new Set(["filesInstalled", "javaReady"]);
 const AUTH_FINDING_CODES = new Set([
   "atlas_not_signed_in",
   "microsoft_not_signed_in",
@@ -87,13 +92,16 @@ const checklist = computed(() => props.readiness?.checklist ?? []);
 const hasAuthBlockers = computed(() =>
   checklist.value.some((item) => LOGIN_KEYS.has(item.key) && !item.ready)
 );
-const visibleChecklist = computed(() => {
+const actionChecklist = computed(() => {
   if (!hasAuthBlockers.value) {
     return checklist.value;
   }
   return checklist.value.filter((item) => LOGIN_KEYS.has(item.key));
 });
-const blockingItems = computed(() => visibleChecklist.value.filter((item) => !item.ready));
+const visibleChecklist = computed(() =>
+  actionChecklist.value.filter((item) => !HIDDEN_CHECKLIST_KEYS.has(item.key))
+);
+const blockingItems = computed(() => actionChecklist.value.filter((item) => !item.ready));
 const activeBlocking = computed(() => blockingItems.value[0] ?? null);
 const allReady = computed(() => props.readiness?.readyToLaunch ?? false);
 const signedIn = computed(() => props.atlasSignedIn || props.microsoftSignedIn);
@@ -101,6 +109,13 @@ const needsSignInFlow = computed(
   () => !props.atlasSignedIn || !props.microsoftSignedIn || hasAuthBlockers.value
 );
 const canUseRecovery = computed(() => !hasAuthBlockers.value);
+const closeLockedBySignIn = computed(
+  () =>
+    mode.value === "readiness" &&
+    (!props.atlasSignedIn ||
+      !props.microsoftSignedIn ||
+      checklist.value.some((item) => item.key === "accountLink" && !item.ready))
+);
 
 const findings = computed(() =>
   (report.value?.findings ?? []).filter((finding) => !AUTH_FINDING_CODES.has(finding.code))
@@ -143,6 +158,28 @@ const accountLinkStatus = computed(() => {
   }
 
   return "Select continue to finish account linking in your browser.";
+});
+
+const activeSignInCode = computed(() => {
+  const item = activeBlocking.value;
+  if (!item) {
+    return null;
+  }
+  if (item.key === "atlasLogin") {
+    return props.atlasDeviceCode;
+  }
+  if (item.key === "microsoftLogin") {
+    return props.microsoftDeviceCode;
+  }
+  return null;
+});
+
+const activeSignInVerificationUrl = computed(() => {
+  const code = activeSignInCode.value;
+  if (!code) {
+    return null;
+  }
+  return code.verification_uri_complete ?? code.verification_uri ?? null;
 });
 
 function actionLabel(action: FixAction): string {
@@ -269,6 +306,19 @@ async function copyLinkCode() {
   }
 }
 
+async function copySignInCode() {
+  const code = activeSignInCode.value?.user_code;
+  if (!code) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(code);
+    copyStatus.value = "Copied.";
+  } catch {
+    copyStatus.value = "Copy failed.";
+  }
+}
+
 async function openLinkPage() {
   if (!linkUrl.value) {
     return;
@@ -276,11 +326,25 @@ async function openLinkPage() {
   await openUrl(linkUrl.value);
 }
 
+async function openSignInPage() {
+  if (!activeSignInVerificationUrl.value) {
+    return;
+  }
+  await openUrl(activeSignInVerificationUrl.value);
+}
+
 function revealLinkCode() {
   showLinkCode.value = true;
 }
 
+function revealSignInCode() {
+  showSignInCode.value = true;
+}
+
 function openRecovery() {
+  if (props.fixedMode) {
+    return;
+  }
   if (!canUseRecovery.value) {
     return;
   }
@@ -289,6 +353,10 @@ function openRecovery() {
 }
 
 function runPrimaryReadinessAction() {
+  if (props.isSigningIn) {
+    emit("status", "A sign-in is already in progress. Finish it in your browser.");
+    return;
+  }
   const current = activeBlocking.value;
   if (!current) {
     emit("complete");
@@ -299,10 +367,13 @@ function runPrimaryReadinessAction() {
     emit("action", current.key);
     return;
   }
-  openRecovery();
+  emit("status", "Resolve remaining blockers from the Recovery modal.");
 }
 
 function closeWizard() {
+  if (closeLockedBySignIn.value) {
+    return;
+  }
   emit("close");
 }
 
@@ -315,9 +386,10 @@ watch(
     void nextTick(() => {
       closeButtonRef.value?.focus();
     });
-    mode.value = props.mode;
+    mode.value = props.fixedMode ?? props.mode;
     copyStatus.value = null;
     showLinkCode.value = false;
+    showSignInCode.value = false;
     if (mode.value === "recovery") {
       resetRecoveryState();
       void refreshTroubleshooter();
@@ -328,6 +400,9 @@ watch(
 watch(
   () => props.mode,
   (next) => {
+    if (props.fixedMode) {
+      return;
+    }
     if (!props.open) {
       return;
     }
@@ -344,6 +419,9 @@ watch(
 watch(
   () => canUseRecovery.value,
   (enabled) => {
+    if (props.fixedMode) {
+      return;
+    }
     if (!enabled && mode.value === "recovery") {
       mode.value = "readiness";
     }
@@ -353,6 +431,9 @@ watch(
 watch(
   () => needsSignInFlow.value,
   (needsSignIn) => {
+    if (props.fixedMode) {
+      return;
+    }
     if (needsSignIn && mode.value !== "readiness") {
       mode.value = "readiness";
     }
@@ -370,6 +451,7 @@ watch(
     <div class="mx-auto flex h-full max-w-4xl items-center justify-center">
       <Card class="glass relative w-full max-h-full overflow-hidden bg-background/95">
         <button
+          v-if="!closeLockedBySignIn"
           ref="closeButtonRef"
           class="absolute right-6 top-5 inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 text-muted-foreground hover:bg-background/60 hover:text-foreground"
           type="button"
@@ -381,22 +463,22 @@ watch(
         </button>
 
         <CardHeader class="space-y-3 pr-14">
-          <CardTitle>{{ needsSignInFlow ? "Sign in to continue" : "Launch Assist" }}</CardTitle>
+          <CardTitle>{{ mode === "readiness" ? "Account status" : "Recovery" }}</CardTitle>
           <CardDescription>
             {{
-              needsSignInFlow
+              mode === "readiness"
                 ? "Sign in to Atlas and Microsoft to continue setup."
-                : "Check readiness, fix issues, and retry from one guided flow."
+                : "Analyze launch issues, apply fixes, and retry from one guided flow."
             }}
           </CardDescription>
-          <div v-if="!needsSignInFlow" class="flex gap-2 pt-1">
+          <div v-if="!props.fixedMode && !needsSignInFlow" class="flex gap-2 pt-1">
             <Button
               size="sm"
               variant="outline"
               :class="mode === 'readiness' ? 'border-primary text-primary' : ''"
               @click="mode = 'readiness'"
             >
-              Readiness
+              Account status
             </Button>
             <Button
               v-if="canUseRecovery"
@@ -413,7 +495,7 @@ watch(
         <CardContent class="space-y-4 overflow-y-auto max-h-[70vh]">
           <template v-if="mode === 'readiness'">
             <div v-if="!props.readiness" class="rounded-xl border border-border/60 bg-background/40 p-3 text-sm text-muted-foreground">
-              Checking readiness...
+              Checking account status...
             </div>
 
             <div v-if="allReady" class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4">
@@ -439,9 +521,6 @@ watch(
                   </div>
                   <p v-if="item.detail" class="mt-1 text-xs text-muted-foreground">{{ item.detail }}</p>
                 </div>
-                <span v-if="!item.ready" class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                  blocked
-                </span>
               </div>
 
               <div
@@ -476,6 +555,46 @@ watch(
                   Browser did not open? Show code.
                 </Button>
               </div>
+
+              <div
+                v-if="(item.key === 'atlasLogin' || item.key === 'microsoftLogin') && !item.ready && item.key === activeBlocking?.key && activeSignInCode && showSignInCode"
+                class="mt-3 space-y-2 rounded-lg border border-border/60 bg-card/60 p-3"
+              >
+                <div class="text-[11px] uppercase tracking-widest text-muted-foreground">Sign-in code</div>
+                <div class="text-lg font-semibold tracking-[0.15em] text-foreground">{{ activeSignInCode.user_code }}</div>
+                <div class="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" :disabled="props.working" @click="copySignInCode">
+                    <Link2 class="mr-1 h-3.5 w-3.5" />
+                    Copy code
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    :disabled="props.working || !activeSignInVerificationUrl"
+                    @click="openSignInPage"
+                  >
+                    Open sign-in page
+                  </Button>
+                </div>
+                <p v-if="copyStatus" class="text-xs text-muted-foreground">{{ copyStatus }}</p>
+              </div>
+
+              <div
+                v-if="(item.key === 'atlasLogin' || item.key === 'microsoftLogin') && !item.ready && item.key === activeBlocking?.key && activeSignInCode && !showSignInCode"
+                class="mt-4"
+              >
+                <p class="mb-1 text-sm font-semibold text-foreground">
+                  Continue in browser to complete sign-in.
+                </p>
+                <Button
+                  variant="link"
+                  size="sm"
+                  class="p-0 text-xs text-muted-foreground underline-offset-4 hover:underline"
+                  @click="revealSignInCode"
+                >
+                  Browser did not open? Show code.
+                </Button>
+              </div>
             </div>
 
             <p
@@ -485,17 +604,48 @@ watch(
               {{ accountLinkStatus }}
             </p>
 
-            <div class="flex flex-wrap gap-2 pt-2">
+            <div class="flex flex-wrap items-center justify-end gap-2 border-t border-border/40 pt-3">
+              <DropdownMenu v-if="signedIn">
+                <DropdownMenuTrigger as-child>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="props.working"
+                    class="mr-auto h-9 px-4 text-sm"
+                  >
+                    Sign out
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  side="top"
+                  class="z-[120] w-72 rounded-xl border border-border/70 bg-background/75 p-1.5 shadow-2xl ring-1 ring-border/60 backdrop-blur-2xl backdrop-saturate-150"
+                  style="backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%);"
+                >
+                  <DropdownMenuItem
+                    :disabled="props.working || !props.microsoftSignedIn"
+                    class="h-9 rounded-lg px-3 text-sm"
+                    @select="emit('sign-out', 'microsoft')"
+                  >
+                    Sign out of Microsoft
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator class="mx-0 my-1 bg-border/70" />
+                  <DropdownMenuItem
+                    :disabled="props.working"
+                    class="h-9 rounded-lg px-3 text-sm text-destructive focus:text-destructive"
+                    @select="emit('sign-out', 'all')"
+                  >
+                    Sign out of Atlas + Microsoft
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
-                v-if="activeBlocking"
-                :disabled="props.working"
+                v-if="activeBlocking && !!props.nextActionLabels[activeBlocking.key]"
+                :disabled="props.working || props.isSigningIn"
                 @click="runPrimaryReadinessAction"
               >
                 <Wrench class="mr-1 h-3.5 w-3.5" />
-                {{
-                  props.nextActionLabels[activeBlocking.key] ??
-                  (canUseRecovery ? "Open guided recovery" : "Continue sign-in")
-                }}
+                {{ props.nextActionLabels[activeBlocking.key] }}
               </Button>
               <Button v-else variant="secondary" :disabled="props.working" @click="emit('complete')">
                 Continue
@@ -593,45 +743,6 @@ watch(
           </template>
         </CardContent>
 
-        <div class="border-t border-border/50 px-6 py-3 flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2">
-            <Button variant="outline" size="sm" @click="closeWizard">Close</Button>
-          </div>
-          <DropdownMenu v-if="signedIn">
-            <DropdownMenuTrigger as-child>
-              <Button
-                variant="outline"
-                size="sm"
-                :disabled="props.working"
-                class="h-9 px-4 text-sm"
-              >
-                Sign out
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              side="top"
-              class="z-[120] w-72 rounded-xl border border-border/70 bg-background/75 p-1.5 shadow-2xl ring-1 ring-border/60 backdrop-blur-2xl backdrop-saturate-150"
-              style="backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%);"
-            >
-              <DropdownMenuItem
-                :disabled="props.working || !props.microsoftSignedIn"
-                class="h-9 rounded-lg px-3 text-sm"
-                @select="emit('sign-out', 'microsoft')"
-              >
-                Sign out of Microsoft
-              </DropdownMenuItem>
-              <DropdownMenuSeparator class="mx-0 my-1 bg-border/70" />
-              <DropdownMenuItem
-                :disabled="props.working"
-                class="h-9 rounded-lg px-3 text-sm text-destructive focus:text-destructive"
-                @select="emit('sign-out', 'all')"
-              >
-                Sign out of Atlas + Microsoft
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </Card>
     </div>
   </div>

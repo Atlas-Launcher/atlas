@@ -21,6 +21,7 @@ fn sample_settings() -> AppSettings {
         pending_intent: None,
         first_launch_completed_at: None,
         first_launch_notice_dismissed_at: None,
+        default_memory_profile_v1_applied: false,
     }
 }
 

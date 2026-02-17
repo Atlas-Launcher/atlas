@@ -54,4 +54,5 @@ export interface AppSettings {
   pendingIntent?: OnboardingIntent | null;
   firstLaunchCompletedAt?: string | null;
   firstLaunchNoticeDismissedAt?: string | null;
+  defaultMemoryProfileV1Applied?: boolean;
 }

@@ -17,12 +17,22 @@ interface SettingsDeps {
   run: <T>(task: () => Promise<T>) => Promise<T | undefined>;
 }
 
+const MIN_MEMORY_MB = 1024;
+const MEMORY_STEP_MB = 512;
+const SYSTEM_MEMORY_RESERVED_MB = 2 * 1024;
+const LARGE_RAM_THRESHOLD_MB = 34 * 1024;
+const LARGE_RAM_SLIDER_CAP_MB = 32 * 1024;
+const LEGACY_DEFAULT_MEMORY_MB = 4096;
+const PROFILE_MEMORY_8GB_MB = 6 * 1024;
+const PROFILE_MEMORY_16GB_MB = 8 * 1024;
+const PROFILE_MEMORY_24GB_MB = 12 * 1024;
+
 export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
   let saveTimer: number | undefined;
   const settings = ref<AppSettings>({
     msClientId: null,
     atlasHubUrl: null,
-    defaultMemoryMb: 4096,
+    defaultMemoryMb: LEGACY_DEFAULT_MEMORY_MB,
     defaultJvmArgs: null,
     instances: [],
     selectedInstanceId: null,
@@ -33,9 +43,11 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     },
     pendingIntent: null,
     firstLaunchCompletedAt: null,
-    firstLaunchNoticeDismissedAt: null
+    firstLaunchNoticeDismissedAt: null,
+    defaultMemoryProfileV1Applied: false
   });
   const defaultGameDir = ref("");
+  const systemMemoryMb = ref<number | null>(null);
 
   const settingsClientId = computed({
     get: () => settings.value.msClientId ?? "",
@@ -62,15 +74,21 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     }
   });
 
+  const settingsMemoryMaxMb = computed(() => resolveMemoryEntryCapMb(systemMemoryMb.value));
+  const settingsRecommendedMemoryMb = computed(() => {
+    if (systemMemoryMb.value == null) {
+      return null;
+    }
+    const profileDefault = resolveMemoryProfileDefault(systemMemoryMb.value);
+    return normalizeMemoryMb(profileDefault, settingsMemoryMaxMb.value);
+  });
+  const settingsSystemMemoryMb = computed(() => systemMemoryMb.value);
+
   const settingsDefaultMemoryMb = computed({
-    get: () => settings.value.defaultMemoryMb ?? 4096,
+    get: () => settings.value.defaultMemoryMb ?? LEGACY_DEFAULT_MEMORY_MB,
     set: (value: number | string) => {
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed)) {
-        settings.value.defaultMemoryMb = 4096;
-        return;
-      }
-      settings.value.defaultMemoryMb = Math.max(1024, Math.round(parsed));
+      settings.value.defaultMemoryMb = normalizeMemoryMb(value, settingsMemoryMaxMb.value);
+      queueSave();
     }
   });
 
@@ -79,6 +97,7 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     set: (value: string) => {
       const trimmed = value.trim();
       settings.value.defaultJvmArgs = trimmed.length > 0 ? trimmed : null;
+      queueSave();
     }
   });
 
@@ -265,13 +284,14 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
   async function loadSettings() {
     try {
       const loaded = await invoke<AppSettings>("get_settings");
+      await refreshSystemMemoryMb();
       settings.value = {
         msClientId: loaded.msClientId ?? null,
         atlasHubUrl: loaded.atlasHubUrl ?? null,
         defaultMemoryMb:
           typeof loaded.defaultMemoryMb === "number" && Number.isFinite(loaded.defaultMemoryMb)
-            ? Math.max(1024, Math.round(loaded.defaultMemoryMb))
-            : 4096,
+            ? Math.max(MIN_MEMORY_MB, Math.round(loaded.defaultMemoryMb))
+            : LEGACY_DEFAULT_MEMORY_MB,
         defaultJvmArgs: (loaded.defaultJvmArgs ?? "").trim() || null,
         instances: dedupeInstances(
           (loaded.instances ?? []).map((instance, index) =>
@@ -283,9 +303,12 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
         launchReadinessWizard: normalizeLaunchReadinessWizard(loaded.launchReadinessWizard),
         pendingIntent: normalizeOnboardingIntent(loaded.pendingIntent),
         firstLaunchCompletedAt: loaded.firstLaunchCompletedAt ?? null,
-        firstLaunchNoticeDismissedAt: loaded.firstLaunchNoticeDismissedAt ?? null
+        firstLaunchNoticeDismissedAt: loaded.firstLaunchNoticeDismissedAt ?? null,
+        defaultMemoryProfileV1Applied: loaded.defaultMemoryProfileV1Applied === true
       };
-      if (ensureDefaults()) {
+      const defaultsChanged = ensureDefaults();
+      const memoryProfileChanged = await applyDefaultMemoryProfileIfNeeded();
+      if (defaultsChanged || memoryProfileChanged) {
         await saveSettings(true);
       }
       applyTheme(settings.value.themeMode ?? "system");
@@ -305,9 +328,12 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
   function ensureDefaults() {
     let changed = false;
 
-    const defaultMemory = settings.value.defaultMemoryMb;
-    if (!defaultMemory || defaultMemory < 1024) {
-      settings.value.defaultMemoryMb = 4096;
+    const normalizedDefaultMemory = normalizeMemoryMb(
+      settings.value.defaultMemoryMb ?? LEGACY_DEFAULT_MEMORY_MB,
+      settingsMemoryMaxMb.value
+    );
+    if (settings.value.defaultMemoryMb !== normalizedDefaultMemory) {
+      settings.value.defaultMemoryMb = normalizedDefaultMemory;
       changed = true;
     }
     // Do not auto-create a default local profile. Start with zero instances if none exist.
@@ -337,12 +363,105 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
       changed = true;
     }
 
+    if (settings.value.defaultMemoryProfileV1Applied === undefined) {
+      settings.value.defaultMemoryProfileV1Applied = false;
+      changed = true;
+    }
+
     const selected = settings.value.selectedInstanceId;
     if (!selected || !settings.value.instances.some((instance) => instance.id === selected)) {
       // If there are instances, prefer the first. Otherwise leave as null instead of creating one.
       settings.value.selectedInstanceId = settings.value.instances[0]?.id ?? null;
       changed = true;
     }
+    return changed;
+  }
+
+  async function refreshSystemMemoryMb() {
+    try {
+      const totalSystemMemoryMb = await invoke<number>("get_system_memory_mb");
+      if (Number.isFinite(totalSystemMemoryMb) && totalSystemMemoryMb > 0) {
+        systemMemoryMb.value = Math.round(totalSystemMemoryMb);
+      } else {
+        systemMemoryMb.value = null;
+      }
+    } catch (err) {
+      systemMemoryMb.value = null;
+      pushLog(`Failed to detect system memory: ${String(err)}`);
+    }
+  }
+
+  function resolveMemoryEntryCapMb(totalSystemMemoryMb: number | null): number | null {
+    if (totalSystemMemoryMb == null || !Number.isFinite(totalSystemMemoryMb) || totalSystemMemoryMb <= 0) {
+      return null;
+    }
+    const baseCap = Math.max(MIN_MEMORY_MB, Math.floor(totalSystemMemoryMb - SYSTEM_MEMORY_RESERVED_MB));
+    if (totalSystemMemoryMb >= LARGE_RAM_THRESHOLD_MB) {
+      return Math.min(baseCap, LARGE_RAM_SLIDER_CAP_MB);
+    }
+    return baseCap;
+  }
+
+  function alignMemoryDown(value: number): number {
+    return Math.max(MIN_MEMORY_MB, Math.floor(value / MEMORY_STEP_MB) * MEMORY_STEP_MB);
+  }
+
+  function normalizeMemoryMb(value: number | string, maxMemoryMb: number | null): number {
+    const parsed = Number(value);
+    const fallback = settings.value.defaultMemoryMb ?? LEGACY_DEFAULT_MEMORY_MB;
+    const raw = Number.isFinite(parsed) ? Math.max(MIN_MEMORY_MB, Math.round(parsed)) : fallback;
+    const roundedUp = Math.max(MIN_MEMORY_MB, Math.ceil(raw / MEMORY_STEP_MB) * MEMORY_STEP_MB);
+
+    if (maxMemoryMb == null) {
+      return roundedUp;
+    }
+    const cap = alignMemoryDown(maxMemoryMb);
+    if (roundedUp <= cap) {
+      return roundedUp;
+    }
+    return cap;
+  }
+
+  function resolveMemoryProfileDefault(totalSystemMemoryMb: number): number {
+    const totalGb = totalSystemMemoryMb / 1024;
+    if (totalGb >= 24) {
+      return PROFILE_MEMORY_24GB_MB;
+    }
+    if (totalGb >= 16) {
+      return PROFILE_MEMORY_16GB_MB;
+    }
+    if (totalGb >= 8) {
+      return PROFILE_MEMORY_8GB_MB;
+    }
+    return LEGACY_DEFAULT_MEMORY_MB;
+  }
+
+  async function applyDefaultMemoryProfileIfNeeded(): Promise<boolean> {
+    if (settings.value.defaultMemoryProfileV1Applied) {
+      return false;
+    }
+
+    let changed = false;
+    const currentDefaultRaw = Math.max(
+      MIN_MEMORY_MB,
+      Math.round(settings.value.defaultMemoryMb ?? LEGACY_DEFAULT_MEMORY_MB)
+    );
+    const currentDefault = normalizeMemoryMb(currentDefaultRaw, settingsMemoryMaxMb.value);
+    let nextDefault = currentDefault;
+
+    // Preserve explicit custom defaults and only migrate legacy/default values.
+    if (currentDefaultRaw === LEGACY_DEFAULT_MEMORY_MB && settingsRecommendedMemoryMb.value != null) {
+      nextDefault = settingsRecommendedMemoryMb.value;
+    }
+    nextDefault = normalizeMemoryMb(nextDefault, settingsMemoryMaxMb.value);
+
+    if (nextDefault !== settings.value.defaultMemoryMb) {
+      settings.value.defaultMemoryMb = nextDefault;
+      changed = true;
+    }
+
+    settings.value.defaultMemoryProfileV1Applied = true;
+    changed = true;
     return changed;
   }
 
@@ -585,6 +704,9 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
     settingsClientId,
     settingsAtlasHubUrl,
     settingsDefaultMemoryMb,
+    settingsMemoryMaxMb,
+    settingsRecommendedMemoryMb,
+    settingsSystemMemoryMb,
     settingsDefaultJvmArgs,
     loadSettings,
     loadDefaultGameDir,

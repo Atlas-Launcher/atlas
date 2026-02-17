@@ -28,6 +28,7 @@ base64 = "0.22"
 url = "2"
 async-trait = "0.1"
 quick-xml = "0.38"
+sysinfo = "0.33"
 tauri-plugin-deep-link = "^2.0.0"
 tauri-plugin-opener = "^2.0.0"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

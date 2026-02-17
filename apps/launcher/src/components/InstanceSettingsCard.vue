@@ -7,6 +7,7 @@ import CardTitle from "./ui/card/CardTitle.vue";
 import CardDescription from "./ui/card/CardDescription.vue";
 import CardContent from "./ui/card/CardContent.vue";
 import Input from "./ui/input/Input.vue";
+import MemorySelector from "./MemorySelector.vue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Label } from "@/components/ui/label";
 import type { InstanceConfig } from "@/types/settings";
@@ -16,6 +17,9 @@ const props = defineProps<{
   instance: InstanceConfig | null;
   instancesCount: number;
   defaultMemoryMb: number;
+  memoryMaxMb?: number | null;
+  recommendedMemoryMb?: number | null;
+  systemMemoryMb?: number | null;
   defaultJvmArgs: string;
   working: boolean;
   managedByAtlas?: boolean;
@@ -81,13 +85,8 @@ function clearRuntimeOverrides() {
   });
 }
 
-function updateMemory(value: string | number) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    updateField("memoryMb", null);
-    return;
-  }
-  updateField("memoryMb", Math.max(1024, Math.round(parsed)));
+function updateMemoryOverride(value: number) {
+  updateField("memoryMb", value);
 }
 
 function updateJvmArgs(event: Event) {
@@ -207,17 +206,17 @@ function updateJvmArgs(event: Event) {
           </div>
 
           <div v-if="hasRuntimeOverrides" class="grid gap-4">
-            <div class="space-y-2">
-              <Label class="text-xs uppercase tracking-widest text-muted-foreground">
-                Memory (MB)
-              </Label>
-              <Input
-                type="number"
-                min="1024"
-                :model-value="props.instance.memoryMb ?? props.defaultMemoryMb"
-                @update:modelValue="updateMemory"
-              />
-            </div>
+            <MemorySelector
+              title="Memory"
+              :model-value="props.instance.memoryMb ?? props.defaultMemoryMb"
+              :max-mb="props.memoryMaxMb ?? null"
+              :recommended-mb="props.recommendedMemoryMb ?? null"
+              :system-memory-mb="props.systemMemoryMb ?? null"
+              :working="props.working"
+              :show-limits-copy="true"
+              :show-recommended="true"
+              @update:modelValue="updateMemoryOverride"
+            />
             <div class="space-y-2">
               <Label class="text-xs uppercase tracking-widest text-muted-foreground">
                 JVM launch options

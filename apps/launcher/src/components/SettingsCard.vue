@@ -6,14 +6,14 @@ import CardHeader from "./ui/card/CardHeader.vue";
 import CardTitle from "./ui/card/CardTitle.vue";
 import CardDescription from "./ui/card/CardDescription.vue";
 import CardContent from "./ui/card/CardContent.vue";
-import CardFooter from "./ui/card/CardFooter.vue";
-import Input from "./ui/input/Input.vue";
+import MemorySelector from "./MemorySelector.vue";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 
 const props = withDefaults(defineProps<{
-  settingsClientId: string;
-  settingsAtlasHubUrl: string;
   settingsDefaultMemoryMb: number;
+  settingsMemoryMaxMb?: number | null;
+  settingsRecommendedMemoryMb?: number | null;
+  settingsSystemMemoryMb?: number | null;
   settingsDefaultJvmArgs: string;
   settingsThemeMode: "light" | "dark" | "system";
   working: boolean;
@@ -22,6 +22,9 @@ const props = withDefaults(defineProps<{
   updaterUpdateVersion?: string | null;
   updaterInstallComplete?: boolean;
 }>(), {
+  settingsMemoryMaxMb: null,
+  settingsRecommendedMemoryMb: null,
+  settingsSystemMemoryMb: null,
   updaterBusy: false,
   updaterStatusText: "",
   updaterUpdateVersion: null,
@@ -29,28 +32,17 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{
-  (event: "update:settingsClientId", value: string): void;
-  (event: "update:settingsAtlasHubUrl", value: string): void;
   (event: "update:settingsDefaultMemoryMb", value: number): void;
   (event: "update:settingsDefaultJvmArgs", value: string): void;
   (event: "update:settingsThemeMode", value: "light" | "dark" | "system"): void;
-  (event: "save-settings"): void;
   (event: "check-updates"): void;
   (event: "open-readiness-wizard"): void;
 }>();
 
 const settingsTab = ref<"runtime" | "appearance" | "advanced">("runtime");
 
-function updateClientId(value: string | number) {
-  emit("update:settingsClientId", String(value ?? ""));
-}
-
-function updateAtlasHubUrl(value: string | number) {
-  emit("update:settingsAtlasHubUrl", String(value ?? ""));
-}
-
-function updateDefaultMemory(value: string | number) {
-  emit("update:settingsDefaultMemoryMb", Number(value));
+function updateDefaultMemory(value: number) {
+  emit("update:settingsDefaultMemoryMb", value);
 }
 
 function updateDefaultJvmArgs(event: Event) {
@@ -105,17 +97,18 @@ const updaterDetailText = computed(() => {
         </TabsList>
 
         <TabsContent value="runtime" class="space-y-4">
-          <div class="space-y-2">
-            <label class="text-xs uppercase tracking-widest text-muted-foreground">
-              Default memory (MB)
-            </label>
-            <Input
-              type="number"
-              min="1024"
-              :model-value="props.settingsDefaultMemoryMb"
-              @update:modelValue="updateDefaultMemory"
-            />
-          </div>
+          <MemorySelector
+            title="Default memory"
+            :model-value="props.settingsDefaultMemoryMb"
+            :max-mb="props.settingsMemoryMaxMb"
+            :recommended-mb="props.settingsRecommendedMemoryMb"
+            :system-memory-mb="props.settingsSystemMemoryMb"
+            :working="props.working"
+            :show-limits-copy="true"
+            :show-recommended="true"
+            @update:modelValue="updateDefaultMemory"
+          />
+
           <div class="space-y-2">
             <label class="text-xs uppercase tracking-widest text-muted-foreground">
               Default JVM options
@@ -132,7 +125,6 @@ const updaterDetailText = computed(() => {
             </p>
           </div>
         </TabsContent>
-
 
         <TabsContent value="appearance" class="space-y-4">
           <div class="space-y-2">
@@ -186,38 +178,8 @@ const updaterDetailText = computed(() => {
             </div>
             <p v-if="updaterDetailText" class="text-xs text-muted-foreground">{{ updaterDetailText }}</p>
           </div>
-
-          <div class="space-y-2">
-            <label class="text-xs uppercase tracking-widest text-muted-foreground">
-              Microsoft client ID
-            </label>
-            <Input
-              :model-value="props.settingsClientId"
-              placeholder="Leave empty to use the default ID"
-              @update:modelValue="updateClientId"
-            />
-          </div>
-          <div class="space-y-2">
-            <label class="text-xs uppercase tracking-widest text-muted-foreground">
-              Atlas Hub URL
-            </label>
-            <Input
-              :model-value="props.settingsAtlasHubUrl"
-              placeholder="https://atlas.nathanm.org"
-              @update:modelValue="updateAtlasHubUrl"
-            />
-          </div>
-          <div class="text-xs text-muted-foreground">
-            Sign out and sign back in after changing account settings.
-          </div>
         </TabsContent>
       </Tabs>
     </CardContent>
-    <CardFooter class="pt-0">
-      <div class="flex w-full items-center justify-between gap-3">
-        <div />
-        <Button :disabled="props.working" variant="secondary" @click="emit('save-settings')">Save</Button>
-      </div>
-    </CardFooter>
   </Card>
 </template>

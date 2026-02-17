@@ -42,6 +42,8 @@ const { working, run } = useWorking();
 const incomingOnboardingIntent = ref<OnboardingIntent | null>(null);
 const {
   isSigningIn,
+  microsoftDeviceCode,
+  atlasDeviceCode,
   profile,
   atlasProfile,
   launcherLinkSession,
@@ -70,10 +72,12 @@ const {
   settingsClientId,
   settingsAtlasHubUrl,
   settingsDefaultMemoryMb,
+  settingsMemoryMaxMb,
+  settingsRecommendedMemoryMb,
+  settingsSystemMemoryMb,
   settingsDefaultJvmArgs,
   loadSettings,
   loadDefaultGameDir,
-  saveSettings,
   updateSettings,
   instances,
   activeInstance,
@@ -135,8 +139,8 @@ const syncingRemotePacks = ref(false);
 const instanceInstallStateById = ref<Record<string, boolean>>({});
 const tasksPanelOpen = ref(false);
 const launchReadiness = ref<LaunchReadinessReport | null>(null);
-const launchAssistOpen = ref(false);
-const launchAssistMode = ref<"readiness" | "recovery">("readiness");
+const accountStatusOpen = ref(false);
+const recoveryOpen = ref(false);
 // New flag: when we detect a connectivity error but required vars exist
 const cannotConnect = ref(false);
 const troubleshooterTrigger = ref<"settings" | "help" | "failure">("settings");
@@ -294,13 +298,13 @@ async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
     cannotConnect.value = false;
     const autoOpen = options?.autoOpen === true;
     if (autoOpen && launchReadiness.value && shouldAutoOpenReadinessWizard(launchReadiness.value)) {
-      launchAssistMode.value = "readiness";
-      launchAssistOpen.value = true;
+      recoveryOpen.value = false;
+      accountStatusOpen.value = true;
     }
     // If the report indicates we are not ready to launch (login/link blockers), ensure the wizard is open
     if (launchReadiness.value && hasLoginReadinessBlockers(launchReadiness.value)) {
-      launchAssistMode.value = "readiness";
-      launchAssistOpen.value = true;
+      recoveryOpen.value = false;
+      accountStatusOpen.value = true;
     }
   } catch (err) {
     const msg = String(err);
@@ -325,8 +329,8 @@ async function refreshLaunchReadiness(options?: { autoOpen?: boolean }) {
     }
     // Clear any connectivity flag and open the readiness wizard to allow configuring missing vars
     cannotConnect.value = false;
-    launchAssistMode.value = "readiness";
-    launchAssistOpen.value = true;
+    recoveryOpen.value = false;
+    accountStatusOpen.value = true;
   }
 }
 
@@ -391,8 +395,8 @@ async function applyPendingOnboardingIntent() {
     libraryView.value = "detail";
     await refreshLaunchReadiness();
     if (launchReadiness.value && hasLoginReadinessBlockers(launchReadiness.value)) {
-      launchAssistMode.value = "readiness";
-      launchAssistOpen.value = true;
+      recoveryOpen.value = false;
+      accountStatusOpen.value = true;
     }
     setStatus(`Invite ready for ${matchedInstance.name}. Press Play to continue.`);
 
@@ -450,7 +454,8 @@ function buildDefaultLauncherSettings(): AppSettings {
     },
     pendingIntent: null,
     firstLaunchCompletedAt: null,
-    firstLaunchNoticeDismissedAt: null
+    firstLaunchNoticeDismissedAt: null,
+    defaultMemoryProfileV1Applied: false
   };
 }
 
@@ -470,8 +475,8 @@ async function startUnifiedAuthFlow() {
 
 async function openReadinessWizard() {
   await refreshLaunchReadiness();
-  launchAssistMode.value = "readiness";
-  launchAssistOpen.value = true;
+  recoveryOpen.value = false;
+  accountStatusOpen.value = true;
 }
 
 function dismissTroubleshooterFailurePrompt() {
@@ -488,12 +493,12 @@ async function openTroubleshooter(trigger: "settings" | "help" | "failure") {
     const blocker = readiness?.checklist.find((item) => !item.ready)?.label;
     setStatus(
       blocker
-        ? `Complete readiness check first: ${blocker}.`
-        : "Complete readiness checks before opening Launch Assist."
+        ? `Complete account status check first: ${blocker}.`
+        : "Complete account status checks before opening Launch Assist."
     );
     pushLog(`[LaunchAssist] blocked auto-open due to readiness; trigger=${trigger}; blocker=${blocker ?? "none"}`);
-    launchAssistMode.value = "readiness";
-    launchAssistOpen.value = true;
+    recoveryOpen.value = false;
+    accountStatusOpen.value = true;
     if (trigger === "failure") {
       dismissTroubleshooterFailurePrompt();
     }
@@ -502,8 +507,8 @@ async function openTroubleshooter(trigger: "settings" | "help" | "failure") {
 
   // For manual opens (help/settings) we allow recovery mode even if readiness isn't fully ready.
   troubleshooterTrigger.value = trigger;
-  launchAssistMode.value = "recovery";
-  launchAssistOpen.value = true;
+  accountStatusOpen.value = false;
+  recoveryOpen.value = true;
   pushLog(`[LaunchAssist] opened recovery mode (trigger=${trigger})`);
   if (trigger === "failure") {
     dismissTroubleshooterFailurePrompt();
@@ -948,6 +953,18 @@ async function installLauncherUpdate() {
   await installUpdate();
 }
 
+async function runStartupUpdateInstall() {
+  const available = await checkForUpdates();
+  if (!available) {
+    return false;
+  }
+  const installed = await installUpdate();
+  if (!installed) {
+    return false;
+  }
+  return await restartNow();
+}
+
 function stopHourlyUpdateChecks() {
   if (!updateCheckInterval) {
     return;
@@ -968,6 +985,10 @@ async function restartLauncherAfterUpdate() {
 }
 
 async function handleReadinessAction(key: string) {
+  if (isSigningIn.value) {
+    setStatus("A sign-in is already in progress. Finish it in your browser.");
+    return;
+  }
   if (key === "atlasLogin") {
     await startAtlasLogin();
     await refreshLaunchReadiness();
@@ -985,23 +1006,23 @@ async function handleReadinessAction(key: string) {
 }
 
 async function dismissReadinessWizard() {
-  launchAssistOpen.value = false;
+  accountStatusOpen.value = false;
   await persistReadinessWizardState({
     dismissedAt: new Date().toISOString()
   });
 }
 
 async function completeReadinessWizard() {
-  launchAssistOpen.value = false;
+  accountStatusOpen.value = false;
   await persistReadinessWizardState({
     completedAt: new Date().toISOString(),
     dismissedAt: null
   });
 }
 
-async function closeLaunchAssist() {
+async function closeAccountStatus() {
   if (launchReadiness.value?.readyToLaunch) {
-    launchAssistOpen.value = false;
+    accountStatusOpen.value = false;
     return;
   }
   await dismissReadinessWizard();
@@ -1017,8 +1038,8 @@ function markFirstLaunchSuccessNoticeDismissed() {
 
 async function openLaunchAssistRecoveryFromSuccess() {
   troubleshooterTrigger.value = "help";
-  launchAssistMode.value = "recovery";
-  launchAssistOpen.value = true;
+  accountStatusOpen.value = false;
+  recoveryOpen.value = true;
 }
 
 async function handleReadinessSignOut(scope: "microsoft" | "all") {
@@ -1059,10 +1080,14 @@ async function handleReadinessSignOut(scope: "microsoft" | "all") {
       });
       setStatus("Signed out of Microsoft.");
     }
-    launchAssistMode.value = "readiness";
-    launchAssistOpen.value = true;
+    recoveryOpen.value = false;
+    accountStatusOpen.value = true;
     await refreshLaunchReadiness({ autoOpen: true });
   });
+}
+
+function closeRecovery() {
+  recoveryOpen.value = false;
 }
 
 async function refreshAtlasPacksFromLibrary() {
@@ -1109,6 +1134,10 @@ onMounted(async () => {
     // Ignore if not running in a Tauri window.
   }
   await initLaunchEvents({ status, progress, pushLog, upsertTaskFromEvent });
+  const restartedForUpdate = await runStartupUpdateInstall();
+  if (restartedForUpdate) {
+    return;
+  }
   await restoreSessions();
   await loadDefaultGameDir();
   await loadSettings();
@@ -1121,7 +1150,6 @@ onMounted(async () => {
   await loadNeoForgeLoaderVersions();
   await loadMods();
   await syncAtlasPacks();
-  void checkForUpdates();
   startHourlyUpdateChecks();
   appBootstrapped.value = true;
   try {
@@ -1201,7 +1229,7 @@ watch(
     logs.value[0] ?? ""
   ],
   async ([shouldPrompt, logTriggered, statusValue, firstLog]) => {
-    if (!shouldPrompt || !logTriggered || launchAssistOpen.value) {
+    if (!shouldPrompt || !logTriggered || accountStatusOpen.value || recoveryOpen.value) {
       return;
     }
     const signal = `${statusValue ?? ""}|${firstLog ?? ""}`;
@@ -1335,7 +1363,7 @@ watch(
       :atlas-profile="atlasProfile"
       :is-signing-in="isSigningIn"
       :cannot-connect="cannotConnect"
-      :readiness-open="launchAssistOpen"
+      :readiness-open="accountStatusOpen"
       @open-readiness-wizard="openReadinessWizard"
     />
     
@@ -1432,6 +1460,9 @@ watch(
             :neoforge-loader-versions="neoforgeLoaderVersions"
             :instances-count="instances.length"
             :default-memory-mb="settingsDefaultMemoryMb"
+            :memory-max-mb="settingsMemoryMaxMb"
+            :recommended-memory-mb="settingsRecommendedMemoryMb"
+            :system-memory-mb="settingsSystemMemoryMb"
             :default-jvm-args="settingsDefaultJvmArgs"
             @back="backToLibrary"
             @launch="launchActiveInstance"
@@ -1452,17 +1483,17 @@ watch(
         <section v-else class="flex-1 min-h-0 overflow-hidden">
           <SettingsCard
             class="h-full min-h-0"
-            v-model:settingsClientId="settingsClientId"
-            v-model:settingsAtlasHubUrl="settingsAtlasHubUrl"
             v-model:settingsDefaultMemoryMb="settingsDefaultMemoryMb"
             v-model:settingsDefaultJvmArgs="settingsDefaultJvmArgs"
             v-model:settingsThemeMode="settingsThemeMode"
+            :settings-memory-max-mb="settingsMemoryMaxMb"
+            :settings-recommended-memory-mb="settingsRecommendedMemoryMb"
+            :settings-system-memory-mb="settingsSystemMemoryMb"
             :working="working"
             :updater-busy="updaterBusy"
             :updater-status-text="updaterStatusText"
             :updater-update-version="updateInfo?.version ?? null"
             :updater-install-complete="updaterInstallComplete"
-            @save-settings="saveSettings"
             @check-updates="checkForUpdatesFromSettings"
             @open-readiness-wizard="openReadinessWizard"
           />
@@ -1475,12 +1506,15 @@ watch(
       :pack-name="activeInstance?.name ?? null"
     />
     <LaunchAssistWizard
-      :open="launchAssistOpen"
-      :mode="launchAssistMode"
+      :open="accountStatusOpen"
+      mode="readiness"
+      fixed-mode="readiness"
       :readiness="launchReadiness"
       :atlas-signed-in="!!atlasProfile"
       :microsoft-signed-in="!!profile"
       :is-signing-in="isSigningIn"
+      :microsoft-device-code="microsoftDeviceCode"
+      :atlas-device-code="atlasDeviceCode"
       :link-session="launcherLinkSession"
       :hub-url="hubUrl"
       :working="working"
@@ -1496,7 +1530,35 @@ watch(
       @log="handleTroubleshooterLog"
       @relink-requested="handleTroubleshooterRelinkRequested"
       @retry-launch="retryLaunchFromAssist"
-      @close="closeLaunchAssist"
+      @close="closeAccountStatus"
+      @complete="completeReadinessWizard"
+    />
+    <LaunchAssistWizard
+      :open="recoveryOpen"
+      mode="recovery"
+      fixed-mode="recovery"
+      :readiness="launchReadiness"
+      :atlas-signed-in="!!atlasProfile"
+      :microsoft-signed-in="!!profile"
+      :is-signing-in="isSigningIn"
+      :microsoft-device-code="microsoftDeviceCode"
+      :atlas-device-code="atlasDeviceCode"
+      :link-session="launcherLinkSession"
+      :hub-url="hubUrl"
+      :working="working"
+      :next-action-labels="readinessNextActionLabels"
+      :game-dir="troubleshooterGameDir"
+      :pack-id="troubleshooterPackId"
+      :channel="troubleshooterChannel"
+      :recent-status="status"
+      :recent-logs="logs"
+      @action="handleReadinessAction"
+      @sign-out="handleReadinessSignOut"
+      @status="handleTroubleshooterStatus"
+      @log="handleTroubleshooterLog"
+      @relink-requested="handleTroubleshooterRelinkRequested"
+      @retry-launch="retryLaunchFromAssist"
+      @close="closeRecovery"
       @complete="completeReadinessWizard"
     />
   </div>

@@ -25,6 +25,8 @@ pub struct AppSettings {
     pub first_launch_completed_at: Option<String>,
     #[serde(default)]
     pub first_launch_notice_dismissed_at: Option<String>,
+    #[serde(default)]
+    pub default_memory_profile_v1_applied: bool,
 }
 
 impl Default for AppSettings {
@@ -41,6 +43,7 @@ impl Default for AppSettings {
             pending_intent: None,
             first_launch_completed_at: None,
             first_launch_notice_dismissed_at: None,
+            default_memory_profile_v1_applied: false,
         }
     }
 }

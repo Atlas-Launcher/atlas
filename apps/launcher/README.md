@@ -12,7 +12,6 @@ A tiny Tauri + Vue Minecraft launcher.
    - `pnpm install`
 2. Run in dev:
    - `pnpm tauri:dev`
-   - or `pnpm tauri:dev:device-code` if you don't want to use the deeplink flow (good for macOS).
 3. Build:
    - `pnpm tauri:build`
 

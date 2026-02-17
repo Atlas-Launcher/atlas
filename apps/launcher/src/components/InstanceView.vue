@@ -26,6 +26,9 @@ const props = defineProps<{
   neoforgeLoaderVersions: string[];
   instancesCount: number;
   defaultMemoryMb: number;
+  memoryMaxMb?: number | null;
+  recommendedMemoryMb?: number | null;
+  systemMemoryMb?: number | null;
   defaultJvmArgs: string;
 }>();
 
@@ -202,6 +205,9 @@ const launchBlockedReason = computed(() => {
                 :instance="props.instance"
                 :instances-count="props.instancesCount"
                 :default-memory-mb="props.defaultMemoryMb"
+                :memory-max-mb="props.memoryMaxMb ?? null"
+                :recommended-memory-mb="props.recommendedMemoryMb ?? null"
+                :system-memory-mb="props.systemMemoryMb ?? null"
                 :default-jvm-args="props.defaultJvmArgs"
                 :working="props.working"
                 :managed-by-atlas="isRemoteInstance"

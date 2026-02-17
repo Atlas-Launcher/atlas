@@ -16,9 +16,8 @@ export interface DeviceCodeResponse {
   user_code: string;
   verification_uri: string;
   verification_uri_complete?: string;
+  interval?: number;
 }
-
-export type AuthFlow = "deeplink" | "device_code";
 
 export interface LauncherLinkSession {
   linkSessionId: string;

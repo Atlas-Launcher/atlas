@@ -1,10 +1,10 @@
 import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   AtlasProfile,
-  AuthFlow,
   DeviceCodeResponse,
   LauncherLinkComplete,
   LauncherLinkSession,
@@ -18,41 +18,50 @@ interface AuthDeps {
   onUnhandledDeepLink?: (url: string) => void;
 }
 
-function resolveAuthFlow(value: string): AuthFlow {
-  return value === "device_code" ? "device_code" : "deeplink";
-}
-
-function resolveDeepLinkTarget(url: string): "microsoft" | "atlas" | null {
-  try {
-    const parsed = new URL(url);
-    const target = `${parsed.hostname}${parsed.pathname}`.toLowerCase();
-    if (target.includes("signin")) {
-      return "atlas";
-    }
-    if (target.includes("auth")) {
-      return "microsoft";
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
 function atlasIdentity(profile: AtlasProfile): string {
   return profile.name?.trim() || profile.email?.trim() || profile.id;
 }
 
+function resolveVerificationUrl(device: DeviceCodeResponse): string {
+  if (device.verification_uri_complete?.trim()) {
+    return device.verification_uri_complete;
+  }
+
+  const base = device.verification_uri?.trim();
+  if (!base) {
+    return "";
+  }
+
+  if (!device.user_code?.trim()) {
+    return base;
+  }
+
+  try {
+    const url = new URL(base);
+    if (!url.searchParams.has("user_code")) {
+      url.searchParams.set("user_code", device.user_code);
+    }
+    return url.toString();
+  } catch {
+    return base;
+  }
+}
+
+function hasVerificationUriComplete(device: DeviceCodeResponse): boolean {
+  return !!device.verification_uri_complete?.trim();
+}
+
 export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDeps) {
-  const authFlow = resolveAuthFlow((import.meta.env.VITE_AUTH_FLOW ?? "deeplink").toLowerCase());
-  const deviceCode = ref<DeviceCodeResponse | null>(null);
-  const pendingDeeplink = ref<string | null>(null);
+  const microsoftDeviceCode = ref<DeviceCodeResponse | null>(null);
+  const atlasDeviceCode = ref<DeviceCodeResponse | null>(null);
   const profile = ref<Profile | null>(null);
   const atlasProfile = ref<AtlasProfile | null>(null);
-  const atlasPendingDeeplink = ref<string | null>(null);
   const launcherLinkSession = ref<LauncherLinkSession | null>(null);
   const authInFlight = ref(false);
   const atlasAuthInFlight = ref(false);
-  let deviceLoginAttempt = 0;
+  let microsoftPkceLoginAttempt = 0;
+  let microsoftDeviceLoginAttempt = 0;
+  let atlasDeviceLoginAttempt = 0;
   let launcherLinkPollAttempt = 0;
   let launcherLinkPollTimer: number | undefined;
   const LAUNCHER_LINK_STORAGE_KEY = "atlas.launcherLinkSession";
@@ -62,10 +71,38 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
     () =>
       authInFlight.value ||
       atlasAuthInFlight.value ||
-      !!deviceCode.value ||
-      !!pendingDeeplink.value ||
-      !!atlasPendingDeeplink.value
+      !!microsoftDeviceCode.value ||
+      !!atlasDeviceCode.value
   );
+
+  function hasSignInInFlight() {
+    return (
+      authInFlight.value ||
+      atlasAuthInFlight.value ||
+      !!microsoftDeviceCode.value ||
+      !!atlasDeviceCode.value
+    );
+  }
+
+  async function focusLauncherWindow() {
+    try {
+      await invoke("focus_main_window");
+      return;
+    } catch (err) {
+      pushLog(`Backend window focus failed, using frontend fallback: ${String(err)}`);
+    }
+
+    try {
+      const window = getCurrentWindow();
+      if (await window.isMinimized()) {
+        await window.unminimize();
+      }
+      await window.show();
+      await window.setFocus();
+    } catch (err) {
+      pushLog(`Failed to focus launcher window: ${String(err)}`);
+    }
+  }
 
   function readStoredLauncherLinkSession(): LauncherLinkSession | null {
     if (typeof window === "undefined") {
@@ -206,18 +243,19 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
     launcherLinkPollTimer = window.setTimeout(poll, LAUNCHER_LINK_POLL_INTERVAL_MS);
   }
 
-  async function waitForDeviceApproval(deviceCodeValue: string, attempt: number) {
+  async function waitForMicrosoftDeviceApproval(deviceCodeValue: string, attempt: number) {
     try {
       const result = await invoke<Profile>("complete_device_code", {
         deviceCode: deviceCodeValue
       });
-      if (attempt !== deviceLoginAttempt) {
+      if (attempt !== microsoftDeviceLoginAttempt) {
         return;
       }
       profile.value = result;
-      deviceCode.value = null;
+      microsoftDeviceCode.value = null;
       authInFlight.value = false;
       setStatus(`Signed in as ${result.name}.`);
+      await focusLauncherWindow();
       // Auto-attempt to complete a stored launcher link session (if present)
       if (launcherLinkSession.value) {
         // fire-and-forget; completeLauncherLink internally handles retries/polling
@@ -235,12 +273,40 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
         });
       }
     } catch (err) {
-      if (attempt !== deviceLoginAttempt) {
+      if (attempt !== microsoftDeviceLoginAttempt) {
         return;
       }
-      deviceCode.value = null;
+      microsoftDeviceCode.value = null;
       authInFlight.value = false;
       setStatus(`Login failed: ${String(err)}`);
+    }
+  }
+
+  async function waitForAtlasDeviceApproval(
+    deviceCodeValue: string,
+    intervalSeconds: number,
+    attempt: number
+  ) {
+    try {
+      const result = await invoke<AtlasProfile>("complete_atlas_device_code", {
+        deviceCode: deviceCodeValue,
+        intervalSeconds
+      });
+      if (attempt !== atlasDeviceLoginAttempt) {
+        return;
+      }
+      atlasProfile.value = result;
+      atlasDeviceCode.value = null;
+      atlasAuthInFlight.value = false;
+      setStatus(`Signed in to Atlas Hub as ${atlasIdentity(result)}.`);
+      await focusLauncherWindow();
+    } catch (err) {
+      if (attempt !== atlasDeviceLoginAttempt) {
+        return;
+      }
+      atlasDeviceCode.value = null;
+      atlasAuthInFlight.value = false;
+      setStatus(`Atlas login failed: ${String(err)}`);
     }
   }
 
@@ -273,35 +339,7 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
     await restoreAtlasSession();
   }
 
-  async function currentDeepLinkFor(
-    target: "microsoft" | "atlas"
-  ): Promise<string | null> {
-    try {
-      const current = await getCurrent();
-      if (!current || current.length === 0) {
-        return null;
-      }
-      return current.find((entry) => resolveDeepLinkTarget(entry) === target) ?? null;
-    } catch (err) {
-      pushLog(`Failed to read auth redirect: ${String(err)}`);
-      return null;
-    }
-  }
-
   function handleDeepLink(url: string) {
-    const target = resolveDeepLinkTarget(url);
-    if (target === "atlas") {
-      atlasPendingDeeplink.value = url;
-      pushLog("Atlas auth redirect received.");
-      void finishAtlasLogin(url);
-      return;
-    }
-    if (target === "microsoft" && authFlow !== "device_code") {
-      pendingDeeplink.value = url;
-      pushLog("Microsoft auth redirect received.");
-      void finishDeeplinkLogin(url);
-      return;
-    }
     onUnhandledDeepLink?.(url);
   }
 
@@ -328,71 +366,60 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
   }
 
   async function startLogin() {
-    authInFlight.value = true;
-    if (authFlow === "device_code") {
-      await startDeviceLogin();
-    } else {
-      await startDeeplinkLogin();
+    if (hasSignInInFlight()) {
+      setStatus("A sign-in is already in progress. Finish it in your browser.");
+      return;
     }
+    authInFlight.value = true;
+    await startMicrosoftPkceLogin();
   }
 
-  async function startDeviceLogin() {
-    const attempt = ++deviceLoginAttempt;
-    const response = await run(async () => {
+  async function startMicrosoftPkceLogin() {
+    const attempt = ++microsoftPkceLoginAttempt;
+    const opened = await run(async () => {
       try {
-        deviceCode.value = null;
-        const nextDeviceCode = await invoke<DeviceCodeResponse>("start_device_code");
-        deviceCode.value = nextDeviceCode;
-        const url = nextDeviceCode.verification_uri_complete ?? nextDeviceCode.verification_uri;
-        await openUrl(url);
-        setStatus("Waiting for Microsoft sign-in approval in your browser.");
-        return nextDeviceCode;
+        microsoftDeviceCode.value = null;
+        const authUrl = await invoke<string>("begin_deeplink_login");
+        try {
+          await openUrl(authUrl);
+        } catch (openErr) {
+          pushLog(`Microsoft PKCE browser open failed: ${String(openErr)}`);
+          return false;
+        }
+        setStatus("Continue Microsoft sign-in in your browser.");
+        return true;
       } catch (err) {
-        setStatus(`Login start failed: ${String(err)}`);
+        const message = String(err);
+        setStatus(`Microsoft sign-in start failed: ${message}`);
         authInFlight.value = false;
         return null;
       }
     });
-    if (!response) {
-      return;
-    }
-    void waitForDeviceApproval(response.device_code, attempt);
-  }
 
-  async function startDeeplinkLogin() {
-    await run(async () => {
-      try {
-        pendingDeeplink.value = null;
-        const authUrl = await invoke<string>("begin_deeplink_login");
-        await openUrl(authUrl);
-        setStatus("Finish signing in in your browser.");
-      } catch (err) {
-        setStatus(`Login start failed: ${String(err)}`);
-        authInFlight.value = false;
-      }
-    });
-  }
-
-  async function finishDeeplinkLogin(callbackUrl?: string) {
-    let url = callbackUrl ?? pendingDeeplink.value;
-    if (!url) {
-      url = await currentDeepLinkFor("microsoft");
-    }
-    if (!url) {
-      setStatus("Missing auth redirect URL. Open the atlas://auth link to continue.");
+    if (opened === undefined || opened === null) {
       return;
     }
 
+    if (opened) {
+      void waitForMicrosoftPkceApproval(attempt);
+      return;
+    }
+
+    setStatus("Browser open failed. Falling back to device code sign-in.");
+    await startMicrosoftDeviceLogin();
+  }
+
+  async function waitForMicrosoftPkceApproval(attempt: number) {
     await run(async () => {
       try {
-        const result = await invoke<Profile>("complete_deeplink_login", {
-          callbackUrl: url
-        });
+        const result = await invoke<Profile>("complete_loopback_login");
+        if (attempt !== microsoftPkceLoginAttempt) {
+          return;
+        }
         profile.value = result;
-        setStatus(`Signed in as ${result.name}.`);
-        pendingDeeplink.value = null;
         authInFlight.value = false;
-        // Auto-attempt launcher link completion if we have a stored session
+        setStatus(`Signed in as ${result.name}.`);
+        await focusLauncherWindow();
         if (launcherLinkSession.value) {
           void run(async () => {
             try {
@@ -407,61 +434,93 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
           });
         }
       } catch (err) {
-        setStatus(`Login failed: ${String(err)}`);
+        if (attempt !== microsoftPkceLoginAttempt) {
+          return;
+        }
         authInFlight.value = false;
+        setStatus(`Microsoft sign-in failed: ${String(err)}`);
       }
     });
+  }
+
+  async function startMicrosoftDeviceLogin() {
+    const attempt = ++microsoftDeviceLoginAttempt;
+    const response = await run(async () => {
+      try {
+        microsoftDeviceCode.value = null;
+        const nextDeviceCode = await invoke<DeviceCodeResponse>("start_device_code");
+        microsoftDeviceCode.value = nextDeviceCode;
+        const url = resolveVerificationUrl(nextDeviceCode);
+        if (!url) {
+          throw new Error("Microsoft device code response missing verification URL.");
+        }
+        if (!hasVerificationUriComplete(nextDeviceCode) && nextDeviceCode.user_code?.trim()) {
+          try {
+            await navigator.clipboard.writeText(nextDeviceCode.user_code);
+            pushLog("Microsoft sign-in code copied to clipboard.");
+          } catch {
+            // Ignore clipboard errors; code is still shown in status/UI.
+          }
+          setStatus(
+            `Continue in browser and enter code ${nextDeviceCode.user_code}.`
+          );
+        } else {
+          setStatus("Waiting for Microsoft sign-in approval in your browser.");
+        }
+        await openUrl(url);
+        return nextDeviceCode;
+      } catch (err) {
+        setStatus(`Login start failed: ${String(err)}`);
+        authInFlight.value = false;
+        return null;
+      }
+    });
+    if (!response) {
+      return;
+    }
+    void waitForMicrosoftDeviceApproval(response.device_code, attempt);
   }
 
   async function startAtlasLogin() {
+    if (hasSignInInFlight()) {
+      setStatus("A sign-in is already in progress. Finish it in your browser.");
+      return;
+    }
     atlasAuthInFlight.value = true;
-    await run(async () => {
+    const attempt = ++atlasDeviceLoginAttempt;
+    const response = await run(async () => {
       try {
-        atlasPendingDeeplink.value = null;
-        const authUrl = await invoke<string>("begin_atlas_login");
-        await openUrl(authUrl);
-        setStatus("Finish Atlas sign-in in your browser.");
+        atlasDeviceCode.value = null;
+        const nextDeviceCode = await invoke<DeviceCodeResponse>("start_atlas_device_code");
+        atlasDeviceCode.value = nextDeviceCode;
+        const url = resolveVerificationUrl(nextDeviceCode);
+        if (!url) {
+          throw new Error("Atlas device code response missing verification URL.");
+        }
+        await openUrl(url);
+        setStatus("Waiting for Atlas sign-in approval in your browser.");
+        return nextDeviceCode;
       } catch (err) {
         setStatus(`Atlas login start failed: ${String(err)}`);
         atlasAuthInFlight.value = false;
+        return null;
       }
     });
-  }
-
-  async function finishAtlasLogin(callbackUrl?: string) {
-    let url = callbackUrl ?? atlasPendingDeeplink.value;
-    if (!url) {
-      url = await currentDeepLinkFor("atlas");
-    }
-    if (!url) {
-      setStatus("Missing Atlas callback URL. Open the atlas://signin link to continue.");
+    if (!response) {
       return;
     }
-
-    await run(async () => {
-      try {
-        const result = await invoke<AtlasProfile>("complete_atlas_login", {
-          callbackUrl: url
-        });
-        atlasProfile.value = result;
-        setStatus(`Signed in to Atlas Hub as ${atlasIdentity(result)}.`);
-        atlasPendingDeeplink.value = null;
-        atlasAuthInFlight.value = false;
-      } catch (err) {
-        setStatus(`Atlas login failed: ${String(err)}`);
-        atlasAuthInFlight.value = false;
-      }
-    });
+    void waitForAtlasDeviceApproval(response.device_code, response.interval ?? 5, attempt);
   }
 
   async function signOut() {
-    deviceLoginAttempt += 1;
+    microsoftPkceLoginAttempt += 1;
+    microsoftDeviceLoginAttempt += 1;
     await run(async () => {
       try {
         await invoke("sign_out");
         profile.value = null;
-        deviceCode.value = null;
-        pendingDeeplink.value = null;
+        authInFlight.value = false;
+        microsoftDeviceCode.value = null;
         launcherLinkSession.value = null;
         writeStoredLauncherLinkSession(null);
         setStatus("Signed out.");
@@ -472,11 +531,13 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
   }
 
   async function signOutAtlas() {
+    atlasDeviceLoginAttempt += 1;
     await run(async () => {
       try {
         await invoke("atlas_sign_out");
         atlasProfile.value = null;
-        atlasPendingDeeplink.value = null;
+        atlasAuthInFlight.value = false;
+        atlasDeviceCode.value = null;
         launcherLinkSession.value = null;
         writeStoredLauncherLinkSession(null);
         setStatus("Signed out of Atlas Hub.");
@@ -536,8 +597,9 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
   }
 
   return {
-    authFlow,
     isSigningIn,
+    microsoftDeviceCode,
+    atlasDeviceCode,
     profile,
     atlasProfile,
     launcherLinkSession,
@@ -547,8 +609,6 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
     initDeepLink,
     startLogin,
     startAtlasLogin,
-    finishDeeplinkLogin,
-    finishAtlasLogin,
     signOut,
     signOutAtlas,
     createLauncherLink,

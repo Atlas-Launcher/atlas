@@ -7,6 +7,7 @@ use crate::settings;
 use crate::state::AppState;
 use crate::telemetry;
 use atlas_client::hub::{HubClient, LauncherLinkCompleteRequest, LauncherMinecraftPayload};
+use tauri::Manager;
 
 #[tauri::command]
 pub async fn start_device_code() -> Result<DeviceCodeResponse, String> {
@@ -18,6 +19,25 @@ pub async fn start_device_code() -> Result<DeviceCodeResponse, String> {
 }
 
 #[tauri::command]
+pub fn focus_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window not found".to_string())?;
+    if window.is_minimized().map_err(|err| err.to_string())? {
+        window.unminimize().map_err(|err| err.to_string())?;
+    }
+    if !window.is_visible().map_err(|err| err.to_string())? {
+        window.show().map_err(|err| err.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_always_on_top(false);
+    }
+    window.set_focus().map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 pub async fn begin_deeplink_login(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let settings = state
         .settings
@@ -25,8 +45,7 @@ pub async fn begin_deeplink_login(state: tauri::State<'_, AppState>) -> Result<S
         .map_err(|_| "Settings lock poisoned".to_string())?
         .clone();
     let client_id = config::resolve_client_id(&settings);
-    let (pending, auth_url) = auth::begin_deeplink_login(&client_id, config::DEFAULT_REDIRECT_URI)
-        .map_err(|err| err.to_string())?;
+    let (pending, auth_url) = auth::begin_deeplink_login(&client_id).map_err(|err| err.to_string())?;
     auth::save_pending_auth(&pending).map_err(|err| err.to_string())?;
     let mut guard = state
         .pending_auth
@@ -34,6 +53,42 @@ pub async fn begin_deeplink_login(state: tauri::State<'_, AppState>) -> Result<S
         .map_err(|_| "Auth state lock poisoned".to_string())?;
     *guard = Some(pending);
     Ok(auth_url)
+}
+
+#[tauri::command]
+pub async fn complete_loopback_login(state: tauri::State<'_, AppState>) -> Result<Profile, String> {
+    let pending = {
+        let guard = state
+            .pending_auth
+            .lock()
+            .map_err(|_| "Auth state lock poisoned".to_string())?;
+        if let Some(pending) = guard.as_ref() {
+            pending.clone()
+        } else {
+            auth::load_pending_auth()
+                .map_err(|err| err.to_string())?
+                .ok_or_else(|| "No pending sign-in found. Start sign-in again.".to_string())?
+        }
+    };
+
+    let session = auth::complete_loopback_login(pending)
+        .await
+        .map_err(|err| err.to_string())?;
+    let profile = session.profile.clone();
+    auth::save_session(&session).map_err(|err| err.to_string())?;
+    auth::clear_pending_auth().map_err(|err| err.to_string())?;
+    let mut pending_guard = state
+        .pending_auth
+        .lock()
+        .map_err(|_| "Auth state lock poisoned".to_string())?;
+    *pending_guard = None;
+
+    let mut guard = state
+        .auth
+        .lock()
+        .map_err(|_| "Auth state lock poisoned".to_string())?;
+    *guard = Some(session);
+    Ok(profile)
 }
 
 #[tauri::command]
@@ -168,6 +223,25 @@ pub async fn begin_atlas_login(state: tauri::State<'_, AppState>) -> Result<Stri
 }
 
 #[tauri::command]
+pub async fn start_atlas_device_code(
+    state: tauri::State<'_, AppState>,
+) -> Result<DeviceCodeResponse, String> {
+    let settings = state
+        .settings
+        .lock()
+        .map_err(|_| "Settings lock poisoned".to_string())?
+        .clone();
+    let hub_url = config::resolve_atlas_hub_url(&settings);
+    let client_id = config::resolve_atlas_client_id();
+    telemetry::info(format!(
+        "Launcher requested Atlas device code (hub_url={hub_url}, client_id={client_id})."
+    ));
+    auth::start_atlas_device_code(&hub_url, &client_id)
+        .await
+        .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 pub async fn complete_atlas_login(
     state: tauri::State<'_, AppState>,
     callback_url: Option<String>,
@@ -207,6 +281,56 @@ pub async fn complete_atlas_login(
         .lock()
         .map_err(|_| "Auth state lock poisoned".to_string())?;
     *guard = Some(session);
+    Ok(profile)
+}
+
+#[tauri::command]
+pub async fn complete_atlas_device_code(
+    state: tauri::State<'_, AppState>,
+    device_code: String,
+    interval_seconds: u64,
+) -> Result<AtlasProfile, String> {
+    let started = std::time::Instant::now();
+    let settings = state
+        .settings
+        .lock()
+        .map_err(|_| "Settings lock poisoned".to_string())?
+        .clone();
+    let hub_url = config::resolve_atlas_hub_url(&settings);
+    let auth_base_url = config::resolve_atlas_auth_base_url(&settings);
+    let client_id = config::resolve_atlas_client_id();
+    telemetry::info(format!(
+        "Launcher waiting for Atlas device approval (hub_url={hub_url}, auth_base_url={auth_base_url}, interval={}s).",
+        interval_seconds
+    ));
+    let session = auth::complete_atlas_device_code(
+        &hub_url,
+        &auth_base_url,
+        &client_id,
+        &device_code,
+        interval_seconds,
+    )
+    .await
+    .map_err(|err| {
+        telemetry::error(format!(
+            "Atlas device-code completion failed after {}ms: {}",
+            started.elapsed().as_millis(),
+            err
+        ));
+        err.to_string()
+    })?;
+    let profile = session.profile.clone();
+    auth::save_atlas_session(&session).map_err(|err| err.to_string())?;
+    let mut guard = state
+        .atlas_auth
+        .lock()
+        .map_err(|_| "Auth state lock poisoned".to_string())?;
+    *guard = Some(session);
+    telemetry::info(format!(
+        "Atlas device-code completion succeeded for user {} (elapsed={}ms).",
+        profile.id,
+        started.elapsed().as_millis()
+    ));
     Ok(profile)
 }
 

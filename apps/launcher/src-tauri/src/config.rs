@@ -4,7 +4,6 @@ pub const DEFAULT_MS_CLIENT_ID: &str = match option_env!("ATLAS_MS_CLIENT_ID") {
     Some(value) => value,
     None => "atlas-ms-client-id-not-configured",
 };
-pub const DEFAULT_REDIRECT_URI: &str = "atlas://auth";
 pub const DEFAULT_ATLAS_HUB_URL: &str = atlas_client::device_code::DEFAULT_ATLAS_HUB_URL;
 pub const DEFAULT_ATLAS_CLIENT_ID: &str = atlas_client::device_code::DEFAULT_ATLAS_DEVICE_CLIENT_ID;
 pub const DEFAULT_ATLAS_REDIRECT_URI: &str = "atlas://signin";

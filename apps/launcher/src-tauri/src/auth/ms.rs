@@ -10,6 +10,11 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+    time::timeout,
+};
 use url::Url;
 
 use super::error::AuthError;
@@ -146,6 +151,13 @@ pub(crate) struct AuthRequest {
     pub code_verifier: String,
 }
 
+pub(crate) struct LoopbackAuthRequest {
+    pub auth_url: String,
+    pub state: String,
+    pub code_verifier: String,
+    pub redirect_uri: String,
+}
+
 pub(crate) fn build_auth_request(
     client_id: &str,
     redirect_uri: &str,
@@ -172,6 +184,87 @@ pub(crate) fn build_auth_request(
         state,
         code_verifier,
     })
+}
+
+pub(crate) fn build_loopback_auth_request(client_id: &str) -> Result<LoopbackAuthRequest, AuthError> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|err| format!("Failed to reserve loopback redirect port: {err}"))?;
+    let port = listener
+        .local_addr()
+        .map_err(|err| format!("Failed to read loopback redirect port: {err}"))?
+        .port();
+    drop(listener);
+
+    let redirect_uri = format!("http://127.0.0.1:{port}/callback");
+    let request = build_auth_request(client_id, &redirect_uri)?;
+
+    Ok(LoopbackAuthRequest {
+        auth_url: request.auth_url,
+        state: request.state,
+        code_verifier: request.code_verifier,
+        redirect_uri,
+    })
+}
+
+pub(crate) async fn wait_for_loopback_callback(
+    redirect_uri: &str,
+    wait_timeout: Duration,
+) -> Result<String, AuthError> {
+    let redirect = Url::parse(redirect_uri).map_err(|err| format!("Invalid redirect URI: {err}"))?;
+    let host = redirect
+        .host_str()
+        .ok_or_else(|| "Missing redirect host".to_string())?;
+    let port = redirect
+        .port_or_known_default()
+        .ok_or_else(|| "Missing redirect port".to_string())?;
+    let bind_addr = format!("{host}:{port}");
+
+    let listener = TcpListener::bind(&bind_addr)
+        .await
+        .map_err(|err| format!("Failed to bind loopback listener on {bind_addr}: {err}"))?;
+    let (mut socket, _peer) = timeout(wait_timeout, listener.accept())
+        .await
+        .map_err(|_| "Timed out waiting for Microsoft authorization callback.".to_string())?
+        .map_err(|err| format!("Failed to accept Microsoft authorization callback: {err}"))?;
+
+    let mut buffer = vec![0u8; 8192];
+    let size = timeout(Duration::from_secs(30), socket.read(&mut buffer))
+        .await
+        .map_err(|_| "Timed out reading Microsoft authorization callback.".to_string())?
+        .map_err(|err| format!("Failed to read Microsoft authorization callback: {err}"))?;
+    if size == 0 {
+        return Err("Received empty Microsoft authorization callback.".to_string().into());
+    }
+
+    let request = String::from_utf8_lossy(&buffer[..size]).to_string();
+    let request_line = request
+        .lines()
+        .next()
+        .ok_or_else(|| "Malformed Microsoft authorization callback request.".to_string())?;
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let target = parts.next().unwrap_or_default();
+    if method != "GET" || target.is_empty() {
+        return Err("Unexpected Microsoft authorization callback request."
+            .to_string()
+            .into());
+    }
+
+    let callback_url = format!("http://{bind_addr}{target}");
+    let expected_path = redirect.path().to_string();
+    let callback = Url::parse(&callback_url)
+        .map_err(|err| format!("Invalid Microsoft callback URL: {err}"))?;
+    if callback.path() != expected_path {
+        return Err("Microsoft callback path did not match expected redirect path."
+            .to_string()
+            .into());
+    }
+
+    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n<!doctype html><html><head><meta charset=\"utf-8\" /><title>Atlas Sign-in</title></head><body style=\"font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 2rem; color: #111; background: #fff;\"><h1 style=\"margin:0 0 0.75rem 0; font-size:1.2rem;\">Sign-in complete</h1><p style=\"margin:0; font-size:1rem;\">You can close this window and return to Atlas Launcher.</p></body></html>";
+    let _ = socket.write_all(response.as_bytes()).await;
+    let _ = socket.shutdown().await;
+
+    Ok(callback_url)
 }
 
 pub(crate) fn parse_auth_callback(
