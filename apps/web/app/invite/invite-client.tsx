@@ -60,10 +60,10 @@ const steps: { id: InviteStep; label: string; detail: string }[] = [
   },
   {
     id: "launcher",
-    label: "Open launcher",
-    detail: "Open Atlas Launcher and land on your invited pack.",
+    label: "Open Atlas",
+    detail: "Open Atlas and land on your invited pack.",
   },
-  { id: "done", label: "Continue", detail: "Finish setup in Atlas Launcher." },
+  { id: "done", label: "Continue", detail: "Finish setup in Atlas." },
 ];
 
 function resolveInviteStep(value: string | null): InviteStep | null {
@@ -472,12 +472,12 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
             <CardHeader>
               <CardTitle>{playerWebCopy.invite.launcherStepTitle}</CardTitle>
               <CardDescription>
-                Open Atlas Launcher to continue directly to your invited pack.
+                Open Atlas to continue directly to your invited pack.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="rounded-2xl border border-[hsl(var(--border)/0.8)] bg-[var(--atlas-surface-soft)] px-4 py-4 text-sm text-[var(--atlas-ink-muted)]">
-                Atlas Launcher opens on your invited pack so you can install and play.
+                Atlas opens on your invited pack so you can install and play.
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -500,7 +500,7 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
                   className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700"
                   role="alert"
                 >
-                  Atlas Launcher did not open automatically. Install it with the download button, then try again.
+                  Atlas did not open automatically. Install it with the download button, then try again.
                 </div>
               ) : null}
 
@@ -524,11 +524,11 @@ export default function InviteClient({ code, signedIn }: InviteClientProps) {
           <Card>
             <CardHeader>
               <CardTitle>{playerWebCopy.invite.doneTitle}</CardTitle>
-              <CardDescription>Finish setup in Atlas Launcher.</CardDescription>
+              <CardDescription>Finish setup in Atlas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <ol className="list-decimal space-y-2 pl-4 text-sm text-[var(--atlas-ink-muted)]">
-                <li>Open Atlas Launcher.</li>
+                <li>Open Atlas.</li>
                 <li>Sign in to Atlas Hub if prompted.</li>
                 <li>Sign in to Microsoft and complete account linking.</li>
                 <li>Install the invited pack and press play.</li>
