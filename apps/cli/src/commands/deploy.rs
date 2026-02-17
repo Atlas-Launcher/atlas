@@ -156,7 +156,7 @@ fn resolve_ci_auth(
 fn apply_ci_auth_to_client(client: &mut HubClient, ci_auth: &CiAuth) -> Result<()> {
     match ci_auth {
         CiAuth::UserToken(token) => client.set_token(token.clone()),
-        CiAuth::OidcToken(token) => client.set_service_token(token.clone()),
+        CiAuth::OidcToken(token) => client.set_ci_oidc_token(token.clone()),
         CiAuth::PackDeployToken(token) => client.set_pack_deploy_token(token.clone()),
     }
     Ok(())

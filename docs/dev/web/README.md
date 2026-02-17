@@ -35,10 +35,16 @@ pack dashboard:
 - Copy the plaintext token from the one-time reveal panel.
 - Use the table to audit token prefixes and revoke tokens.
 
+Pack creators and admins can also manage CI pack deploy tokens in the same view:
+- In **Pack Deploy Tokens**, create a token with an optional name.
+- Copy the plaintext token from the one-time reveal panel.
+- Use the table to audit token prefixes and revoke tokens.
+
 Implementation lives in:
 - `apps/web/app/dashboard/pack-dashboard-client.tsx`
 - `apps/web/app/dashboard/components/manage-tab.tsx`
 - `apps/web/app/api/v1/runner/tokens/route.ts`
+- `apps/web/app/api/v1/packs/[packId]/deploy-tokens/route.ts`
 
 ### Pack list dedup guard
 
@@ -152,6 +158,9 @@ When packs are imported/created with GitHub repo setup, Hub configures repositor
 Implementation notes:
 - GitHub Contents API paths must be encoded per path segment (not as a single `encodeURIComponent` call on the full path), otherwise nested paths like `.github/workflows/atlas-build.yml` can fail.
 - Writing workflow files requires GitHub App installation permissions that include workflow write access.
+- Repository onboarding now always provisions `ATLAS_HUB_URL` and
+  `ATLAS_PACK_DEPLOY_TOKEN` GitHub Actions secrets, including fallback paths
+  where `atlas.toml` is missing from a template repository.
 - Pack creation endpoints now include an idempotency guard by normalized GitHub repo identity for the same owner account:
   - `POST /api/v1/packs` (repo import path)
   - `POST /api/v1/github/repos` (template repo creation path)

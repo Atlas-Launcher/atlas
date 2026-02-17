@@ -54,3 +54,8 @@ Treat platform behavior as best-effort developer tooling unless explicitly docum
 
 - `atlas_client::hub` blocking helper methods now bootstrap their own Tokio runtime when no runtime exists (normal synchronous CLI execution, including GitHub Actions shell steps).
 - This prevents `there is no reactor running` panics when `atlas` commands call Hub APIs from non-async contexts.
+- `atlas publish --oidc-token` and `ATLAS_CI_OIDC_TOKEN` now authenticate CI
+  requests using the `x-atlas-oidc-token` header on `/api/v1/ci/*` endpoints.
+  They do not use runner service-token exchange.
+- `atlas publish --deploy-token` and `ATLAS_PACK_DEPLOY_TOKEN` use pack deploy
+  tokens (`atlas_pack_*`) via `x-atlas-pack-deploy-token`.

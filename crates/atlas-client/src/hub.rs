@@ -17,6 +17,7 @@ pub struct HubClient {
     base_url: Url,
     auth: Mutex<AuthState>,
     pack_deploy_token: Mutex<Option<String>>,
+    ci_oidc_token: Mutex<Option<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -219,6 +220,7 @@ impl HubClient {
             base_url,
             auth: Mutex::new(AuthState::None),
             pack_deploy_token: Mutex::new(None),
+            ci_oidc_token: Mutex::new(None),
         })
     }
 
@@ -243,10 +245,25 @@ impl HubClient {
         *value = Some(token);
     }
 
+    pub fn set_ci_oidc_token(&mut self, token: String) {
+        let mut value = self
+            .ci_oidc_token
+            .lock()
+            .expect("ci_oidc_token lock poisoned");
+        *value = Some(token);
+    }
+
     fn get_pack_deploy_token(&self) -> Option<String> {
         self.pack_deploy_token
             .lock()
             .expect("pack_deploy_token lock poisoned")
+            .clone()
+    }
+
+    fn get_ci_oidc_token(&self) -> Option<String> {
+        self.ci_oidc_token
+            .lock()
+            .expect("ci_oidc_token lock poisoned")
             .clone()
     }
 
@@ -951,6 +968,9 @@ Ensure you are using a runner service token from `/api/v1/runner/tokens`, not a 
         if let Some(token) = self.get_pack_deploy_token() {
             request = request.header("x-atlas-pack-deploy-token", token);
         }
+        if let Some(token) = self.get_ci_oidc_token() {
+            request = request.header("x-atlas-oidc-token", token);
+        }
         let response = request.send().await?.error_for_status()?;
 
         response
@@ -981,6 +1001,9 @@ Ensure you are using a runner service token from `/api/v1/runner/tokens`, not a 
             .json(request);
         if let Some(token) = self.get_pack_deploy_token() {
             req = req.header("x-atlas-pack-deploy-token", token);
+        }
+        if let Some(token) = self.get_ci_oidc_token() {
+            req = req.header("x-atlas-oidc-token", token);
         }
         req.send().await?.error_for_status()?;
         Ok(())
