@@ -406,7 +406,13 @@ export async function POST(request: Request) {
 
     // 3. Configure the Repo (workflows, atlas.toml) using SHARED LOGIC
     // First, check if atlas.toml exists (it should, from template)
-    const { checkAtlasTomlExists, ensureAtlasBuildWorkflow, setRepositoryActionsPermissions, enableRepositoryWorkflows } = await import("@/lib/github/repo-config");
+    const {
+      checkAtlasTomlExists,
+      ensureAtlasBuildWorkflow,
+      setRepositoryActionsPermissions,
+      enableRepositoryWorkflows,
+      ensureRepositoryAtlasSecrets,
+    } = await import("@/lib/github/repo-config");
 
     // We add a small retry loop for searching the file, just in case of propagation delay
     let atlasToml: GithubContentFile | null = null;
@@ -430,7 +436,15 @@ export async function POST(request: Request) {
         existingAtlasToml: atlasToml,
       });
     } else {
-      // Fallback if atlas.toml missing in template: just ensure workflow and permissions
+      // Fallback if atlas.toml is missing in template: still provision Atlas secrets
+      // so CI publish works, then ensure workflow and permissions.
+      await ensureRepositoryAtlasSecrets({
+        token: installationToken,
+        owner: resolvedOwner,
+        repo: repo.name,
+        packId: createdPack.id,
+        hubUrl,
+      });
       await ensureAtlasBuildWorkflow({ token: installationToken, owner: resolvedOwner, repo: repo.name });
       await setRepositoryActionsPermissions({ token: installationToken, owner: resolvedOwner, repo: repo.name });
       await enableRepositoryWorkflows({ token: installationToken, owner: resolvedOwner, repo: repo.name });

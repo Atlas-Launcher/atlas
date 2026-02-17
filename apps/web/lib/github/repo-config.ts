@@ -449,7 +449,7 @@ async function upsertRepositoryActionsSecret({
     );
 }
 
-async function ensureRepositoryAtlasSecrets({
+export async function ensureRepositoryAtlasSecrets({
     token,
     owner,
     repo,
