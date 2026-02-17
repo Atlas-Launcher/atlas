@@ -80,6 +80,7 @@ fn readiness_marks_missing_auth_and_files() {
         .find(|item| item.key == "javaReady")
         .expect("java readiness checklist entry");
     assert_eq!(java_item.ready, report.java_ready);
+    assert!(java_item.ready);
 }
 
 #[test]
@@ -123,6 +124,30 @@ fn troubleshooter_classifies_memory_and_runtime_metadata_signals() {
     assert!(finding_exists(&report.findings, "memory_pressure"));
     assert!(finding_exists(&report.findings, "runtime_metadata_missing"));
     assert!(finding_exists(
+        &report.findings,
+        "install_corruption_or_stale"
+    ));
+}
+
+#[test]
+fn troubleshooter_does_not_flag_install_corruption_when_files_not_installed() {
+    let readiness = LaunchReadinessReport {
+        atlas_logged_in: true,
+        microsoft_logged_in: true,
+        accounts_linked: true,
+        files_installed: false,
+        java_ready: true,
+        ready_to_launch: false,
+        checklist: vec![],
+    };
+    let report = run_troubleshooter(TroubleshooterInput {
+        readiness,
+        recent_status: Some("Launch failed".to_string()),
+        recent_logs: vec![],
+    });
+
+    assert!(finding_exists(&report.findings, "files_missing"));
+    assert!(!finding_exists(
         &report.findings,
         "install_corruption_or_stale"
     ));

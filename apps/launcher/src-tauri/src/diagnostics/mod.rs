@@ -81,9 +81,11 @@ pub fn build_launch_readiness(input: ReadinessContext) -> LaunchReadinessReport 
         .as_deref()
         .map(resolve_files_installed)
         .unwrap_or(false);
-    let java_ready = resolve_java_ready(&input.settings, input.game_dir.as_deref());
-    let ready_to_launch =
-        atlas_logged_in && microsoft_logged_in && accounts_linked && files_installed && java_ready;
+    // Java compatibility is validated during the launch path. Readiness should
+    // not block or report missing Java before users attempt launch.
+    let _detected_java_ready = resolve_java_ready(&input.settings, input.game_dir.as_deref());
+    let java_ready = true;
+    let ready_to_launch = atlas_logged_in && microsoft_logged_in && accounts_linked && files_installed;
     let checklist = vec![
         ReadinessItem {
             key: "atlasLogin".to_string(),
@@ -117,10 +119,9 @@ pub fn build_launch_readiness(input: ReadinessContext) -> LaunchReadinessReport 
         },
         ReadinessItem {
             key: "javaReady".to_string(),
-            label: "Java ready".to_string(),
+            label: "Java check on launch".to_string(),
             ready: java_ready,
-            detail: (!java_ready)
-                .then_some("Install or repair Java to launch this profile.".to_string()),
+            detail: Some("Java compatibility is checked automatically when you launch.".to_string()),
         },
     ];
 
@@ -184,17 +185,6 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
             suggested_actions: vec![FixAction::ResyncPack, FixAction::FullRepair],
         });
     }
-    if !input.readiness.java_ready {
-        findings.push(TroubleshooterFinding {
-            code: "java_missing".to_string(),
-            title: "Java needs attention".to_string(),
-            detail: "We couldn’t find a working Java installation. Try repairing the runtime to continue."
-                .to_string(),
-            confidence: 90,
-            suggested_actions: vec![FixAction::RepairRuntime, FixAction::FullRepair],
-        });
-    }
-
     if haystack.contains("out of memory") || haystack.contains("java heap space") {
         findings.push(TroubleshooterFinding {
             code: "memory_pressure".to_string(),
@@ -218,9 +208,10 @@ pub fn run_troubleshooter(input: TroubleshooterInput) -> TroubleshooterReport {
             suggested_actions: vec![FixAction::ResyncPack, FixAction::FullRepair],
         });
     }
-    if haystack.contains("client jar is missing")
-        || haystack.contains("launch failed")
-        || haystack.contains("pack update failed")
+    if input.readiness.files_installed
+        && (haystack.contains("client jar is missing")
+            || haystack.contains("launch failed")
+            || haystack.contains("pack update failed"))
     {
         findings.push(TroubleshooterFinding {
             code: "install_corruption_or_stale".to_string(),

@@ -28,7 +28,7 @@ const emit = defineEmits<{
         <div class="min-w-0">
           <p class="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             <CheckCircle2 class="h-4 w-4" />
-            First launch complete
+            Launch complete
           </p>
           <p class="mt-1 text-xs text-muted-foreground">
             {{ props.packName ? `${props.packName} launched successfully.` : "Your profile launched successfully." }}

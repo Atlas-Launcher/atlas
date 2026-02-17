@@ -154,6 +154,7 @@ const readinessNextActionLabels: Partial<Record<string, string>> = {
   microsoftLogin: "Sign in to Microsoft",
   accountLink: "Link accounts"
 };
+const dismissedLaunchSuccessAt = ref<number | null>(null);
 
 function onboardingIntentMatches(a: AppSettings["pendingIntent"], b: AppSettings["pendingIntent"]) {
   if (!a && !b) {
@@ -198,11 +199,10 @@ const homeStatusMessage = computed(() => {
   }
   return null;
 });
-const showFirstLaunchSuccessPanel = computed(
-  () =>
-    !!settings.value.firstLaunchCompletedAt &&
-    !settings.value.firstLaunchNoticeDismissedAt
-);
+const showFirstLaunchSuccessPanel = computed(() => {
+  const latest = latestLaunchSuccessAt.value;
+  return !!latest && latest !== dismissedLaunchSuccessAt.value;
+});
 const firstLaunchPackName = computed(() => activeInstance.value?.name ?? null);
 
 const modsDir = computed(() => {
@@ -834,6 +834,13 @@ async function installSelectedVersion() {
   await loadInstalledVersions();
   await refreshInstanceInstallStates();
   await refreshLaunchReadiness();
+
+  if (!canLaunch.value) {
+    setStatus("Install complete. Finish linking Minecraft in Atlas Hub before launching.");
+    return;
+  }
+
+  await launchMinecraft();
 }
 
 async function refreshVersions() {
@@ -1004,14 +1011,8 @@ async function retryLaunchFromAssist() {
   await launchActiveInstance();
 }
 
-async function markFirstLaunchSuccessNoticeDismissed() {
-  if (settings.value.firstLaunchNoticeDismissedAt) {
-    return;
-  }
-  await updateSettings({
-    ...settings.value,
-    firstLaunchNoticeDismissedAt: new Date().toISOString()
-  });
+function markFirstLaunchSuccessNoticeDismissed() {
+  dismissedLaunchSuccessAt.value = latestLaunchSuccessAt.value;
 }
 
 async function openLaunchAssistRecoveryFromSuccess() {

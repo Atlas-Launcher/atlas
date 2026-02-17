@@ -50,6 +50,20 @@ Key backend modules:
   - Syncing pack
   - Preparing files
   - Starting Minecraft
+- Install-to-play flow:
+  - When users click **Install** in instance/library views, launcher now starts
+    play automatically as soon as install/sync completes successfully.
+  - If launch prerequisites are still unmet (for example account link), launcher
+    keeps install success and shows a readiness status message instead of
+    launching.
+- Successful launch banner:
+  - Launcher now shows the success banner after every successful launch event
+    (not only first launch), with headline text `Launch complete`.
+- Diagnostics guardrails:
+  - Readiness/troubleshooter does not classify "install corruption" when profile
+    files are not installed yet.
+  - Java version/runtime compatibility is validated during launch, not treated as
+    a pre-launch readiness blocker.
 - First confirmed launch success is persisted and shown via a compact first-run success panel.
 - Tauri updater endpoints should target Distribution API routes:
 - `/api/v1/launcher/updates/{os}/{arch}` (or channelized variant).
