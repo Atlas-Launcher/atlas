@@ -419,8 +419,8 @@ const memoryLimitCopy = computed(() => {
   background: linear-gradient(
     to right,
     hsl(var(--primary)) 0%,
-    hsl(var(--primary)) var(--memory-slider-fill),
-    hsl(var(--muted-foreground) / 0.35) var(--memory-slider-fill),
+    hsl(var(--primary)) var(--memory-slider-fill, 0%),
+    hsl(var(--muted-foreground) / 0.35) var(--memory-slider-fill, 0%),
     hsl(var(--muted-foreground) / 0.35) 100%
   );
   transition: background 80ms linear;
