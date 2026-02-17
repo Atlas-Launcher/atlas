@@ -42,6 +42,8 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const [invites, setInvites] = useState<Invite[]>([]);
   const [members, setMembers] = useState<PackMember[]>([]);
   const [runnerTokens, setRunnerTokens] = useState<RunnerServiceToken[]>([]);
+  const [runnerTokenName, setRunnerTokenName] = useState("");
+  const [createdRunnerToken, setCreatedRunnerToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -263,6 +265,44 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
         token.id === tokenId ? { ...token, revokedAt: data?.revokedAt ?? new Date().toISOString() } : token
       )
     );
+  };
+
+  const handleCreateRunnerToken = async () => {
+    setLoading(true);
+    setError(null);
+    setCreatedRunnerToken(null);
+    const response = await fetch(`/api/v1/runner/tokens`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        packId,
+        name: runnerTokenName.trim() || null,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data?.error ?? "Unable to create runner token.");
+      return;
+    }
+
+    setRunnerTokenName("");
+    setCreatedRunnerToken(data?.token?.toString() ?? null);
+    const nextPrefix = data?.prefix?.toString() ?? "";
+    const nextId = data?.id?.toString() ?? `new-${Date.now()}`;
+    setRunnerTokens((prev) => [
+      {
+        id: nextId,
+        name: runnerTokenName.trim() || null,
+        tokenPrefix: nextPrefix,
+        createdAt: new Date().toISOString(),
+        lastUsedAt: null,
+        revokedAt: null,
+        expiresAt: null,
+      },
+      ...prev,
+    ]);
   };
 
   const handlePromoteMember = async (userId: string) => {
@@ -499,6 +539,10 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
                 onDeletePack={handleDeletePack}
                 runnerTokens={runnerTokens}
                 canManageRunnerTokens={canManageRunnerTokens}
+                runnerTokenName={runnerTokenName}
+                onRunnerTokenNameChange={setRunnerTokenName}
+                onCreateRunnerToken={handleCreateRunnerToken}
+                createdRunnerToken={createdRunnerToken}
                 onRevokeRunnerToken={handleRevokeRunnerToken}
                 loading={loading}
               />

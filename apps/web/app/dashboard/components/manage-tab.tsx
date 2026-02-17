@@ -33,6 +33,10 @@ interface ManageTabProps {
   onDeletePack: () => void;
   runnerTokens: RunnerServiceToken[];
   canManageRunnerTokens: boolean;
+  runnerTokenName: string;
+  onRunnerTokenNameChange: (value: string) => void;
+  onCreateRunnerToken: () => void;
+  createdRunnerToken: string | null;
   onRevokeRunnerToken: (tokenId: string) => void;
   loading: boolean;
 }
@@ -51,6 +55,10 @@ export default function ManageTab({
   onDeletePack,
   runnerTokens,
   canManageRunnerTokens,
+  runnerTokenName,
+  onRunnerTokenNameChange,
+  onCreateRunnerToken,
+  createdRunnerToken,
   onRevokeRunnerToken,
   loading,
 }: ManageTabProps) {
@@ -125,10 +133,32 @@ export default function ManageTab({
             <div>
               <h3 className="text-sm font-semibold">Runner Service Tokens</h3>
               <p className="text-xs text-[var(--atlas-ink-muted)]">
-              Manage deploy keys used by Atlas Runner.
+                Manage deploy keys used by Atlas Runner.
               </p>
             </div>
           </div>
+          {canManageRunnerTokens ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Input
+                placeholder="Token name (optional)"
+                value={runnerTokenName}
+                onChange={(event) => onRunnerTokenNameChange(event.target.value)}
+                className="max-w-sm"
+              />
+              <Button size="sm" onClick={onCreateRunnerToken} disabled={loading}>
+                {loading ? "Creating..." : "Create runner token"}
+              </Button>
+            </div>
+          ) : null}
+
+          {createdRunnerToken ? (
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
+              <p className="text-xs font-semibold text-amber-900">New token (shown once):</p>
+              <p className="mt-1 break-all font-mono text-xs text-amber-900">
+                {createdRunnerToken}
+              </p>
+            </div>
+          ) : null}
           <div className="mt-4">
             <Table>
               <TableHeader>

@@ -26,6 +26,20 @@ See:
 - `api-spec.md`
 - `openapi.yaml`
 
+## Runner service tokens in Hub UI
+
+Pack creators and admins can now manage runner service tokens directly in the
+pack dashboard:
+- Navigate to **Dashboard -> Pack -> Manage**.
+- In **Runner Service Tokens**, create a token with an optional name.
+- Copy the plaintext token from the one-time reveal panel.
+- Use the table to audit token prefixes and revoke tokens.
+
+Implementation lives in:
+- `apps/web/app/dashboard/pack-dashboard-client.tsx`
+- `apps/web/app/dashboard/components/manage-tab.tsx`
+- `apps/web/app/api/v1/runner/tokens/route.ts`
+
 ### Pack list dedup guard
 
 `GET /api/v1/packs` now applies a server-side dedup pass by `pack.id` before responding.
