@@ -437,20 +437,26 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
   }
 
   async function applyDefaultMemoryProfileIfNeeded(): Promise<boolean> {
-    if (settings.value.defaultMemoryProfileV1Applied) {
-      return false;
-    }
-
-    let changed = false;
     const currentDefaultRaw = Math.max(
       MIN_MEMORY_MB,
       Math.round(settings.value.defaultMemoryMb ?? LEGACY_DEFAULT_MEMORY_MB)
     );
+    const isLegacyDefault = currentDefaultRaw === LEGACY_DEFAULT_MEMORY_MB;
+
+    // Normal steady state: migration already applied and memory is no longer legacy default.
+    // If memory is still legacy default, continue through migration logic to self-heal
+    // older installs that were marked applied before RAM detection succeeded.
+    if (settings.value.defaultMemoryProfileV1Applied && !isLegacyDefault) {
+      return false;
+    }
+
+    let changed = false;
     const currentDefault = normalizeMemoryMb(currentDefaultRaw, settingsMemoryMaxMb.value);
     let nextDefault = currentDefault;
 
     // Preserve explicit custom defaults and only migrate legacy/default values.
-    if (currentDefaultRaw === LEGACY_DEFAULT_MEMORY_MB && settingsRecommendedMemoryMb.value != null) {
+    // If RAM detection is unavailable, keep the flag unset so we retry next launch.
+    if (isLegacyDefault && settingsRecommendedMemoryMb.value != null) {
       nextDefault = settingsRecommendedMemoryMb.value;
     }
     nextDefault = normalizeMemoryMb(nextDefault, settingsMemoryMaxMb.value);
@@ -460,8 +466,14 @@ export function useSettings({ setStatus, pushLog, run }: SettingsDeps) {
       changed = true;
     }
 
-    settings.value.defaultMemoryProfileV1Applied = true;
-    changed = true;
+    const canMarkApplied = !isLegacyDefault || settingsRecommendedMemoryMb.value != null;
+    if (canMarkApplied && settings.value.defaultMemoryProfileV1Applied !== true) {
+      settings.value.defaultMemoryProfileV1Applied = true;
+      changed = true;
+    } else if (!canMarkApplied && settings.value.defaultMemoryProfileV1Applied !== false) {
+      settings.value.defaultMemoryProfileV1Applied = false;
+      changed = true;
+    }
     return changed;
   }
 
