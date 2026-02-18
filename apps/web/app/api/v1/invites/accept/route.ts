@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -36,7 +36,8 @@ export async function POST(request: Request) {
   const [invite] = await db
     .select()
     .from(invites)
-    .where(and(eq(invites.code, code), isNull(invites.usedAt)));
+    .where(eq(invites.code, code))
+    .limit(1);
 
   if (!invite) {
     return NextResponse.json({ error: "Invite not found" }, { status: 404 });
@@ -76,25 +77,14 @@ export async function POST(request: Request) {
 
   await recomputeWhitelist(invite.packId);
 
-  await db
-    .update(invites)
-    .set({ usedAt: new Date() })
-    .where(eq(invites.id, invite.id));
-
   emitWhitelistUpdate({ packId: invite.packId, source: "invite" });
 
   const recommendedChannel = toRecommendedChannel(invite.accessLevel);
-  const deepLink = `atlas://onboarding?source=invite&packId=${encodeURIComponent(
-    invite.packId
-  )}&channel=${recommendedChannel}`;
 
   return NextResponse.json({
     success: true,
     packId: invite.packId,
     pack,
-    onboarding: {
-      deepLink,
-      recommendedChannel,
-    },
+    recommendedChannel,
   });
 }

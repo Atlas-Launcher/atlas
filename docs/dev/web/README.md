@@ -56,20 +56,18 @@ This suppresses duplicate launcher pack cards caused by accidental duplicate pac
 
 ## Invite Onboarding Contract
 
-`POST /api/v1/invites/accept` now returns an onboarding handoff payload while keeping backward compatibility:
+`POST /api/v1/invites/accept` returns invite acceptance metadata:
 
-- Existing fields retained:
-  - `success`
-  - `packId`
-- Added fields:
-  - `pack: { id, name, slug }`
-  - `onboarding: { deepLink, recommendedChannel }`
+- `success`
+- `packId`
+- `pack: { id, name, slug }`
+- `recommendedChannel`
 
-`deepLink` targets launcher onboarding:
-- `atlas://onboarding?source=invite&packId=<packId>&channel=<dev|beta|production>`
-
-Invite web flow uses this deep link as primary CTA and falls back to:
-- `/download/app/installer/latest`
+Invite behavior:
+- Invite links are multi-use. Accepting an invite does not consume/revoke the link.
+- Web invite flow does not issue launcher protocol deep links.
+- Existing launcher users are told to open Atlas Launcher and press Refresh.
+- Launcher download CTA now links to `/download/app` (guided installer page).
 
 ## Copy Standards
 

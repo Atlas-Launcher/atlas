@@ -25,8 +25,8 @@ Start in the web invite page and complete account acceptance.
 
 1. Open your invite link.
 2. Sign in or create your Atlas account.
-3. Select **Open Atlas Launcher**.
-4. If handoff fails, install launcher from the fallback link and retry.
+3. If Atlas Launcher is installed, open it and select **Refresh**.
+4. If Atlas Launcher is not installed, download it from `/download/app`.
 
 ## Complete launch readiness
 

@@ -14,24 +14,22 @@ This document describes the direct-replacement onboarding flow for players joini
 2. Player signs up/signs in.
 3. Web accepts invite with `POST /api/v1/invites/accept`.
 4. Response returns:
-   - `packId` (legacy)
+   - `success`
+   - `packId`
    - `pack` metadata
-   - `onboarding.deepLink`
-   - `onboarding.recommendedChannel`
-5. Primary CTA opens `atlas://onboarding?...`.
-6. If protocol handoff does not open launcher, user is shown installer fallback (`/download/app/installer/latest`).
-7. Web invite copy refers to "Atlas" (neutral wording) instead of hardcoding a specific app name.
+   - `recommendedChannel`
+5. Invite codes are reusable (not consumed on first acceptance).
+6. Invite page tells users with Launcher installed to open it and press Refresh.
+7. If launcher is not installed, invite page sends users to `/download/app`.
+8. Web invite copy refers to "Atlas" (neutral wording) instead of hardcoding a specific app name.
 
-## Launcher Intake and Intent Persistence
+## Launcher intake after invite acceptance
 
 1. Launcher handles auth with device code flow (no auth callback deep link required).
-2. Non-auth deep links are parsed by onboarding deep-link parser.
-3. Onboarding intent is persisted in settings as `pendingIntent`.
-4. After Atlas pack sync, launcher matches remote instance by `packId`.
-5. Launcher selects that instance, switches to library detail, and applies requested channel.
-6. Launcher does not auto-install.
-7. If readiness blockers exist, Launch Assist opens in readiness mode.
-8. `pendingIntent` is cleared when handoff is fully applied.
+2. User presses Refresh in launcher after invite acceptance.
+3. After Atlas pack sync, launcher shows the new pack membership.
+4. Launcher does not auto-install.
+5. If readiness blockers exist, Launch Assist opens in readiness mode.
 
 ## Unified Launch Assist
 

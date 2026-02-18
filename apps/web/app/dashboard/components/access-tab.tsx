@@ -82,10 +82,7 @@ export default function AccessTab({
     [members]
   );
   const [copied, setCopied] = useState(false);
-  const activeInvites = useMemo(
-    () => invites.filter((invite) => !invite.usedAt),
-    [invites]
-  );
+  const activeInvites = useMemo(() => invites, [invites]);
 
   const formatCreatedAt = (value?: string | null) => {
     if (!value) {
@@ -281,7 +278,7 @@ export default function AccessTab({
                     ) : (
                       <TableRow>
                         <TableCell colSpan={3} className="text-sm text-[var(--atlas-ink-muted)]">
-                          No active invites.
+                          No invites yet.
                         </TableCell>
                       </TableRow>
                     )}

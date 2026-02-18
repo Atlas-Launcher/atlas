@@ -21,7 +21,6 @@ export async function GET(request: Request) {
       creatorName: users.name,
       creatorEmail: users.email,
       expiresAt: invites.expiresAt,
-      usedAt: invites.usedAt,
       createdBy: invites.createdBy,
     })
     .from(invites)
@@ -35,10 +34,6 @@ export async function GET(request: Request) {
 
   if (invite.expiresAt && invite.expiresAt < new Date()) {
     return NextResponse.json({ error: "Invite expired" }, { status: 410 });
-  }
-
-  if (invite.usedAt) {
-    return NextResponse.json({ error: "Invite already used" }, { status: 409 });
   }
 
   if (!invite.packId || !invite.packName) {
