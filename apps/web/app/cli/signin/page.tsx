@@ -9,7 +9,9 @@ export default function CliSigninPage() {
         <div className="min-h-screen bg-transparent px-6 py-16 text-[var(--atlas-ink)]">
           <div className="mx-auto max-w-md">
             <div className="rounded-3xl border border-[var(--atlas-border)] bg-white p-8 shadow-sm">
-              <p className="text-sm text-[var(--atlas-ink-muted)]">Loading CLI sign-in…</p>
+              <p className="text-sm text-[var(--atlas-ink-muted)]">
+                Loading device sign-in…
+              </p>
             </div>
           </div>
         </div>

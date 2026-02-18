@@ -149,7 +149,6 @@ export default function AccessTab({
                   <TableHeader>
                     <TableRow>
                       <TableHead>User</TableHead>
-                      <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Access</TableHead>
                       <TableHead className="w-[120px] text-right">Action</TableHead>
@@ -160,9 +159,6 @@ export default function AccessTab({
                       sortedMembers.map((member) => (
                         <TableRow key={member.userId}>
                           <TableCell className="font-medium">{member.name}</TableCell>
-                          <TableCell className="text-xs text-[var(--atlas-ink-muted)]">
-                            {member.email}
-                          </TableCell>
                           <TableCell>
                             <Badge variant="secondary">{member.role}</Badge>
                           </TableCell>
@@ -229,7 +225,7 @@ export default function AccessTab({
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-sm text-[var(--atlas-ink-muted)]">
+                        <TableCell colSpan={4} className="text-sm text-[var(--atlas-ink-muted)]">
                           No users found for this pack.
                         </TableCell>
                       </TableRow>

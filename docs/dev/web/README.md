@@ -69,6 +69,23 @@ Invite behavior:
 - Existing launcher users are told to open Atlas Launcher and press Refresh.
 - Launcher download CTA now links to `/download/app` (guided installer page).
 
+## Device auth copy
+
+Web pages used in the device code flow under `/cli/signin` use generic
+"device sign-in" wording and avoid CLI-specific copy. This keeps the browser
+approval UX reusable for non-CLI device clients while preserving route
+compatibility.
+
+## Pack member privacy
+
+Pack-scoped membership views no longer expose email addresses.
+
+- `GET /api/v1/packs/{packId}/members` returns member identity and role/access
+  fields without email.
+- Pack dashboard **Access -> Users** view hides email addresses for all roles.
+- Email visibility is reserved for system/admin views (for example
+  `/api/admin/users` and admin user detail pages).
+
 ## Copy Standards
 
 Player and creator copy constants are centralized under:

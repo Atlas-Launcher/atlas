@@ -58,7 +58,6 @@ export interface UserSummary {
 export interface PackMember {
   userId: string;
   name: string;
-  email: string;
   role: Role;
   accessLevel: AccessLevel;
   joinedAt?: string;

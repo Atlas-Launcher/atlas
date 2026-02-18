@@ -27,7 +27,7 @@ export default function CliApproveClient() {
     setLoading(false);
 
     if (result?.error) {
-      setError(result.error.error_description ?? "Unable to approve CLI sign-in.");
+      setError(result.error.error_description ?? "Unable to approve device sign-in.");
       return;
     }
 
@@ -41,7 +41,7 @@ export default function CliApproveClient() {
     setLoading(false);
 
     if (result?.error) {
-      setError(result.error.error_description ?? "Unable to deny CLI sign-in.");
+      setError(result.error.error_description ?? "Unable to deny device sign-in.");
       return;
     }
 
@@ -54,20 +54,20 @@ export default function CliApproveClient() {
         <Card>
           <CardHeader>
             <Badge variant="secondary">Atlas Hub</Badge>
-            <CardTitle>Approve CLI Sign-in</CardTitle>
+            <CardTitle>Approve device sign-in</CardTitle>
             <CardDescription>
-              Confirm access for the CLI using code {userCode || "-"}.
+              Confirm access for this device using code {userCode || "-"}.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!userCode ? (
               <p className="text-sm text-[var(--atlas-ink-muted)]">
-                Missing device code. Return to the CLI and request a new one.
+                Missing device code. Request a new one from your device.
               </p>
             ) : !session ? (
               <div className="space-y-3">
                 <p className="text-sm text-[var(--atlas-ink-muted)]">
-                  Sign in to approve this CLI authorization.
+                  Sign in to approve this device authorization.
                 </p>
                 <Button asChild>
                   <a href={`/sign-in?redirect=/cli/signin/approve?user_code=${userCode}`}>Sign in</a>
@@ -77,12 +77,12 @@ export default function CliApproveClient() {
               <div className="space-y-3">
                 {status === "approved" ? (
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-                    CLI approved. Return to your terminal to finish sign-in.
+                    Device approved. Return to your app to finish sign-in.
                   </div>
                 ) : null}
                 {status === "denied" ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                    CLI denied. You can restart the flow in the CLI.
+                    Device denied. You can restart the flow from your app.
                   </div>
                 ) : null}
                 {error ? (

@@ -44,7 +44,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     .select({
       userId: users.id,
       name: users.name,
-      email: users.email,
       role: packMembers.role,
       accessLevel: packMembers.accessLevel,
       joinedAt: packMembers.createdAt,
@@ -67,8 +66,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     members.push({
       userId: session.user.id,
-      name: session.user.name ?? session.user.email ?? "You",
-      email: session.user.email ?? "",
+      name: session.user.name ?? "You",
       role: selfMembership?.role ?? fallbackRole,
       accessLevel: selfMembership?.accessLevel ?? fallbackAccess,
       joinedAt: selfMembership?.joinedAt ?? new Date(),

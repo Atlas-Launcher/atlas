@@ -52,9 +52,9 @@ export default function CliSigninClient() {
         <Card>
           <CardHeader>
             <Badge variant="secondary">Atlas Hub</Badge>
-            <CardTitle>CLI Authorization</CardTitle>
+            <CardTitle>Device Authorization</CardTitle>
             <CardDescription>
-              Enter the code from the Atlas CLI to authorize this session.
+              Enter your device code to authorize this session.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
