@@ -20,9 +20,19 @@ pub async fn start_device_code() -> Result<DeviceCodeResponse, String> {
 
 #[tauri::command]
 pub fn focus_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    focus_window_internal(&app, "main")
+}
+
+#[tauri::command]
+pub fn focus_window(app: tauri::AppHandle, label: String) -> Result<(), String> {
+    focus_window_internal(&app, label.trim())
+}
+
+fn focus_window_internal(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
+    let target_label = if label.is_empty() { "main" } else { label };
     let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "Main window not found".to_string())?;
+        .get_webview_window(target_label)
+        .ok_or_else(|| format!("Window not found: {target_label}"))?;
     if window.is_minimized().map_err(|err| err.to_string())? {
         window.unminimize().map_err(|err| err.to_string())?;
     }

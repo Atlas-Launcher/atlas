@@ -97,6 +97,26 @@ Key backend modules:
 - On boot, while the prelaunch loading window is open, launcher checks for
   updates and runs download/install automatically before main UI bootstrap. When
   install succeeds, launcher restarts immediately into the updated build.
+- Startup update check/install runs before session restore, settings load,
+  deep-link init, and library/profile hydration.
+- If no network connection is available (`navigator.onLine === false`), startup
+  update check is skipped and normal bootstrap continues without blocking.
+- Prelaunch loading window now shows updater-specific startup phases:
+  - Checking for update.
+  - Update ready (explicit user acknowledgement required before install starts).
+  - Downloading update (with determinate progress).
+  - Installing update.
+  - Offline skip path messaging when connectivity is unavailable.
+- During startup update download, prelaunch loading UI displays update version
+  plus remaining size and total size.
+- Prelaunch loading modal uses a compact card layout with a single status line
+  (phase/version pills removed).
+- Frontend window focus behavior is centralized via
+  `src/lib/windowFocus.ts::takeWindowFocus`, including startup loading-window
+  input focus and post-auth launcher refocus.
+- `takeWindowFocus` always routes through Tauri Rust invoke command
+  `focus_window` (no frontend fallback path) so focus behavior is handled in
+  one backend code path.
 - Restart uses an explicit cross-platform relaunch path (spawn current
   executable, then exit) so update apply reliably reopens on Windows, macOS,
   and Linux.
@@ -140,6 +160,9 @@ Key backend modules:
 - Launcher Advanced settings no longer exposes Microsoft client ID or Atlas Hub
   URL inputs, and Settings no longer uses a manual Save button. Runtime/theme
   edits persist automatically.
+- Reset-to-defaults flows do not auto-create a default local profile; launcher
+  can remain in a zero-profile state until the user creates one or sync brings
+  in Atlas packs.
 - Default JVM memory now uses a one-time RAM profile migration:
   - 6 GB on 8 GB systems.
   - 8 GB on 16 GB systems.

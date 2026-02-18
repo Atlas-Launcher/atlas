@@ -22,6 +22,7 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
   const updaterEnabled = !import.meta.env.DEV;
   const checking = ref(false);
   const installing = ref(false);
+  const installPhase = ref<"download" | "install">("download");
   const installComplete = ref(false);
   const bannerDismissed = ref(false);
   const errorMessage = ref<string | null>(null);
@@ -67,6 +68,9 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
       return "Update installed. Restart required.";
     }
     if (installing.value) {
+      if (installPhase.value === "install") {
+        return "Installing update...";
+      }
       if (!totalBytes.value) {
         return "Downloading update...";
       }
@@ -90,6 +94,7 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
   function handleDownloadEvent(event: DownloadEvent) {
     const now = Date.now();
     if (event.event === "Started") {
+      installPhase.value = "download";
       downloadedBytes.value = 0;
       totalBytes.value = event.data.contentLength ?? null;
       speedBytesPerSecond.value = null;
@@ -120,10 +125,16 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
       return;
     }
     if (event.event === "Finished") {
+      installPhase.value = "install";
       if (totalBytes.value) {
         downloadedBytes.value = totalBytes.value;
       }
       etaSeconds.value = 0;
+      if (updateHandle.value) {
+        setStatus(`Installing update ${updateHandle.value.version}...`);
+      } else {
+        setStatus("Installing update...");
+      }
     }
   }
 
@@ -217,6 +228,7 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
       return false;
     }
     installing.value = true;
+    installPhase.value = "download";
     errorMessage.value = null;
     downloadedBytes.value = 0;
     totalBytes.value = null;
@@ -245,6 +257,7 @@ export function useUpdater({ setStatus, pushLog }: UpdaterDeps) {
       return false;
     } finally {
       installing.value = false;
+      installPhase.value = "download";
     }
   }
 

@@ -81,6 +81,7 @@ fn main() {
             commands::library::sync_atlas_pack,
             commands::auth::start_device_code,
             commands::auth::focus_main_window,
+            commands::auth::focus_window,
             commands::auth::begin_deeplink_login,
             commands::auth::complete_loopback_login,
             commands::auth::complete_deeplink_login,

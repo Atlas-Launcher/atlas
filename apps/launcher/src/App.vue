@@ -22,6 +22,7 @@ import { useSettings } from "./lib/useSettings";
 import { useStatus } from "./lib/useStatus";
 import { useUpdater } from "./lib/useUpdater";
 import { useWorking } from "./lib/useWorking";
+import { takeWindowFocus } from "./lib/windowFocus";
 import type { LaunchReadinessReport, TroubleshooterReport } from "@/types/diagnostics";
 import type { AtlasPackSyncResult, AtlasRemotePack } from "@/types/library";
 import type { AppSettings, InstanceConfig, ModLoaderKind } from "@/types/settings";
@@ -159,6 +160,97 @@ const readinessNextActionLabels: Partial<Record<string, string>> = {
   accountLink: "Link accounts"
 };
 const dismissedLaunchSuccessAt = ref<number | null>(null);
+const LOADING_STATUS_STORAGE_KEY = "atlas:loading-status";
+const UPDATE_ACK_STORAGE_KEY = "atlas:update-ready-ack";
+
+type LoadingScreenPhase =
+  | "startup"
+  | "checking-update"
+  | "update-ready"
+  | "downloading-update"
+  | "installing-update"
+  | "offline-skip";
+
+interface LoadingScreenState {
+  phase: LoadingScreenPhase;
+  message: string;
+  version?: string | null;
+  progressPercent?: number | null;
+  downloadedBytes?: number | null;
+  totalBytes?: number | null;
+  ackRequired?: boolean;
+  ackToken?: string | null;
+  updatedAt: string;
+}
+
+function publishLoadingStatus(state: Omit<LoadingScreenState, "updatedAt">) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const payload: LoadingScreenState = {
+    ...state,
+    updatedAt: new Date().toISOString()
+  };
+  try {
+    window.localStorage.setItem(LOADING_STATUS_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage write failures during startup.
+  }
+}
+
+function publishStartupLoadingStatus(message: string) {
+  publishLoadingStatus({
+    phase: "startup",
+    message,
+    progressPercent: null,
+    downloadedBytes: null,
+    totalBytes: null,
+    version: null,
+    ackRequired: false,
+    ackToken: null
+  });
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function focusLoadingWindowForInput() {
+  await takeWindowFocus({ label: "loading" });
+}
+
+function clearUpdateReadyAcknowledgement() {
+  try {
+    window.localStorage.removeItem(UPDATE_ACK_STORAGE_KEY);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+}
+
+function readUpdateReadyAcknowledgementToken() {
+  try {
+    const raw = window.localStorage.getItem(UPDATE_ACK_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as { token?: unknown };
+    return typeof parsed.token === "string" ? parsed.token : null;
+  } catch {
+    return null;
+  }
+}
+
+async function waitForUpdateReadyAcknowledgement(expectedToken: string) {
+  while (true) {
+    const token = readUpdateReadyAcknowledgementToken();
+    if (token === expectedToken) {
+      return;
+    }
+    await wait(150);
+  }
+}
 
 function onboardingIntentMatches(a: AppSettings["pendingIntent"], b: AppSettings["pendingIntent"]) {
   if (!a && !b) {
@@ -450,30 +542,13 @@ async function persistReadinessWizardState(state: { dismissedAt?: string | null;
 }
 
 function buildDefaultLauncherSettings(): AppSettings {
-  const base = (defaultGameDir.value ?? "").trim().replace(/[\\/]+$/, "");
   return {
     msClientId: null,
     atlasHubUrl: null,
     defaultMemoryMb: 4096,
     defaultJvmArgs: null,
-    instances: [
-      {
-        id: "default",
-        name: "Default",
-        gameDir: base ? `${base}/instances/default` : "",
-        version: null,
-        loader: {
-          kind: "vanilla",
-          loaderVersion: null
-        },
-        javaPath: "",
-        memoryMb: null,
-        jvmArgs: null,
-        source: "local",
-        atlasPack: null
-      }
-    ],
-    selectedInstanceId: "default",
+    instances: [],
+    selectedInstanceId: null,
     themeMode: "system",
     launchReadinessWizard: {
       dismissedAt: null,
@@ -981,14 +1056,83 @@ async function installLauncherUpdate() {
 }
 
 async function runStartupUpdateInstall() {
+  clearUpdateReadyAcknowledgement();
+  publishLoadingStatus({
+    phase: "checking-update",
+    message: "Checking for launcher updates...",
+    progressPercent: null,
+    downloadedBytes: null,
+    totalBytes: null,
+    version: null
+  });
+  if (navigator.onLine === false) {
+    pushLog("Skipped startup update check because launcher is offline.");
+    publishLoadingStatus({
+      phase: "offline-skip",
+      message: "No internet connection. Skipping launcher update check.",
+      progressPercent: null,
+      downloadedBytes: null,
+      totalBytes: null,
+      version: null,
+      ackRequired: false,
+      ackToken: null
+    });
+    return false;
+  }
   const available = await checkForUpdates();
   if (!available) {
+    if (updaterErrorMessage.value) {
+      publishStartupLoadingStatus("Unable to check launcher updates. Continuing startup...");
+    } else {
+      publishStartupLoadingStatus("No launcher update found. Continuing startup...");
+    }
     return false;
   }
+  const targetVersion = updateInfo.value?.version ?? null;
+  const ackToken = crypto.randomUUID();
+  publishLoadingStatus({
+    phase: "update-ready",
+    message: targetVersion
+      ? `Update ${targetVersion} is ready. A system permission prompt may appear after you continue.`
+      : "Update is ready. A system permission prompt may appear after you continue.",
+    progressPercent: null,
+    downloadedBytes: null,
+    totalBytes: null,
+    version: targetVersion,
+    ackRequired: true,
+    ackToken
+  });
+  await focusLoadingWindowForInput();
+  await waitForUpdateReadyAcknowledgement(ackToken);
+  publishLoadingStatus({
+    phase: "downloading-update",
+    message: targetVersion
+      ? `Downloading launcher update ${targetVersion}...`
+      : "Downloading launcher update...",
+    progressPercent: 0,
+    downloadedBytes: 0,
+    totalBytes: updaterTotalBytes.value,
+    version: targetVersion,
+    ackRequired: false,
+    ackToken: null
+  });
   const installed = await installUpdate();
   if (!installed) {
+    publishStartupLoadingStatus("Launcher update did not complete. Continuing startup...");
     return false;
   }
+  publishLoadingStatus({
+    phase: "installing-update",
+    message: targetVersion
+      ? `Update ${targetVersion} installed. Restarting...`
+      : "Update installed. Restarting...",
+    progressPercent: 100,
+    downloadedBytes: updaterTotalBytes.value,
+    totalBytes: updaterTotalBytes.value,
+    version: targetVersion,
+    ackRequired: false,
+    ackToken: null
+  });
   return await restartNow();
 }
 
@@ -1151,43 +1295,51 @@ async function refreshInstanceInstallStates() {
 }
 
 onMounted(async () => {
-  const window = getCurrentWindow();
+  const appWindow = getCurrentWindow();
+  clearUpdateReadyAcknowledgement();
+  publishStartupLoadingStatus("Starting Atlas Launcher...");
   try {
-    await window.setProgressBar({
+    await appWindow.setProgressBar({
       status: ProgressBarStatus.Indeterminate,
       progress: 10
     });
   } catch {
     // Ignore if not running in a Tauri window.
   }
-  await initLaunchEvents({ status, progress, pushLog, upsertTaskFromEvent });
   const restartedForUpdate = await runStartupUpdateInstall();
   if (restartedForUpdate) {
     return;
   }
+  await initLaunchEvents({ status, progress, pushLog, upsertTaskFromEvent });
+  publishStartupLoadingStatus("Restoring sign-in sessions...");
   await restoreSessions();
+  publishStartupLoadingStatus("Loading launcher settings...");
   await loadDefaultGameDir();
   await loadSettings();
+  publishStartupLoadingStatus("Checking account readiness...");
   await refreshLaunchReadiness({ autoOpen: true });
+  publishStartupLoadingStatus("Preparing deep-link handlers...");
   await initDeepLink();
+  publishStartupLoadingStatus("Loading versions and profiles...");
   await loadAvailableVersions();
   await loadInstalledVersions();
   await refreshInstanceInstallStates();
   await loadFabricLoaderVersions();
   await loadNeoForgeLoaderVersions();
   await loadMods();
+  publishStartupLoadingStatus("Syncing Atlas packs...");
   await syncAtlasPacks();
   startHourlyUpdateChecks();
   appBootstrapped.value = true;
   try {
-    const windows = await Window.getAll();
-    const loading = windows.find((entry) => entry.label === "loading");
+    const loading = await Window.getByLabel("loading");
     if (loading) {
       await loading.close();
     }
-    await window.setProgressBar({ status: ProgressBarStatus.None });
-    await window.show();
-    await window.setFocus();
+    globalThis.localStorage.removeItem(LOADING_STATUS_STORAGE_KEY);
+    globalThis.localStorage.removeItem(UPDATE_ACK_STORAGE_KEY);
+    await appWindow.setProgressBar({ status: ProgressBarStatus.None });
+    await takeWindowFocus({ label: "main" });
   } catch {
     // Ignore if not running in a Tauri window.
   }
@@ -1195,7 +1347,86 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopHourlyUpdateChecks();
+  try {
+    window.localStorage.removeItem(LOADING_STATUS_STORAGE_KEY);
+    window.localStorage.removeItem(UPDATE_ACK_STORAGE_KEY);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
 });
+
+watch(
+  () => ({
+    checking: updaterChecking.value,
+    installing: updaterInstalling.value,
+    installComplete: updaterInstallComplete.value,
+    version: updateInfo.value?.version ?? null,
+    progressPercent: updaterProgressPercent.value,
+    downloadedBytes: updaterDownloadedBytes.value,
+    totalBytes: updaterTotalBytes.value
+  }),
+  ({ checking, installing, installComplete, version, progressPercent, downloadedBytes, totalBytes }) => {
+    if (installComplete) {
+      publishLoadingStatus({
+        phase: "installing-update",
+        message: version ? `Update ${version} installed. Restarting...` : "Update installed. Restarting...",
+        version,
+        progressPercent: 100,
+        downloadedBytes: totalBytes,
+        totalBytes,
+        ackRequired: false,
+        ackToken: null
+      });
+      return;
+    }
+    if (checking) {
+      publishLoadingStatus({
+        phase: "checking-update",
+        message: "Checking for launcher updates...",
+        version,
+        progressPercent: null,
+        downloadedBytes: null,
+        totalBytes: null,
+        ackRequired: false,
+        ackToken: null
+      });
+      return;
+    }
+    if (!installing) {
+      return;
+    }
+
+    const hasTotalBytes = typeof totalBytes === "number" && totalBytes > 0;
+    const hasDownloadedBytes = typeof downloadedBytes === "number" && downloadedBytes >= 0;
+    const downloadFinished = hasTotalBytes && hasDownloadedBytes && downloadedBytes >= totalBytes;
+
+    if (downloadFinished) {
+      publishLoadingStatus({
+        phase: "installing-update",
+        message: version ? `Installing launcher update ${version}...` : "Installing launcher update...",
+        version,
+        progressPercent: 100,
+        downloadedBytes,
+        totalBytes,
+        ackRequired: false,
+        ackToken: null
+      });
+      return;
+    }
+
+    publishLoadingStatus({
+      phase: "downloading-update",
+      message: version ? `Downloading launcher update ${version}...` : "Downloading launcher update...",
+      version,
+      progressPercent: typeof progressPercent === "number" ? progressPercent : null,
+      downloadedBytes: hasDownloadedBytes ? downloadedBytes : null,
+      totalBytes: hasTotalBytes ? totalBytes : null,
+      ackRequired: false,
+      ackToken: null
+    });
+  },
+  { immediate: true }
+);
 
 watch(
   () => incomingOnboardingIntent.value,

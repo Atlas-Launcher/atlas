@@ -23,9 +23,9 @@
       }
 
       .card {
-        width: min(320px, 80vw);
-        padding: 24px 26px;
-        border-radius: 18px;
+        width: min(280px, 72vw);
+        padding: 18px 20px;
+        border-radius: 16px;
         background: rgba(15, 20, 32, 0.78);
         border: 1px solid rgba(120, 140, 170, 0.18);
         box-shadow: 0 12px 30px rgba(3, 7, 14, 0.5);
@@ -33,15 +33,15 @@
       }
 
       h1 {
-        margin: 0 0 8px;
-        font-size: 18px;
+        margin: 0 0 6px;
+        font-size: 15px;
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
 
       p {
-        margin: 0 0 18px;
-        font-size: 14px;
+        margin: 0 0 14px;
+        font-size: 13px;
         color: #9aa4b2;
       }
 
@@ -53,7 +53,7 @@
         position: relative;
       }
 
-      .bar::after {
+      .bar.indeterminate::after {
         content: "";
         position: absolute;
         inset: 0;
@@ -70,6 +70,48 @@
         );
       }
 
+      .fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 0;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(96, 165, 250, 0.6), rgba(96, 165, 250, 0.95));
+        transition: width 120ms linear;
+      }
+
+      .size {
+        margin: 9px 0 0;
+        min-height: 14px;
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        color: #8da2ba;
+      }
+
+      .actions {
+        margin-top: 10px;
+        min-height: 30px;
+        display: flex;
+        justify-content: center;
+      }
+
+      .ack-button {
+        border: 1px solid rgba(96, 165, 250, 0.45);
+        border-radius: 999px;
+        background: linear-gradient(180deg, rgba(96, 165, 250, 0.25), rgba(96, 165, 250, 0.38));
+        color: #e6f0ff;
+        font-family: "Sora", system-ui, sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.03em;
+        padding: 7px 12px;
+        cursor: pointer;
+      }
+
+      .ack-button:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+
       @keyframes progress-stripe-sweep {
         from {
           transform: translateX(-140%);
@@ -84,8 +126,121 @@
   <body>
     <div class="card">
       <h1>Atlas Launcher</h1>
-      <p>Loading your profiles and packs...</p>
-      <div class="bar"></div>
+      <p id="loading-message">Loading your profiles and packs...</p>
+      <div id="loading-bar" class="bar indeterminate">
+        <div id="loading-fill" class="fill"></div>
+      </div>
+      <p id="loading-size" class="size"></p>
+      <div id="loading-actions" class="actions">
+        <button id="ack-button" class="ack-button" type="button" hidden>Continue update</button>
+      </div>
     </div>
+    <script>
+      const LOADING_STATUS_STORAGE_KEY = "atlas:loading-status";
+      const UPDATE_ACK_STORAGE_KEY = "atlas:update-ready-ack";
+      const messageEl = document.getElementById("loading-message");
+      const barEl = document.getElementById("loading-bar");
+      const fillEl = document.getElementById("loading-fill");
+      const sizeEl = document.getElementById("loading-size");
+      const ackButtonEl = document.getElementById("ack-button");
+      let lastState = "";
+      let currentAckToken = null;
+
+      function formatBytes(bytes) {
+        if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) {
+          return null;
+        }
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let value = bytes;
+        let index = 0;
+        while (value >= 1024 && index < units.length - 1) {
+          value /= 1024;
+          index += 1;
+        }
+        const digits = value >= 100 || index === 0 ? 0 : value >= 10 ? 1 : 2;
+        return `${value.toFixed(digits)} ${units[index]}`;
+      }
+
+      function render(state) {
+        const baseMessage = typeof state?.message === "string" && state.message.trim()
+          ? state.message.trim()
+          : "Loading your profiles and packs...";
+        const version = typeof state?.version === "string" && state.version.trim()
+          ? state.version.trim()
+          : "";
+        const message = version && !baseMessage.includes(version)
+          ? `${baseMessage} (v${version})`
+          : baseMessage;
+        messageEl.textContent = message;
+
+        const ackRequired = state?.ackRequired === true;
+        const ackToken = typeof state?.ackToken === "string" && state.ackToken.trim()
+          ? state.ackToken.trim()
+          : null;
+        currentAckToken = ackRequired ? ackToken : null;
+        ackButtonEl.hidden = !ackRequired;
+        ackButtonEl.disabled = !ackRequired || !ackToken;
+        ackButtonEl.textContent = ackRequired
+          ? "Continue update"
+          : "Continue";
+
+        const progressPercent = typeof state?.progressPercent === "number"
+          ? Math.max(0, Math.min(100, state.progressPercent))
+          : null;
+        const determinate = progressPercent !== null;
+        fillEl.style.width = determinate ? `${progressPercent}%` : "0%";
+        barEl.classList.toggle("indeterminate", !determinate);
+
+        const downloaded = typeof state?.downloadedBytes === "number" ? state.downloadedBytes : null;
+        const total = typeof state?.totalBytes === "number" ? state.totalBytes : null;
+        if (downloaded !== null && total !== null && total > 0) {
+          const remaining = Math.max(0, total - downloaded);
+          const remainingText = formatBytes(remaining);
+          const totalText = formatBytes(total);
+          sizeEl.textContent = remainingText && totalText
+            ? `${remainingText} remaining of ${totalText}`
+            : "";
+          return;
+        }
+
+        sizeEl.textContent = "";
+      }
+
+      function readStateFromStorage() {
+        try {
+          const raw = window.localStorage.getItem(LOADING_STATUS_STORAGE_KEY);
+          if (!raw || raw === lastState) {
+            return;
+          }
+          lastState = raw;
+          const parsed = JSON.parse(raw);
+          render(parsed);
+        } catch {
+          // Ignore malformed startup payloads.
+        }
+      }
+
+      window.addEventListener("storage", readStateFromStorage);
+      ackButtonEl.addEventListener("click", () => {
+        if (!currentAckToken) {
+          return;
+        }
+        try {
+          window.localStorage.setItem(
+            UPDATE_ACK_STORAGE_KEY,
+            JSON.stringify({
+              token: currentAckToken,
+              acknowledgedAt: new Date().toISOString()
+            })
+          );
+          ackButtonEl.disabled = true;
+          ackButtonEl.textContent = "Continuing...";
+        } catch {
+          // Ignore storage write failures.
+        }
+      });
+      readStateFromStorage();
+      setInterval(readStateFromStorage, 200);
+    </script>
   </body>
 </html>

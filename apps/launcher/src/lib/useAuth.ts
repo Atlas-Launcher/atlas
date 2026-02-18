@@ -1,8 +1,8 @@
 import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { takeWindowFocus } from "./windowFocus";
 import type {
   AtlasProfile,
   DeviceCodeResponse,
@@ -85,23 +85,10 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
   }
 
   async function focusLauncherWindow() {
-    try {
-      await invoke("focus_main_window");
-      return;
-    } catch (err) {
-      pushLog(`Backend window focus failed, using frontend fallback: ${String(err)}`);
-    }
-
-    try {
-      const window = getCurrentWindow();
-      if (await window.isMinimized()) {
-        await window.unminimize();
-      }
-      await window.show();
-      await window.setFocus();
-    } catch (err) {
-      pushLog(`Failed to focus launcher window: ${String(err)}`);
-    }
+    await takeWindowFocus({
+      label: "main",
+      log: pushLog
+    });
   }
 
   function readStoredLauncherLinkSession(): LauncherLinkSession | null {
