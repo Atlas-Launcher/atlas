@@ -186,7 +186,9 @@ pub(crate) fn build_auth_request(
     })
 }
 
-pub(crate) fn build_loopback_auth_request(client_id: &str) -> Result<LoopbackAuthRequest, AuthError> {
+pub(crate) fn build_loopback_auth_request(
+    client_id: &str,
+) -> Result<LoopbackAuthRequest, AuthError> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")
         .map_err(|err| format!("Failed to reserve loopback redirect port: {err}"))?;
     let port = listener
@@ -210,7 +212,8 @@ pub(crate) async fn wait_for_loopback_callback(
     redirect_uri: &str,
     wait_timeout: Duration,
 ) -> Result<String, AuthError> {
-    let redirect = Url::parse(redirect_uri).map_err(|err| format!("Invalid redirect URI: {err}"))?;
+    let redirect =
+        Url::parse(redirect_uri).map_err(|err| format!("Invalid redirect URI: {err}"))?;
     let host = redirect
         .host_str()
         .ok_or_else(|| "Missing redirect host".to_string())?;
@@ -233,7 +236,9 @@ pub(crate) async fn wait_for_loopback_callback(
         .map_err(|_| "Timed out reading Microsoft authorization callback.".to_string())?
         .map_err(|err| format!("Failed to read Microsoft authorization callback: {err}"))?;
     if size == 0 {
-        return Err("Received empty Microsoft authorization callback.".to_string().into());
+        return Err("Received empty Microsoft authorization callback."
+            .to_string()
+            .into());
     }
 
     let request = String::from_utf8_lossy(&buffer[..size]).to_string();
@@ -255,9 +260,11 @@ pub(crate) async fn wait_for_loopback_callback(
     let callback = Url::parse(&callback_url)
         .map_err(|err| format!("Invalid Microsoft callback URL: {err}"))?;
     if callback.path() != expected_path {
-        return Err("Microsoft callback path did not match expected redirect path."
-            .to_string()
-            .into());
+        return Err(
+            "Microsoft callback path did not match expected redirect path."
+                .to_string()
+                .into(),
+        );
     }
 
     let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n<!doctype html><html><head><meta charset=\"utf-8\" /><title>Atlas Sign-in</title></head><body style=\"font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 2rem; color: #111; background: #fff;\"><h1 style=\"margin:0 0 0.75rem 0; font-size:1.2rem;\">Sign-in complete</h1><p style=\"margin:0; font-size:1rem;\">You can close this window and return to Atlas Launcher.</p></body></html>";

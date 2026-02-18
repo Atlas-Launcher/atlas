@@ -7,7 +7,12 @@ pub fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
     std::process::Command::new(&exe)
         .args(&args)
         .spawn()
-        .map_err(|err| format!("Failed to spawn launcher process from {}: {err}", exe.display()))?;
+        .map_err(|err| {
+            format!(
+                "Failed to spawn launcher process from {}: {err}",
+                exe.display()
+            )
+        })?;
 
     app.exit(0);
     Ok(())

@@ -168,10 +168,10 @@
         const version = typeof state?.version === "string" && state.version.trim()
           ? state.version.trim()
           : "";
-        const message = version && !baseMessage.includes(version)
-          ? `${baseMessage} (v${version})`
-          : baseMessage;
-        messageEl.textContent = message;
+        messageEl.textContent =
+          version && !baseMessage.includes(version)
+            ? `${baseMessage} (v${version})`
+            : baseMessage;
 
         const ackRequired = state?.ackRequired === true;
         const ackToken = typeof state?.ackToken === "string" && state.ackToken.trim()

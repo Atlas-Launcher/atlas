@@ -439,7 +439,9 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
         microsoftDeviceCode.value = nextDeviceCode;
         const url = resolveVerificationUrl(nextDeviceCode);
         if (!url) {
-          throw new Error("Microsoft device code response missing verification URL.");
+          setStatus("Login start failed: Microsoft device code response missing verification URL.");
+          authInFlight.value = false;
+          return null;
         }
         if (!hasVerificationUriComplete(nextDeviceCode) && nextDeviceCode.user_code?.trim()) {
           try {
@@ -482,7 +484,9 @@ export function useAuth({ setStatus, pushLog, run, onUnhandledDeepLink }: AuthDe
         atlasDeviceCode.value = nextDeviceCode;
         const url = resolveVerificationUrl(nextDeviceCode);
         if (!url) {
-          throw new Error("Atlas device code response missing verification URL.");
+          setStatus("Atlas login start failed: Atlas device code response missing verification URL.");
+          atlasAuthInFlight.value = false;
+          return null;
         }
         await openUrl(url);
         setStatus("Waiting for Atlas sign-in approval in your browser.");

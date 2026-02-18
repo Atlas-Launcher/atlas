@@ -1065,7 +1065,7 @@ async function runStartupUpdateInstall() {
     totalBytes: null,
     version: null
   });
-  if (navigator.onLine === false) {
+  if (!navigator.onLine) {
     pushLog("Skipped startup update check because launcher is offline.");
     publishLoadingStatus({
       phase: "offline-skip",
@@ -1396,9 +1396,11 @@ watch(
       return;
     }
 
-    const hasTotalBytes = typeof totalBytes === "number" && totalBytes > 0;
-    const hasDownloadedBytes = typeof downloadedBytes === "number" && downloadedBytes >= 0;
-    const downloadFinished = hasTotalBytes && hasDownloadedBytes && downloadedBytes >= totalBytes;
+    const safeTotalBytes = Math.max(0, totalBytes ?? 0);
+    const safeDownloadedBytes = Math.max(0, downloadedBytes ?? 0);
+    const hasTotalBytes = safeTotalBytes > 0;
+    const hasDownloadedBytes = safeDownloadedBytes >= 0;
+    const downloadFinished = hasTotalBytes && hasDownloadedBytes && safeDownloadedBytes >= safeTotalBytes;
 
     if (downloadFinished) {
       publishLoadingStatus({
@@ -1406,8 +1408,8 @@ watch(
         message: version ? `Installing launcher update ${version}...` : "Installing launcher update...",
         version,
         progressPercent: 100,
-        downloadedBytes,
-        totalBytes,
+        downloadedBytes: safeDownloadedBytes,
+        totalBytes: safeTotalBytes,
         ackRequired: false,
         ackToken: null
       });
@@ -1418,9 +1420,9 @@ watch(
       phase: "downloading-update",
       message: version ? `Downloading launcher update ${version}...` : "Downloading launcher update...",
       version,
-      progressPercent: typeof progressPercent === "number" ? progressPercent : null,
-      downloadedBytes: hasDownloadedBytes ? downloadedBytes : null,
-      totalBytes: hasTotalBytes ? totalBytes : null,
+      progressPercent,
+      downloadedBytes: hasDownloadedBytes ? safeDownloadedBytes : null,
+      totalBytes: hasTotalBytes ? safeTotalBytes : null,
       ackRequired: false,
       ackToken: null
     });
@@ -1601,13 +1603,6 @@ watch(
       firstLaunchCompletedAt: new Date(value).toISOString(),
       firstLaunchNoticeDismissedAt: null
     });
-  }
-);
-
-watch(
-  () => tasks.value.length,
-  (count, previousCount) => {
-    // Manual control only: removed auto-open logic
   }
 );
 

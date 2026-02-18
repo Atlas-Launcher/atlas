@@ -1,9 +1,9 @@
+use crate::telemetry;
 use atlas_client::device_code::{
     hub_device_code_endpoint, hub_device_token_endpoint, parse_device_token_poll_body,
     DeviceCodeRequest, DeviceTokenPollStatus, DeviceTokenRequest, StandardDeviceTokenResponse,
 };
 use atlas_client::oauth as client_oauth;
-use crate::telemetry;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
@@ -122,21 +122,21 @@ pub(crate) async fn poll_device_token(
                 ));
                 return Err("Atlas device code expired. Start sign-in again."
                     .to_string()
-                    .into())
+                    .into());
             }
             DeviceTokenPollStatus::AccessDenied => {
                 telemetry::warn(format!(
                     "Atlas device token polling access_denied after {} attempts.",
                     attempts
                 ));
-                return Err("Atlas device code authorization denied.".to_string().into())
+                return Err("Atlas device code authorization denied.".to_string().into());
             }
             DeviceTokenPollStatus::Fatal(message) => {
                 telemetry::error(format!(
                     "Atlas device token polling fatal error after {} attempts: {}",
                     attempts, message
                 ));
-                return Err(format!("Atlas sign-in failed: {message}").into())
+                return Err(format!("Atlas sign-in failed: {message}").into());
             }
         }
     }
