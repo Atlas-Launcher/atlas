@@ -3,10 +3,15 @@ import { and, desc, eq, ilike } from "drizzle-orm";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { accounts, packMembers, packs } from "@/lib/db/schema";
+import { packMembers, packs } from "@/lib/db/schema";
 import { hasRole } from "@/lib/auth/roles";
 import { createPackWithDefaults } from "@/lib/packs/create-pack";
 import type { GithubContentFile } from "@/lib/github/repo-config";
+import {
+  getInstallationTokenForOwner,
+  GitHubAppNotConfiguredError,
+  GitHubAppNotInstalledError,
+} from "@/lib/github/app";
 
 type PackListItem = {
   id: string;
@@ -153,7 +158,6 @@ export async function POST(request: Request) {
   // If importing a repo, validate it has atlas.toml and configure it
   let existingAtlasToml: GithubContentFile | null = null;
   let parsed: { owner: string; repo: string } | null = null;
-  let account: { accessToken: string | null } | null = null;
   let githubAccessToken: string | null = null;
 
   if (repoUrl) {
@@ -181,43 +185,38 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get the user's GitHub account
-    [account] = await db
-      .select({ accessToken: accounts.accessToken })
-      .from(accounts)
-      .where(
-        and(eq(accounts.userId, session.user.id), eq(accounts.providerId, "github"))
-      )
-      .orderBy(desc(accounts.updatedAt))
-      .limit(1);
-
-    if (!account?.accessToken) {
-      return NextResponse.json(
-        { error: "No GitHub account linked." },
-        { status: 404 }
-      );
-    }
-    githubAccessToken = account.accessToken;
-
     try {
-      const userResponse = await fetch("https://api.github.com/user", {
-        headers: {
-          Authorization: `Bearer ${githubAccessToken}`,
-        },
-      });
-
-      if (!userResponse.ok) {
+      githubAccessToken = await getInstallationTokenForOwner(parsed.owner);
+    } catch (error) {
+      if (error instanceof GitHubAppNotInstalledError) {
+        const appSlug =
+          process.env.GITHUB_APP_SLUG ||
+          process.env.NEXT_PUBLIC_GITHUB_APP_SLUG ||
+          "atlas-launcher";
         return NextResponse.json(
-          { error: "Failed to get GitHub user info." },
+          {
+            error: `The Atlas Launcher GitHub App is not installed on '${parsed.owner}'.`,
+            code: "GITHUB_APP_NOT_INSTALLED",
+            installUrl: `https://github.com/apps/${appSlug}/installations/new`,
+          },
+          { status: 403 }
+        );
+      }
+
+      if (error instanceof GitHubAppNotConfiguredError) {
+        return NextResponse.json(
+          {
+            error:
+              "GitHub App is not configured on this server. Please contact the administrator.",
+            code: "GITHUB_APP_NOT_CONFIGURED",
+          },
           { status: 500 }
         );
       }
 
-      await userResponse.json();
-    } catch {
       return NextResponse.json(
-        { error: "Failed to get GitHub user info." },
-        { status: 500 }
+        { error: "Unable to access GitHub App installation for this owner." },
+        { status: 502 }
       );
     }
 

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, ilike } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 
 import { auth } from "@/auth";
 import { hasRole } from "@/lib/auth/roles";
 import { db } from "@/lib/db";
-import { accounts, packs } from "@/lib/db/schema";
+import { packs } from "@/lib/db/schema";
 import { createPackWithDefaults } from "@/lib/packs/create-pack";
 import {
   configureRepoForAtlas,
@@ -12,14 +12,11 @@ import {
   type GithubContentFile,
 } from "@/lib/github/repo-config";
 import {
-  getInstallationTokenForUser,
+  getInstallationTokenForOwner,
+  listInstallationRepos,
   GitHubAppNotInstalledError,
   GitHubAppNotConfiguredError,
 } from "@/lib/github/app";
-
-type GithubOwner = {
-  login: string;
-};
 
 type GithubRepo = {
   name: string;
@@ -149,72 +146,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Get the user's GitHub username from their linked account
-  const [account] = await db
-    .select()
-    .from(accounts)
-    .where(and(eq(accounts.userId, session.user.id), eq(accounts.providerId, "github")))
-    .orderBy(desc(accounts.updatedAt))
-    .limit(1);
-
-  if (!account?.accountId) {
-    return NextResponse.json(
-      {
-        error: "No GitHub account linked.",
-        code: "GITHUB_NOT_LINKED",
-      },
-      { status: 404 }
-    );
-  }
-
   const { searchParams } = new URL(request.url);
+  const owner = searchParams.get("owner")?.trim();
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const perPage = parseInt(searchParams.get("per_page") ?? "10", 10);
   const search = searchParams.get("search")?.trim();
 
-  // Import the GitHub App utilities
-  const { listInstallationRepos } = await import("@/lib/github/app");
+  if (!owner) {
+    return NextResponse.json(
+      { error: "Owner is required.", code: "OWNER_REQUIRED" },
+      { status: 400 }
+    );
+  }
 
   try {
-    // Get the user's GitHub username first
-    // We need to fetch it since we only store the accountId (numeric ID)
-    const userToken = account.accessToken;
-    let githubUsername: string | null = null;
-
-    if (userToken) {
-      try {
-        const userInfo = await githubRequest<GithubOwner>(
-          userToken,
-          "https://api.github.com/user"
-        );
-        githubUsername = userInfo.login;
-      } catch {
-        // Token might be expired, we'll try to look up by ID below
-      }
-    }
-
-    // If we couldn't get the username from the token, we need to look it up
-    // Using the GitHub API's user lookup by ID
-    if (!githubUsername) {
-      const GITHUB_APP_ID = process.env.GITHUB_APP_ID;
-      const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY;
-
-      if (!GITHUB_APP_ID || !GITHUB_APP_PRIVATE_KEY) {
-        throw new GitHubAppNotConfiguredError();
-      }
-
-      // We'll need to get username from another source or throw an error
-      return NextResponse.json(
-        {
-          error: "Unable to determine your GitHub username. Please re-link your GitHub account.",
-          code: "GITHUB_USERNAME_UNKNOWN",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Get an installation access token for this user
-    const installationToken = await getInstallationTokenForUser(githubUsername);
+    const installationToken = await getInstallationTokenForOwner(owner);
 
     // List repositories from the installation
     const result = await listInstallationRepos(installationToken, page, perPage);
@@ -242,7 +188,7 @@ export async function GET(request: Request) {
       const appSlug = process.env.GITHUB_APP_SLUG || process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || "atlas-launcher";
       return NextResponse.json(
         {
-          error: "The Atlas Launcher GitHub App is not installed on your account. Install it to access your repositories.",
+          error: `The Atlas Launcher GitHub App is not installed on '${owner}'. Install it to access repositories for this owner.`,
           code: "GITHUB_APP_NOT_INSTALLED",
           installUrl: `https://github.com/apps/${appSlug}/installations/new`,
         },
@@ -280,18 +226,6 @@ export async function POST(request: Request) {
 
   if (!hasRole(session, ["admin", "creator"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  // Get the user's GitHub Linked Account
-  const [account] = await db
-    .select()
-    .from(accounts)
-    .where(and(eq(accounts.userId, session.user.id), eq(accounts.providerId, "github")))
-    .orderBy(desc(accounts.updatedAt))
-    .limit(1);
-
-  if (!account?.accessToken) {
-    return NextResponse.json({ error: "No GitHub account linked." }, { status: 404 });
   }
 
   try {
@@ -333,37 +267,9 @@ export async function POST(request: Request) {
     );
   }
 
-  // Verify access to the requested owner using user token
-  try {
-    const user = await githubRequest<GithubOwner>(account.accessToken, "https://api.github.com/user");
-    const githubUsername = user.login;
-
-    if (owner.toLowerCase() !== githubUsername.toLowerCase()) {
-      const orgs = await githubRequest<GithubOwner[]>(account.accessToken, "https://api.github.com/user/orgs?per_page=100");
-      const isMember = orgs.some((org) => org.login.toLowerCase() === owner.toLowerCase());
-      if (!isMember) {
-        return NextResponse.json(
-          { error: "Selected owner is not available to this account." },
-          { status: 400 }
-        );
-      }
-    }
-  } catch {
-    return NextResponse.json(
-      { error: "Unable to verify GitHub account. Please re-link your GitHub account." },
-      { status: 400 }
-    );
-  }
-
-  // Get installation token for the OWNER
-  // For now we use getInstallationTokenForUser(owner). 
-  // If owner is an org, this might need adjustment if getInstallationTokenForUser relies on user-specific endpoints.
-  // But since we successfully use it for listing repos (which lists user and org repos), it might be robust enough
-  // IF the user has installed the app on the org.
-
   let installationToken: string;
   try {
-    installationToken = await getInstallationTokenForUser(owner);
+    installationToken = await getInstallationTokenForOwner(owner);
   } catch (error) {
     if (error instanceof GitHubAppNotInstalledError) {
       const appSlug = process.env.GITHUB_APP_SLUG || process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || "atlas-launcher";
@@ -376,7 +282,20 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
-    throw error;
+    if (error instanceof GitHubAppNotConfiguredError) {
+      return NextResponse.json(
+        {
+          error: "GitHub App is not configured on this server. Please contact the administrator.",
+          code: "GITHUB_APP_NOT_CONFIGURED",
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Unable to access GitHub App installation for this owner." },
+      { status: 502 }
+    );
   }
 
   let createdPackId: string | null = null;

@@ -180,6 +180,9 @@ When packs are imported/created with GitHub repo setup, Hub configures repositor
 Implementation notes:
 - GitHub Contents API paths must be encoded per path segment (not as a single `encodeURIComponent` call on the full path), otherwise nested paths like `.github/workflows/atlas-build.yml` can fail.
 - Writing workflow files requires GitHub App installation permissions that include workflow write access.
+- Repository import and template creation use GitHub App installation tokens that
+  are resolved by the selected owner login (user or organization), not by user
+  OAuth access tokens.
 - Repository onboarding now always provisions `ATLAS_HUB_URL` and
   `ATLAS_PACK_DEPLOY_TOKEN` GitHub Actions secrets, including fallback paths
   where `atlas.toml` is missing from a template repository.

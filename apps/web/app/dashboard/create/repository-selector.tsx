@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Search, ChevronLeft, ChevronRight, Loader2, Book } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ type GithubRepo = {
 type RepositorySelectorProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    owner: string;
     onSelect: (repo: GithubRepo) => void;
     githubAppSlug?: string;
 };
@@ -48,6 +49,7 @@ type RepositorySelectorProps = {
 export function RepositorySelector({
     open,
     onOpenChange,
+    owner,
     onSelect,
     githubAppSlug,
 }: RepositorySelectorProps) {
@@ -59,20 +61,23 @@ export function RepositorySelector({
     const [search, setSearch] = useState("");
     const debouncedSearch = useDebounce(search, 500);
 
-    useEffect(() => {
-        if (open) {
-            loadRepos(1, debouncedSearch);
-        }
-    }, [open, debouncedSearch]);
-
     const [installUrl, setInstallUrl] = useState<string | null>(null);
 
-    const loadRepos = async (pageToLoad: number, searchQuery: string) => {
+    const loadRepos = useCallback(async (pageToLoad: number, searchQuery: string) => {
+        if (!owner.trim()) {
+            setRepos([]);
+            setHasNextPage(false);
+            setPage(1);
+            setError("Enter an owner before loading repositories.");
+            return;
+        }
+
         setLoading(true);
         setError(null);
         setInstallUrl(null);
         try {
             const params = new URLSearchParams({
+                owner: owner.trim(),
                 page: pageToLoad.toString(),
                 per_page: "6", // 6 items per page fits nicely
             });
@@ -100,7 +105,13 @@ export function RepositorySelector({
         } finally {
             setLoading(false);
         }
-    };
+    }, [owner]);
+
+    useEffect(() => {
+        if (open) {
+            loadRepos(1, debouncedSearch);
+        }
+    }, [open, debouncedSearch, loadRepos]);
 
     const handleNextPage = () => {
         if (hasNextPage && !loading) {
@@ -122,6 +133,9 @@ export function RepositorySelector({
                 </DialogHeader>
 
                 <div className="space-y-4">
+                    <p className="text-xs text-[var(--atlas-ink-muted)]">
+                        Owner: <span className="font-medium">{owner || "not set"}</span>
+                    </p>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--atlas-ink-muted)]" />
                         <Input
@@ -129,6 +143,7 @@ export function RepositorySelector({
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="pl-9"
+                            disabled={!owner.trim()}
                         />
                     </div>
 

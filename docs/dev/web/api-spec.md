@@ -94,9 +94,9 @@ Use your Hub deployment URL (Vercel).
 | `POST` | `/api/v1/storage/presign` | Presign storage operation (clients upload/download directly to provider URLs; upload response may include `uploadHeaders`; `download` supports optional `provider` when key is unencoded). Distribution-release upload keys under `artifacts/{launcher|cli|runner|runnerd}/...` require admin session or `x-atlas-app-deploy-token`. |
 | `PUT` | `/api/v1/storage/upload` | Disabled (410): upload proxy traffic is not supported. |
 | `GET` | `/api/v1/storage/download` | Disabled (410): download proxy traffic is not supported. |
-| `GET` | `/api/v1/github/owners` | GitHub owners/orgs for linked user. |
-| `GET` | `/api/v1/github/repos` | List GitHub repos. |
-| `POST` | `/api/v1/github/repos` | Configure/import repo. |
+| `GET` | `/api/v1/github/owners` | GitHub owners/orgs (legacy linked-account endpoint). |
+| `GET` | `/api/v1/github/repos` | List GitHub repos for `owner` using GitHub App installation credentials. |
+| `POST` | `/api/v1/github/repos` | Create repo from template and onboard Atlas using GitHub App installation credentials. |
 | `GET` | `/api/v1/curseforge/mods` | Search CurseForge mods. |
 | `GET` | `/api/v1/curseforge/mods/{modId}/files` | List mod files. |
 | `GET` | `/api/v1/curseforge/mods/{modId}/files/{fileId}/download-url` | Resolve file download URL. |

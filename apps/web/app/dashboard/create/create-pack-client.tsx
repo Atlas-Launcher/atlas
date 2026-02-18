@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Github } from "lucide-react";
@@ -24,12 +24,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-  InputGroupText,
-} from "@/components/ui/input-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RepositorySelector } from "./repository-selector";
 
@@ -46,12 +40,6 @@ function deriveNameFromRepoUrl(value: string) {
   return repo.replace(/[-_]+/g, " ").trim();
 }
 
-type GithubOwner = {
-  login: string;
-  type: "user" | "org";
-  avatarUrl?: string | null;
-};
-
 const requireValue =
   (label: string) =>
     ({ value }: { value: string }) =>
@@ -64,10 +52,8 @@ export default function CreatePackClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("import");
-  const [githubOwners, setGithubOwners] = useState<GithubOwner[]>([]);
-  const [githubLoading, setGithubLoading] = useState(false);
-  const [githubError, setGithubError] = useState<string | null>(null);
   const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
 
   const createPack = async (payload: {
@@ -101,12 +87,14 @@ export default function CreatePackClient() {
     setLoading(true);
     setError(null);
     setErrorCode(null);
+    setInstallUrl(null);
     const result = await createPack(payload);
     setLoading(false);
 
     if (!result.ok) {
       setError(result.data?.error ?? "Unable to create pack.");
       setErrorCode(result.data?.code ?? null);
+      setInstallUrl(result.data?.installUrl ?? null);
       return;
     }
 
@@ -115,6 +103,7 @@ export default function CreatePackClient() {
 
   const importForm = useForm({
     defaultValues: {
+      owner: "",
       repoUrl: "",
       name: "",
       slug: "",
@@ -138,6 +127,7 @@ export default function CreatePackClient() {
     onSubmit: async ({ value }) => {
       setLoading(true);
       setError(null);
+      setInstallUrl(null);
 
       const response = await fetch("/api/v1/github/repos", {
         method: "POST",
@@ -153,6 +143,8 @@ export default function CreatePackClient() {
 
       if (!response.ok) {
         setError(data?.error ?? "Unable to create GitHub repository.");
+        setErrorCode(data?.code ?? null);
+        setInstallUrl(data?.installUrl ?? null);
         setLoading(false);
         return;
       }
@@ -160,51 +152,6 @@ export default function CreatePackClient() {
       router.push(`/dashboard/${data.pack.id}`);
     },
   });
-
-  useEffect(() => {
-    let mounted = true;
-    const loadOwners = async () => {
-      setGithubLoading(true);
-      setGithubError(null);
-      const response = await fetch("/api/v1/github/owners");
-      const data = await response.json();
-      if (!mounted) {
-        return;
-      }
-      setGithubLoading(false);
-      if (!response.ok) {
-        setGithubError(data?.error ?? "Unable to load GitHub owners.");
-        return;
-      }
-      setGithubOwners(data.owners ?? []);
-    };
-
-    loadOwners().catch(() => {
-      if (mounted) {
-        setGithubLoading(false);
-        setGithubError("Unable to load GitHub owners.");
-      }
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (githubOwners.length && !newRepoForm.state.values.owner) {
-      newRepoForm.setFieldValue("owner", githubOwners[0].login);
-    }
-  }, [githubOwners, newRepoForm]);
-
-  const ownerOptions = useMemo(
-    () =>
-      githubOwners.map((owner) => ({
-        label: `${owner.login}${owner.type === "org" ? " (org)" : ""}`,
-        value: owner.login,
-      })),
-    [githubOwners]
-  );
 
   return (
     <div className="space-y-8">
@@ -239,6 +186,17 @@ export default function CreatePackClient() {
               Create a New Repository Instead
             </Button>
           )}
+          {installUrl ? (
+            <a href={installUrl} target="_blank" rel="noopener noreferrer">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs bg-white/50 hover:bg-white/80 border-red-200 text-red-700 hover:text-red-800"
+              >
+                Install GitHub App
+              </Button>
+            </a>
+          ) : null}
         </div>
       ) : null}
 
@@ -271,6 +229,32 @@ export default function CreatePackClient() {
                 className="space-y-5"
               >
                 <importForm.Field
+                  name="owner"
+                  validators={{ onChange: requireValue("Owner") }}
+                >
+                  {(field) => (
+                    <FormField field={field}>
+                      <FormItem>
+                        <FormLabel>Owner</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="your-user-or-org"
+                            value={field.state.value}
+                            onChange={(event) => field.handleChange(event.target.value)}
+                            onBlur={field.handleBlur}
+                            disabled={loading}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Enter the GitHub user or organization that owns the repository.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    </FormField>
+                  )}
+                </importForm.Field>
+
+                <importForm.Field
                   name="repoUrl"
                   validators={{ onChange: requireValue("Repository URL") }}
                 >
@@ -286,13 +270,26 @@ export default function CreatePackClient() {
                               readOnly
                               placeholder="Select a repository"
                               className="pl-9 cursor-pointer"
-                              onClick={() => setRepoSelectorOpen(true)}
+                              onClick={() => {
+                                if (importForm.state.values.owner.trim()) {
+                                  setRepoSelectorOpen(true);
+                                }
+                              }}
                             />
                           </div>
                           <Button
                             type="button"
                             variant="secondary"
-                            onClick={() => setRepoSelectorOpen(true)}
+                            onClick={() => {
+                              if (!importForm.state.values.owner.trim()) {
+                                setError("Owner is required before selecting a repository.");
+                                setErrorCode("OWNER_REQUIRED");
+                                return;
+                              }
+                              setError(null);
+                              setErrorCode(null);
+                              setRepoSelectorOpen(true);
+                            }}
                           >
                             Choose
                           </Button>
@@ -361,46 +358,6 @@ export default function CreatePackClient() {
             Create a new GitHub repository with an Atlas-ready starting setup.
           </p>
 
-          {githubError ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-              <div className="flex flex-col space-y-2">
-                <p>{githubError}</p>
-                <div>
-                  <a
-                    href={`https://github.com/apps/${GITHUB_APP_SLUG}/installations/new`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Button variant="outline" size="sm" className="h-8 text-[10px]">
-                      Install GitHub App
-                    </Button>
-                  </a>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {githubOwners.length === 0 && !githubLoading && !githubError ? (
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700">
-              <div className="flex flex-col space-y-2">
-                <p>
-                  Atlas is not installed on any GitHub account you can access yet. Install the app to create or import repositories.
-                </p>
-                <div>
-                  <a
-                    href={`https://github.com/apps/${GITHUB_APP_SLUG}/installations/new`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Button variant="outline" size="sm" className="h-8 text-[10px]">
-                      Install Atlas GitHub app
-                    </Button>
-                  </a>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
           <Card>
             <CardHeader>
               <CardTitle>Repository details</CardTitle>
@@ -423,27 +380,16 @@ export default function CreatePackClient() {
                       <FormItem>
                         <FormLabel>Owner</FormLabel>
                         <FormControl>
-                          <select
+                          <Input
                             value={field.state.value}
                             onChange={(event) => field.handleChange(event.target.value)}
                             onBlur={field.handleBlur}
-                            disabled={loading || githubLoading || ownerOptions.length === 0}
-                            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {ownerOptions.length === 0 ? (
-                              <option value="">No linked GitHub accounts</option>
-                            ) : null}
-                            {ownerOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
+                            placeholder="your-user-or-org"
+                            disabled={loading}
+                          />
                         </FormControl>
                         <FormDescription>
-                          {githubLoading
-                            ? "Loading GitHub owners..."
-                            : "Choose from the GitHub accounts linked to your profile."}
+                          Enter the GitHub user or organization where Atlas App is installed.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -517,7 +463,7 @@ export default function CreatePackClient() {
 
                 <Button
                   type="submit"
-                  disabled={loading || githubLoading || ownerOptions.length === 0}
+                  disabled={loading}
                 >
                   Create repository
                 </Button>
@@ -530,7 +476,11 @@ export default function CreatePackClient() {
       <RepositorySelector
         open={repoSelectorOpen}
         onOpenChange={setRepoSelectorOpen}
+        owner={importForm.state.values.owner}
         onSelect={(repo) => {
+          if (repo.owner?.login) {
+            importForm.setFieldValue("owner", repo.owner.login);
+          }
           importForm.setFieldValue("repoUrl", repo.html_url);
           if (!importForm.state.values.name) {
             importForm.setFieldValue("name", deriveNameFromRepoUrl(repo.html_url));
