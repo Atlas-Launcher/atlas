@@ -26,6 +26,13 @@ See:
 - `api-spec.md`
 - `openapi.yaml`
 
+## Launcher link UUID canonicalization
+
+`POST /api/v1/launcher/link-sessions/complete` now canonicalizes Minecraft UUID
+input before uniqueness checks and persistence. The endpoint accepts UUIDs in
+hyphenated, braced, and `urn:uuid:` forms, stores canonical lowercase 32-hex
+UUIDs, and rejects malformed identity payloads.
+
 ## Runner service tokens in Hub UI
 
 Pack creators and admins can now manage runner service tokens directly in the

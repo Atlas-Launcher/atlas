@@ -79,6 +79,9 @@ Key backend modules:
     (`get_launch_readiness` + `accountsLinked`) as the source of truth. Local
     Mojang UUID comparison remains only as a startup fallback before readiness
     has loaded.
+  - Account-link UUID validation now canonicalizes Mojang UUID values before
+    comparison (supports hyphenated, braced, and `urn:uuid:` forms) and
+    rejects malformed non-32-hex values.
 - Instance detail view keeps setup focused:
   - `Setup` tab is game setup only.
   - `Profile` tab contains profile/runtime override settings.
