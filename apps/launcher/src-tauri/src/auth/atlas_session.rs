@@ -93,7 +93,18 @@ async fn refresh_atlas_session(session: &AtlasSession) -> Result<AtlasSession, A
 }
 
 fn normalize_mojang_uuid(value: Option<String>) -> Option<String> {
-    value.map(|raw| raw.trim().to_ascii_lowercase().replace('-', ""))
+    let raw = value?;
+    let lower = raw.trim().to_ascii_lowercase();
+    let candidate = lower.strip_prefix("urn:uuid:").unwrap_or(&lower);
+    let hex = candidate
+        .chars()
+        .filter(|ch| ch.is_ascii_hexdigit())
+        .collect::<String>();
+    if hex.len() == 32 {
+        Some(hex)
+    } else {
+        None
+    }
 }
 
 fn unix_timestamp() -> u64 {

@@ -85,7 +85,8 @@ pub fn build_launch_readiness(input: ReadinessContext) -> LaunchReadinessReport 
     // not block or report missing Java before users attempt launch.
     let _detected_java_ready = resolve_java_ready(&input.settings, input.game_dir.as_deref());
     let java_ready = true;
-    let ready_to_launch = atlas_logged_in && microsoft_logged_in && accounts_linked && files_installed;
+    let ready_to_launch =
+        atlas_logged_in && microsoft_logged_in && accounts_linked && files_installed;
     let checklist = vec![
         ReadinessItem {
             key: "atlasLogin".to_string(),
@@ -514,11 +515,17 @@ fn resolve_accounts_linked(atlas_uuid: Option<&str>, launcher_uuid: Option<&str>
 }
 
 fn normalize_uuid(value: Option<&str>) -> String {
-    value
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase()
-        .replace('-', "")
+    let lower = value.unwrap_or("").trim().to_ascii_lowercase();
+    let candidate = lower.strip_prefix("urn:uuid:").unwrap_or(&lower);
+    let hex = candidate
+        .chars()
+        .filter(|ch| ch.is_ascii_hexdigit())
+        .collect::<String>();
+    if hex.len() == 32 {
+        hex
+    } else {
+        String::new()
+    }
 }
 
 fn resolve_files_installed(game_dir: &str) -> bool {

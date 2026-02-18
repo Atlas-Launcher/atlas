@@ -66,7 +66,10 @@ const microsoftReadyState = computed(
 );
 
 function normalizeUuid(value?: string | null) {
-  return (value ?? "").trim().toLowerCase().replace(/-/g, "");
+  const lower = (value ?? "").trim().toLowerCase();
+  const candidate = lower.startsWith("urn:uuid:") ? lower.slice("urn:uuid:".length) : lower;
+  const hex = candidate.replace(/[^0-9a-f]/g, "");
+  return hex.length === 32 ? hex : "";
 }
 
 const localAccountLinkReady = computed(() => {

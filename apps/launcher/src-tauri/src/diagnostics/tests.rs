@@ -103,6 +103,36 @@ fn readiness_detects_linked_accounts_even_with_hyphenated_uuid() {
 }
 
 #[test]
+fn readiness_detects_linked_accounts_with_wrapped_uuid_formats() {
+    let settings = sample_settings();
+    let atlas = atlas_session_with_uuid("urn:uuid:{00112233-4455-6677-8899-AABBCCDDEEFF}");
+    let auth = auth_session_with_uuid("00112233445566778899aabbccddeeff");
+    let report = build_launch_readiness(ReadinessContext {
+        settings,
+        atlas_session: Some(atlas),
+        auth_session: Some(auth),
+        game_dir: Some("/tmp/atlas-missing".to_string()),
+    });
+
+    assert!(report.accounts_linked);
+}
+
+#[test]
+fn readiness_rejects_invalid_uuid_formats() {
+    let settings = sample_settings();
+    let atlas = atlas_session_with_uuid("not-a-valid-uuid");
+    let auth = auth_session_with_uuid("00112233445566778899aabbccddeeff");
+    let report = build_launch_readiness(ReadinessContext {
+        settings,
+        atlas_session: Some(atlas),
+        auth_session: Some(auth),
+        game_dir: Some("/tmp/atlas-missing".to_string()),
+    });
+
+    assert!(!report.accounts_linked);
+}
+
+#[test]
 fn troubleshooter_classifies_memory_and_runtime_metadata_signals() {
     let readiness = LaunchReadinessReport {
         atlas_logged_in: true,

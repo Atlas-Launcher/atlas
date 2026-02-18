@@ -45,7 +45,8 @@ pub async fn begin_deeplink_login(state: tauri::State<'_, AppState>) -> Result<S
         .map_err(|_| "Settings lock poisoned".to_string())?
         .clone();
     let client_id = config::resolve_client_id(&settings);
-    let (pending, auth_url) = auth::begin_deeplink_login(&client_id).map_err(|err| err.to_string())?;
+    let (pending, auth_url) =
+        auth::begin_deeplink_login(&client_id).map_err(|err| err.to_string())?;
     auth::save_pending_auth(&pending).map_err(|err| err.to_string())?;
     let mut guard = state
         .pending_auth
@@ -351,6 +352,11 @@ pub async fn restore_atlas_session(
     let mut session = auth::ensure_fresh_atlas_session(session)
         .await
         .map_err(|err| err.to_string())?;
+    session.profile.mojang_uuid = session
+        .profile
+        .mojang_uuid
+        .as_deref()
+        .and_then(canonicalize_mojang_uuid);
     if session
         .profile
         .mojang_uuid
@@ -375,8 +381,7 @@ pub async fn restore_atlas_session(
             match hub.get_mojang_info(&session.access_token).await {
                 Ok(info) => {
                     if let Some(uuid) = info.uuid {
-                        let normalized = uuid.trim().to_ascii_lowercase().replace('-', "");
-                        session.profile.mojang_uuid = Some(normalized);
+                        session.profile.mojang_uuid = canonicalize_mojang_uuid(&uuid);
                     }
                     if let Some(username) = info.username {
                         session.profile.mojang_username = Some(username);
@@ -503,8 +508,7 @@ pub async fn complete_launcher_link_session(
                 match hub.get_mojang_info(&session.access_token).await {
                     Ok(info) => {
                         if let Some(uuid) = info.uuid.clone() {
-                            let normalized = uuid.trim().to_ascii_lowercase().replace('-', "");
-                            session.profile.mojang_uuid = Some(normalized);
+                            session.profile.mojang_uuid = canonicalize_mojang_uuid(&uuid);
                         }
                         if let Some(username) = info.username.clone() {
                             session.profile.mojang_username = Some(username);
@@ -532,4 +536,18 @@ pub async fn complete_launcher_link_session(
     result.warning = warning;
 
     Ok(result)
+}
+
+fn canonicalize_mojang_uuid(value: &str) -> Option<String> {
+    let lower = value.trim().to_ascii_lowercase();
+    let candidate = lower.strip_prefix("urn:uuid:").unwrap_or(&lower);
+    let hex = candidate
+        .chars()
+        .filter(|ch| ch.is_ascii_hexdigit())
+        .collect::<String>();
+    if hex.len() == 32 {
+        Some(hex)
+    } else {
+        None
+    }
 }

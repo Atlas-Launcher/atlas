@@ -19,8 +19,15 @@ const props = defineProps<{
 }>();
 
 const copyStatus = ref<string | null>(null);
+function normalizeUuid(value?: string | null) {
+  const lower = (value ?? "").trim().toLowerCase();
+  const candidate = lower.startsWith("urn:uuid:") ? lower.slice("urn:uuid:".length) : lower;
+  const hex = candidate.replace(/[^0-9a-f]/g, "");
+  return hex.length === 32 ? hex : "";
+}
+
 const needsLinking = computed(
-  () => !!props.atlasProfile && !props.atlasProfile?.mojang_uuid
+  () => !!props.atlasProfile && !normalizeUuid(props.atlasProfile?.mojang_uuid)
 );
 const linkUrl = computed(() => {
   if (!props.linkSession) return null;

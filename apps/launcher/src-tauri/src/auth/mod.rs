@@ -73,7 +73,7 @@ pub async fn complete_atlas_device_code(
                 email: profile.email,
                 name: profile.name,
                 mojang_username: profile.mojang_username,
-                mojang_uuid: profile.mojang_uuid,
+                mojang_uuid: canonicalize_mojang_uuid(profile.mojang_uuid),
             }
         }
         Err(err) => {
@@ -91,7 +91,7 @@ pub async fn complete_atlas_device_code(
 
             if let Ok(hub) = HubClient::new(hub_url) {
                 if let Ok(info) = hub.get_mojang_info(&token.access_token).await {
-                    fallback.mojang_uuid = info.uuid;
+                    fallback.mojang_uuid = canonicalize_mojang_uuid(info.uuid);
                     fallback.mojang_username = info.username;
                     telemetry::info("Atlas fallback profile enriched with Mojang info.");
                 }
@@ -111,9 +111,7 @@ pub async fn complete_atlas_device_code(
     })
 }
 
-pub fn begin_deeplink_login(
-    client_id: &str,
-) -> Result<(PendingAuth, String), AuthError> {
+pub fn begin_deeplink_login(client_id: &str) -> Result<(PendingAuth, String), AuthError> {
     let request = ms::build_loopback_auth_request(client_id)?;
     let pending = PendingAuth {
         client_id: client_id.to_string(),
@@ -125,7 +123,9 @@ pub fn begin_deeplink_login(
 }
 
 pub async fn complete_loopback_login(pending: PendingAuth) -> Result<AuthSession, AuthError> {
-    let callback_url = ms::wait_for_loopback_callback(&pending.redirect_uri, std::time::Duration::from_secs(300)).await?;
+    let callback_url =
+        ms::wait_for_loopback_callback(&pending.redirect_uri, std::time::Duration::from_secs(300))
+            .await?;
     complete_deeplink_login(&callback_url, pending).await
 }
 
@@ -196,7 +196,7 @@ pub async fn complete_atlas_login(
             email: profile.email,
             name: profile.name,
             mojang_username: profile.mojang_username,
-            mojang_uuid: profile.mojang_uuid,
+            mojang_uuid: canonicalize_mojang_uuid(profile.mojang_uuid),
         },
     })
 }
@@ -215,6 +215,21 @@ fn derive_device_profile_id(access_token: &str) -> String {
     let digest = hasher.finalize();
     let hex = hex::encode(digest);
     format!("atlas-device-{}", &hex[..16])
+}
+
+fn canonicalize_mojang_uuid(value: Option<String>) -> Option<String> {
+    let raw = value?;
+    let lower = raw.trim().to_ascii_lowercase();
+    let candidate = lower.strip_prefix("urn:uuid:").unwrap_or(&lower);
+    let hex = candidate
+        .chars()
+        .filter(|ch| ch.is_ascii_hexdigit())
+        .collect::<String>();
+    if hex.len() == 32 {
+        Some(hex)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
