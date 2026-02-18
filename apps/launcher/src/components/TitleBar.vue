@@ -4,10 +4,12 @@ import { onMounted, onUnmounted, ref, computed } from "vue";
 import { X, Minus, Square, Copy, Check } from "lucide-vue-next";
 import { CloudAlert } from "lucide-vue-next";
 import type { AtlasProfile, Profile } from "@/types/auth";
+import type { LaunchReadinessReport } from "@/types/diagnostics";
 
 const props = defineProps<{
   profile: Profile | null;
   atlasProfile: AtlasProfile | null;
+  readiness?: LaunchReadinessReport | null;
   isSigningIn: boolean;
   // New prop: when true, we can't connect out even though required vars exist
   cannotConnect?: boolean;
@@ -58,13 +60,16 @@ async function closeApp() {
 
 const atlasSignedIn = computed(() => !!props.atlasProfile);
 const mojangSignedIn = computed(() => !!props.profile);
-const hasLinkedMojang = computed(() => !!props.atlasProfile?.mojang_uuid);
+const atlasReadyState = computed(() => props.readiness?.atlasLoggedIn ?? atlasSignedIn.value);
+const microsoftReadyState = computed(
+  () => props.readiness?.microsoftLoggedIn ?? mojangSignedIn.value
+);
 
 function normalizeUuid(value?: string | null) {
   return (value ?? "").trim().toLowerCase().replace(/-/g, "");
 }
 
-const isLaunchReady = computed(() => {
+const localAccountLinkReady = computed(() => {
   if (!props.atlasProfile || !props.profile) {
     return false;
   }
@@ -76,33 +81,25 @@ const isLaunchReady = computed(() => {
   return atlasUuid === launcherUuid;
 });
 
-const needsSetup = computed(() => needsLinking.value || needsLinkCompletion.value);
+const isLaunchReady = computed(() => {
+  if (props.readiness) {
+    return (
+      props.readiness.atlasLoggedIn &&
+      props.readiness.microsoftLoggedIn &&
+      props.readiness.accountsLinked
+    );
+  }
+  return localAccountLinkReady.value;
+});
+
+const needsSetup = computed(() => !isLaunchReady.value);
 
 const statusText = computed(() => {
   if (props.isSigningIn) return "Signing in";
-  if (!atlasSignedIn.value) return "Sign in to Atlas";
-  if (!mojangSignedIn.value) return "Sign in with Microsoft";
+  if (!atlasReadyState.value) return "Sign in to Atlas";
+  if (!microsoftReadyState.value) return "Sign in with Microsoft";
   if (needsSetup.value) return "Finish setup";
-  if (!isLaunchReady.value) return "Finish setup";
   return "Ready";
-});
-
-const needsLinking = computed(() => !!props.atlasProfile && !hasLinkedMojang.value);
-const needsLinkCompletion = computed(() => {
-  if (!props.atlasProfile) {
-    return false;
-  }
-  const normalizeUuid = (value?: string | null) =>
-    (value ?? "").trim().toLowerCase().replace(/-/g, "");
-  const launcherUuid = normalizeUuid(props.profile?.id);
-  const atlasUuid = normalizeUuid(props.atlasProfile.mojang_uuid);
-  if (!launcherUuid) {
-    return false;
-  }
-  if (!atlasUuid) {
-    return true;
-  }
-  return atlasUuid !== launcherUuid;
 });
 
 // Combined no-internet indicator: either backend-reported cannotConnect OR navigator offline

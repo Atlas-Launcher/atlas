@@ -75,6 +75,10 @@ Key backend modules:
   - While sign-in is in progress, readiness actions prevent starting additional
     sign-in attempts, and Atlas/Microsoft blockers expose a "Show code" path
     (copy + open verification page) similar to account-link code reveal.
+  - Frontend launch/account-link gating now uses backend readiness
+    (`get_launch_readiness` + `accountsLinked`) as the source of truth. Local
+    Mojang UUID comparison remains only as a startup fallback before readiness
+    has loaded.
 - Instance detail view keeps setup focused:
   - `Setup` tab is game setup only.
   - `Profile` tab contains profile/runtime override settings.

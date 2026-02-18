@@ -179,7 +179,7 @@ function normalizeUuid(value?: string | null) {
   return (value ?? "").trim().toLowerCase().replace(/-/g, "");
 }
 
-const canLaunch = computed(() => {
+function localAccountsLinked() {
   if (!profile.value || !atlasProfile.value) {
     return false;
   }
@@ -189,9 +189,33 @@ const canLaunch = computed(() => {
     return false;
   }
   return atlasUuid === launcherUuid;
+}
+
+const canLaunch = computed(() => {
+  if (launchReadiness.value) {
+    return (
+      launchReadiness.value.atlasLoggedIn &&
+      launchReadiness.value.microsoftLoggedIn &&
+      launchReadiness.value.accountsLinked
+    );
+  }
+  return localAccountsLinked();
 });
 
 const homeStatusMessage = computed(() => {
+  if (launchReadiness.value) {
+    if (!launchReadiness.value.microsoftLoggedIn) {
+      return "Sign in with Microsoft to continue.";
+    }
+    if (!launchReadiness.value.atlasLoggedIn) {
+      return "Sign in to your Atlas account to finish setup.";
+    }
+    if (!launchReadiness.value.accountsLinked) {
+      return "Finish linking Minecraft in Atlas Hub before launching.";
+    }
+    return null;
+  }
+
   if (!profile.value) {
     return "Sign in with Microsoft to continue.";
   }
@@ -1361,6 +1385,7 @@ watch(
     <TitleBar 
       :profile="profile"
       :atlas-profile="atlasProfile"
+      :readiness="launchReadiness"
       :is-signing-in="isSigningIn"
       :cannot-connect="cannotConnect"
       :readiness-open="accountStatusOpen"
