@@ -58,6 +58,12 @@ Key backend modules:
   - `Account status` modal for sign-in/account-link blockers (opened from the sign-in status button).
   - `Recovery` modal for troubleshooting findings/fixes/support bundle (opened from `?` help and failure prompts).
   - These are independent modal flows instead of tab-switching within one shared modal.
+  - Title bar readiness status renders account identity in a separate pill to
+    the left of the `Ready` badge, with Minecraft player head + Mojang username.
+  - Identity pill styling uses a compact glass treatment with a square 24 px
+    head and white username text, including truncation for long names.
+  - Player head image resolves from the active Microsoft profile UUID and
+    falls back to a bundled local PNG asset when head lookup is unavailable.
   - Account status checklist uses icon/color state for blockers without a separate
     "blocked" badge label.
   - Account status modal hides the `filesInstalled` and `javaReady` checklist rows

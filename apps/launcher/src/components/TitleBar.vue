@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { onMounted, onUnmounted, ref, computed } from "vue";
+import { onMounted, onUnmounted, ref, computed, watch } from "vue";
 import { X, Minus, Square, Copy, Check } from "lucide-vue-next";
 import { CloudAlert } from "lucide-vue-next";
+import playerHeadFallbackPng from "@/assets/player-head-fallback.png";
 import type { AtlasProfile, Profile } from "@/types/auth";
 import type { LaunchReadinessReport } from "@/types/diagnostics";
 
@@ -64,12 +65,18 @@ const atlasReadyState = computed(() => props.readiness?.atlasLoggedIn ?? atlasSi
 const microsoftReadyState = computed(
   () => props.readiness?.microsoftLoggedIn ?? mojangSignedIn.value
 );
+const LOCAL_FALLBACK_HEAD = playerHeadFallbackPng;
 
 function normalizeUuid(value?: string | null) {
   const lower = (value ?? "").trim().toLowerCase();
   const candidate = lower.startsWith("urn:uuid:") ? lower.slice("urn:uuid:".length) : lower;
   const hex = candidate.replace(/[^0-9a-f]/g, "");
   return hex.length === 32 ? hex : "";
+}
+
+function sanitizeDisplayName(value?: string | null) {
+  const trimmed = (value ?? "").trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 const localAccountLinkReady = computed(() => {
@@ -120,6 +127,48 @@ const iconVariant = computed(() => {
   return "x";
 });
 
+const readyMojangUsername = computed(() => {
+  if (!isLaunchReady.value || showNoInternet.value || props.isSigningIn) {
+    return null;
+  }
+
+  const microsoftUsername = sanitizeDisplayName(props.profile?.name);
+  if (microsoftUsername) {
+    return microsoftUsername;
+  }
+
+  return sanitizeDisplayName(props.atlasProfile?.mojang_username);
+});
+
+const readyMojangUuid = computed(() => {
+  if (!isLaunchReady.value || showNoInternet.value || props.isSigningIn) {
+    return "";
+  }
+  return normalizeUuid(props.profile?.id) || normalizeUuid(props.atlasProfile?.mojang_uuid);
+});
+
+const readyMojangHeadUrl = computed(() =>
+  readyMojangUuid.value
+    ? `https://mc-heads.net/avatar/${readyMojangUuid.value}/24`
+    : LOCAL_FALLBACK_HEAD
+);
+
+const readyHeadImageSrc = ref(LOCAL_FALLBACK_HEAD);
+
+watch(
+  () => readyMojangHeadUrl.value,
+  (value) => {
+    readyHeadImageSrc.value = value;
+  },
+  { immediate: true }
+);
+
+function handleReadyHeadError() {
+  if (readyHeadImageSrc.value !== LOCAL_FALLBACK_HEAD) {
+    readyHeadImageSrc.value = LOCAL_FALLBACK_HEAD;
+  }
+}
+
 function handleReadinessClick() {
   // When there's no internet, do nothing on click
   if (showNoInternet.value) return;
@@ -155,6 +204,24 @@ function handleReadinessClick() {
     <!-- Right Section: Launch Readiness & Controls (anchored to right-4 for a consistent gap) -->
     <div class="absolute right-4 top-0 h-11 flex items-center z-[101]" data-tauri-no-drag>
       <div class="flex items-center gap-2.5 h-full pr-0.5">
+        <div
+          v-if="readyMojangUsername"
+          class="glass flex min-w-0 items-center h-8 pl-1.5 pr-3 rounded-2xl border border-foreground/[0.16] bg-background/25 shadow-[0_8px_24px_-16px_rgba(15,23,42,0.8)]"
+          data-tauri-no-drag
+        >
+          <img
+            :src="readyHeadImageSrc"
+            alt="Minecraft player head"
+            class="h-5 w-5 ml-1 rounded-[4px] shrink-0 border border-foreground/25 bg-background/70 object-cover"
+            style="image-rendering: pixelated;"
+            loading="lazy"
+            @error="handleReadyHeadError"
+          />
+          <span class="ml-2 max-w-[140px] truncate text-[11px] font-medium tracking-[0.01em] leading-none text-white/95">
+            {{ readyMojangUsername }}
+          </span>
+        </div>
+
         <button
           class="glass group flex items-center h-8 px-4 rounded-2xl hover:bg-foreground/[0.08] hover:border-foreground/[0.18] transition-all duration-300"
           :class="{ 'bg-amber-500/10 border-amber-500/30': needsSetup, 'opacity-80': props.readinessOpen && !showNoInternet, 'cursor-not-allowed opacity-70': showNoInternet }"
