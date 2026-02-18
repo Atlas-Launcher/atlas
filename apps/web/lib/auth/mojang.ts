@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { accounts, users, packMembers } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { canonicalizeMinecraftUuid } from "@/lib/minecraft/uuid";
 import { recomputeWhitelist } from "@/lib/packs/whitelist";
 
 export async function syncMojangProfile(userId: string) {
@@ -66,11 +67,16 @@ export async function syncMojangProfile(userId: string) {
             throw new Error(`Minecraft profile error: ${profileData.errorMessage}`);
         }
 
+        const minecraftUuid = canonicalizeMinecraftUuid(profileData.id);
+        if (!minecraftUuid) {
+            throw new Error("Minecraft profile returned an invalid UUID");
+        }
+
         // 6. Update User record
         await db.update(users)
             .set({
                 mojangUsername: profileData.name,
-                mojangUuid: profileData.id,
+                mojangUuid: minecraftUuid,
             })
             .where(eq(users.id, userId));
 
@@ -84,7 +90,7 @@ export async function syncMojangProfile(userId: string) {
             await recomputeWhitelist(packId);
         }
 
-        return { username: profileData.name, uuid: profileData.id };
+        return { username: profileData.name, uuid: minecraftUuid };
     } catch (error) {
         console.error("Failed to sync Mojang profile:", error);
         throw error;

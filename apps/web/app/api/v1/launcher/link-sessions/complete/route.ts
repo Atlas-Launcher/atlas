@@ -3,13 +3,14 @@ import { and, eq, ne } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { launcherLinkSessions, users, packMembers } from "@/lib/db/schema";
+import { canonicalizeMinecraftUuid } from "@/lib/minecraft/uuid";
 import { recomputeWhitelist } from "@/lib/packs/whitelist";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const linkSessionId = body?.linkSessionId?.toString().trim();
   const proof = body?.proof?.toString().trim();
-  const minecraftUuid = body?.minecraft?.uuid?.toString().trim().toLowerCase();
+  const minecraftUuid = canonicalizeMinecraftUuid(body?.minecraft?.uuid?.toString());
   const minecraftName = body?.minecraft?.name?.toString().trim();
 
   if (!linkSessionId || !proof) {
@@ -17,7 +18,10 @@ export async function POST(request: Request) {
   }
 
   if (!minecraftUuid || !minecraftName) {
-    return NextResponse.json({ error: "Minecraft identity is required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Valid Minecraft identity is required" },
+      { status: 400 }
+    );
   }
 
   const [linkSession] = await db
