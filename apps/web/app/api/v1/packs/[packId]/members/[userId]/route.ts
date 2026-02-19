@@ -317,6 +317,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Member not found." }, { status: 404 });
   }
 
+  const warnings: string[] = [];
   let inviteAccepted = false;
   let collaboratorRemoved = false;
 
@@ -341,47 +342,47 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     const targetGithub = await getTargetGithubAccount(userId);
-    if (!targetGithub?.accountId) {
-      return NextResponse.json(
-        { error: "User must link a GitHub account before being promoted to creator." },
-        { status: 400 }
+    const targetAccountId = targetGithub?.accountId?.trim() || null;
+    if (!targetAccountId) {
+      warnings.push(
+        "This user does not have a linked GitHub account. You must add them to the GitHub repository manually."
       );
-    }
+    } else {
+      const targetToken = targetGithub?.accessToken?.trim() || null;
+      const isTokenExpired =
+        targetGithub?.accessTokenExpiresAt &&
+        targetGithub.accessTokenExpiresAt <= new Date();
 
-    const targetToken = targetGithub?.accessToken?.trim() || null;
-    const isTokenExpired =
-      targetGithub?.accessTokenExpiresAt &&
-      targetGithub.accessTokenExpiresAt <= new Date();
+      const managerToken = await getPackManagerGithubToken(session.user.id);
+      if (!managerToken) {
+        return NextResponse.json(
+          {
+            error:
+              "Your account must be linked to GitHub to promote creators for this pack repository.",
+          },
+          { status: 400 }
+        );
+      }
 
-    const managerToken = await getPackManagerGithubToken(session.user.id);
-    if (!managerToken) {
-      return NextResponse.json(
-        {
-          error:
-            "Your account must be linked to GitHub to promote creators for this pack repository.",
-        },
-        { status: 400 }
-      );
-    }
-
-    try {
-      const syncResult = await addCreatorToRepository({
-        repoSlug,
-        managerToken,
-        targetToken: isTokenExpired ? null : targetToken,
-        accountId: targetGithub.accountId,
-      });
-      inviteAccepted = syncResult.inviteAccepted;
-    } catch (error) {
-      return NextResponse.json(
-        {
-          error:
-            error instanceof Error
-              ? `Failed to add user to GitHub repository: ${error.message}`
-              : "Failed to add user to GitHub repository.",
-        },
-        { status: 502 }
-      );
+      try {
+        const syncResult = await addCreatorToRepository({
+          repoSlug,
+          managerToken,
+          targetToken: isTokenExpired ? null : targetToken,
+          accountId: targetAccountId,
+        });
+        inviteAccepted = syncResult.inviteAccepted;
+      } catch (error) {
+        return NextResponse.json(
+          {
+            error:
+              error instanceof Error
+                ? `Failed to add user to GitHub repository: ${error.message}`
+                : "Failed to add user to GitHub repository.",
+          },
+          { status: 502 }
+        );
+      }
     }
   }
 
@@ -469,6 +470,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   return NextResponse.json({
     ok: true,
     member: updated,
+    warnings,
     github: {
       inviteAccepted,
       collaboratorRemoved,

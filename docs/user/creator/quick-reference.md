@@ -86,6 +86,14 @@ atlas commit "Describe your change"
 atlas push
 ```
 
+## Manage creator access
+
+Use this guidance when you promote pack members in Atlas Hub.
+
+- You can promote a member to **Creator** even if they have not linked GitHub.
+- If that member has no linked GitHub account, Atlas Hub shows a warning.
+- After this warning, add that member to the pack repository in GitHub manually.
+
 ## Release verbs
 
 These definitions keep command intent consistent across teams.

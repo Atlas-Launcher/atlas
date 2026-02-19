@@ -128,7 +128,10 @@ export default function AccessTab({
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Access</CardTitle>
-            <CardDescription>Manage collaborators and active invite links.</CardDescription>
+            <CardDescription>
+              Manage collaborators and active invite links. If a promoted creator has no linked
+              GitHub account, you must add them to the repository manually.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="users">

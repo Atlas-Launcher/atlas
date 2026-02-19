@@ -49,6 +49,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const [packDeployTokenName, setPackDeployTokenName] = useState("");
   const [createdPackDeployToken, setCreatedPackDeployToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const [inviteLinkModal, setInviteLinkModal] = useState<string | null>(null);
@@ -386,6 +387,7 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
   const handlePromoteMember = async (userId: string) => {
     setLoading(true);
     setError(null);
+    setNotice(null);
     const response = await fetch(`/api/v1/packs/${packId}/members/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -399,6 +401,13 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
     if (!response.ok) {
       setError(data?.error ?? "Unable to promote member.");
       return;
+    }
+
+    const promotionWarnings = Array.isArray(data?.warnings)
+      ? data.warnings.filter((value: unknown): value is string => typeof value === "string")
+      : [];
+    if (promotionWarnings.length) {
+      setNotice(promotionWarnings.join(" "));
     }
 
     setMembers((prev) =>
@@ -568,6 +577,11 @@ export default function PackDashboardClient({ session, packId }: PackDashboardCl
           {error ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
               {error}
+            </div>
+          ) : null}
+          {notice ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              {notice}
             </div>
           ) : null}
 
