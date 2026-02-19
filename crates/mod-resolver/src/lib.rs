@@ -30,6 +30,12 @@ pub struct ResolvedMod {
     pub dependencies: Vec<ResolvedDependency>,
 }
 
+#[derive(Debug, Clone)]
+pub struct CompatibleVersion {
+    pub selector: String,
+    pub label: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
     Modrinth,
@@ -241,6 +247,40 @@ pub async fn resolve_by_project_id(
     }
 }
 
+pub async fn compatible_versions_by_project_id(
+    provider: Provider,
+    project_id: &str,
+    loader: &str,
+    minecraft_version: &str,
+    pack_type: &str,
+) -> Result<Vec<CompatibleVersion>> {
+    let normalized_pack_type = normalize_pack_type(pack_type)?;
+    let client = reqwest::Client::new();
+
+    match provider {
+        Provider::Modrinth => {
+            modrinth::compatible_versions_by_project_id(
+                &client,
+                project_id,
+                loader,
+                minecraft_version,
+                normalized_pack_type,
+            )
+            .await
+        }
+        Provider::CurseForge => {
+            curseforge::compatible_versions_by_project_id(
+                &client,
+                project_id,
+                loader,
+                minecraft_version,
+                normalized_pack_type,
+            )
+            .await
+        }
+    }
+}
+
 pub async fn resolve_curseforge_by_project_id_via_proxy(
     proxy_base_url: &str,
     access_token: &str,
@@ -260,6 +300,28 @@ pub async fn resolve_curseforge_by_project_id_via_proxy(
         loader,
         minecraft_version,
         desired_version,
+        normalized_pack_type,
+    )
+    .await
+}
+
+pub async fn compatible_curseforge_versions_by_project_id_via_proxy(
+    proxy_base_url: &str,
+    access_token: &str,
+    project_id: &str,
+    loader: &str,
+    minecraft_version: &str,
+    pack_type: &str,
+) -> Result<Vec<CompatibleVersion>> {
+    let normalized_pack_type = normalize_pack_type(pack_type)?;
+    let client = reqwest::Client::new();
+    curseforge_proxy::compatible_versions_by_project_id(
+        &client,
+        proxy_base_url,
+        access_token,
+        project_id,
+        loader,
+        minecraft_version,
         normalized_pack_type,
     )
     .await
@@ -374,6 +436,24 @@ pub fn resolve_by_project_id_blocking(
 }
 
 #[cfg(feature = "blocking")]
+pub fn compatible_versions_by_project_id_blocking(
+    provider: Provider,
+    project_id: &str,
+    loader: &str,
+    minecraft_version: &str,
+    pack_type: &str,
+) -> Result<Vec<CompatibleVersion>> {
+    let runtime = tokio::runtime::Runtime::new().context("failed to create tokio runtime")?;
+    runtime.block_on(compatible_versions_by_project_id(
+        provider,
+        project_id,
+        loader,
+        minecraft_version,
+        pack_type,
+    ))
+}
+
+#[cfg(feature = "blocking")]
 pub fn resolve_curseforge_by_project_id_via_proxy_blocking(
     proxy_base_url: &str,
     access_token: &str,
@@ -391,6 +471,26 @@ pub fn resolve_curseforge_by_project_id_via_proxy_blocking(
         loader,
         minecraft_version,
         desired_version,
+        pack_type,
+    ))
+}
+
+#[cfg(feature = "blocking")]
+pub fn compatible_curseforge_versions_by_project_id_via_proxy_blocking(
+    proxy_base_url: &str,
+    access_token: &str,
+    project_id: &str,
+    loader: &str,
+    minecraft_version: &str,
+    pack_type: &str,
+) -> Result<Vec<CompatibleVersion>> {
+    let runtime = tokio::runtime::Runtime::new().context("failed to create tokio runtime")?;
+    runtime.block_on(compatible_curseforge_versions_by_project_id_via_proxy(
+        proxy_base_url,
+        access_token,
+        project_id,
+        loader,
+        minecraft_version,
         pack_type,
     ))
 }

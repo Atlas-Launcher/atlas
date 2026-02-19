@@ -4,7 +4,38 @@ use serde::{Deserialize, Serialize};
 pub struct ModEntry {
     #[serde(default)]
     pub metadata: ModMetadata,
+    #[serde(default, skip_serializing_if = "ModCompat::is_empty")]
+    pub compat: ModCompat,
     pub download: ModDownload,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct ModCompat {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub minecraft: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loaders: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loader_versions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<ModCompatDependency>,
+}
+
+impl ModCompat {
+    pub fn is_empty(&self) -> bool {
+        self.minecraft.is_empty()
+            && self.loaders.is_empty()
+            && self.loader_versions.is_empty()
+            && self.requires.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ModCompatDependency {
+    pub source: String,
+    pub project_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -107,6 +138,7 @@ pub fn parse_mod_toml(contents: &str) -> Result<ModEntry, toml::de::Error> {
             }
             Ok(ModEntry {
                 metadata,
+                compat: ModCompat::default(),
                 download: ModDownload {
                     source: legacy.source,
                     project_id: legacy.project_id,

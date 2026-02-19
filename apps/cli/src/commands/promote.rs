@@ -71,11 +71,16 @@ fn resolve_channel(
         return Ok(default_channel.to_string());
     }
 
-    let current_channels = client.blocking_list_pack_channels(pack_id).unwrap_or_default();
+    let current_channels = client
+        .blocking_list_pack_channels(pack_id)
+        .unwrap_or_default();
     let options = ["dev", "beta", "production"];
 
     let default_index = if let Some(current) = most_recent_channel(&current_channels) {
-        options.iter().position(|value| *value == current).unwrap_or(0)
+        options
+            .iter()
+            .position(|value| *value == current)
+            .unwrap_or(0)
     } else {
         options
             .iter()
@@ -126,7 +131,10 @@ fn resolve_build_id(args: &PromoteArgs, client: &HubClient, pack_id: &str) -> Re
 }
 
 fn format_build_label(build: &PackBuild) -> String {
-    let version = build.version.clone().unwrap_or_else(|| "unknown".to_string());
+    let version = build
+        .version
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
     let commit = build
         .commit_hash
         .as_ref()

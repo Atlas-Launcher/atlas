@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
-use crate::{ResolvedDependency, ResolvedMod, SearchCandidate};
+use crate::{CompatibleVersion, ResolvedDependency, ResolvedMod, SearchCandidate};
 use protocol::config::mods::{ModDownload, ModEntry, ModHashes, ModMetadata, ModSide};
 
 const GAME_ID_MINECRAFT: i32 = 432;
@@ -210,6 +210,7 @@ pub async fn resolve_by_project_id(
                 project_url: Some(curseforge_project_url(project_id)),
                 disabled_client_oses: Vec::new(),
             },
+            compat: protocol::config::mods::ModCompat::default(),
             download: ModDownload {
                 source: "curseforge".to_string(),
                 project_id: project_id.to_string(),
@@ -227,12 +228,78 @@ pub async fn resolve_by_project_id(
     })
 }
 
+pub async fn compatible_versions_by_project_id(
+    client: &reqwest::Client,
+    proxy_base_url: &str,
+    access_token: &str,
+    project_id: &str,
+    loader: &str,
+    minecraft_version: &str,
+    pack_type: &str,
+) -> Result<Vec<CompatibleVersion>> {
+    let mod_id = project_id
+        .parse::<i64>()
+        .context("CurseForge project id must be numeric")?;
+    let class_id = class_id_for(pack_type)?;
+    let loader_id = loader_id_for(loader)?;
+    let base = format!("{}/api/v1/curseforge", proxy_base_url.trim_end_matches('/'));
+
+    let mut files_url = reqwest::Url::parse(&format!("{base}/mods/{mod_id}/files"))
+        .context("Failed to build CurseForge proxy files URL")?;
+    {
+        let mut pairs = files_url.query_pairs_mut();
+        pairs.append_pair("gameVersion", minecraft_version);
+        pairs.append_pair("pageSize", "50");
+        if let Some(class_id) = class_id {
+            pairs.append_pair("classId", &class_id.to_string());
+        }
+        if include_loader_filter(pack_type) {
+            pairs.append_pair("modLoaderType", &loader_id.to_string());
+        }
+    }
+
+    let files = client
+        .get(files_url)
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .context("Failed to load CurseForge proxy files")?
+        .error_for_status()
+        .context("CurseForge proxy files returned an error")?
+        .json::<CfResponse<CfFile>>()
+        .await
+        .context("Failed to parse CurseForge proxy files response")?;
+
+    Ok(compatible_files(&files.data, minecraft_version)
+        .into_iter()
+        .map(|file| CompatibleVersion {
+            selector: file.id.to_string(),
+            label: format_curseforge_version_label(file),
+        })
+        .collect())
+}
+
 fn select_compatible_file<'a>(
     files: &'a [CfFile],
     minecraft_version: &str,
     desired_version: Option<&str>,
 ) -> Option<&'a CfFile> {
-    let compatible = files
+    let compatible = compatible_files(files, minecraft_version);
+
+    if let Some(desired) = desired_version {
+        let desired = desired.trim();
+        return compatible.into_iter().find(|file| {
+            file.id.to_string() == desired
+                || file.display_name == desired
+                || file.file_name == desired
+        });
+    }
+
+    compatible.into_iter().next()
+}
+
+fn compatible_files<'a>(files: &'a [CfFile], minecraft_version: &str) -> Vec<&'a CfFile> {
+    files
         .iter()
         .filter(|file| {
             file.game_versions.is_empty()
@@ -241,15 +308,22 @@ fn select_compatible_file<'a>(
                     .iter()
                     .any(|value| value == minecraft_version)
         })
-        .collect::<Vec<_>>();
+        .collect::<Vec<_>>()
+}
 
-    if let Some(desired) = desired_version {
-        return compatible
-            .into_iter()
-            .find(|file| file.display_name == desired || file.file_name == desired);
+fn format_curseforge_version_label(file: &CfFile) -> String {
+    let display_name = file.display_name.trim();
+    let file_name = file.file_name.trim();
+
+    if display_name.is_empty() {
+        return format!("{file_name} [file {}]", file.id);
     }
 
-    compatible.into_iter().next()
+    if file_name.is_empty() || display_name.eq_ignore_ascii_case(file_name) {
+        return format!("{display_name} [file {}]", file.id);
+    }
+
+    format!("{display_name} ({file_name}) [file {}]", file.id)
 }
 
 fn loader_id_for(loader: &str) -> Result<i32> {

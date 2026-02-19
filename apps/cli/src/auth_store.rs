@@ -67,8 +67,8 @@ pub fn remove_cli_auth_session() -> Result<()> {
 
 pub fn require_access_token_for_hub(hub_url: &str) -> Result<String> {
     let requested_hub = normalize_hub_url(hub_url);
-    let session = load_cli_auth_session()?
-        .context("No CLI auth session found. Run `atlas login` first.")?;
+    let session =
+        load_cli_auth_session()?.context("No CLI auth session found. Run `atlas login` first.")?;
 
     if normalize_hub_url(&session.hub_url) != requested_hub {
         bail!(

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
-use crate::{ResolvedDependency, ResolvedMod, SearchCandidate};
+use crate::{CompatibleVersion, ResolvedDependency, ResolvedMod, SearchCandidate};
 use protocol::config::mods::{ModDownload, ModEntry, ModHashes, ModMetadata, ModSide};
 
 #[derive(Deserialize)]
@@ -236,6 +236,7 @@ pub async fn resolve_by_project_id(
                 project_url: Some(project_url),
                 disabled_client_oses: Vec::new(),
             },
+            compat: protocol::config::mods::ModCompat::default(),
             download: ModDownload {
                 source: "modrinth".to_string(),
                 project_id: project.id.clone(),
@@ -255,6 +256,37 @@ pub async fn resolve_by_project_id(
         },
         dependencies,
     })
+}
+
+pub async fn compatible_versions_by_project_id(
+    client: &reqwest::Client,
+    project_id: &str,
+    loader: &str,
+    minecraft_version: &str,
+    pack_type: &str,
+) -> Result<Vec<CompatibleVersion>> {
+    let version_url = build_version_url(project_id, loader, minecraft_version, pack_type);
+    let versions = client
+        .get(version_url)
+        .send()
+        .await
+        .context("Failed to load Modrinth versions")?
+        .error_for_status()
+        .context("Modrinth versions returned an error")?
+        .json::<Vec<VersionInfo>>()
+        .await
+        .context("Failed to parse Modrinth versions")?;
+
+    Ok(versions
+        .into_iter()
+        .map(|version| {
+            let label = format_modrinth_version_label(&version);
+            CompatibleVersion {
+                selector: version.id,
+                label,
+            }
+        })
+        .collect())
 }
 
 async fn resolve_dependency_project_id(
@@ -330,6 +362,21 @@ fn map_side(
         (false, true) => ModSide::Server,
         _ => ModSide::Both,
     }
+}
+
+fn format_modrinth_version_label(version: &VersionInfo) -> String {
+    let version_number = version.version_number.trim();
+    let name = version.name.trim();
+
+    if name.is_empty() || name.eq_ignore_ascii_case(version_number) {
+        return version_number.to_string();
+    }
+
+    if version_number.is_empty() {
+        return name.to_string();
+    }
+
+    format!("{version_number} ({name})")
 }
 
 fn map_explicit_side_value(value: &str) -> Option<ModSide> {

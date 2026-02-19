@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::{self as stdio, IsTerminal};
 use std::path::{Path, PathBuf};
@@ -73,6 +73,20 @@ pub struct AddArgs {
     #[arg(long)]
     version: Option<String>,
     #[arg(
+        long = "dependencies",
+        default_value = "auto",
+        value_name = "MODE",
+        value_parser = ["auto", "off"]
+    )]
+    dependencies: String,
+    #[arg(
+        long = "dependency-versions",
+        default_value = "required",
+        value_name = "MODE",
+        value_parser = ["required", "latest"]
+    )]
+    dependency_versions: String,
+    #[arg(
         long = "type",
         default_value = "mod",
         value_name = "TYPE",
@@ -85,6 +99,20 @@ pub struct AddArgs {
 pub struct ValidateArgs {
     #[arg(long, default_value = ".")]
     input: PathBuf,
+    #[arg(
+        long = "check-dependencies",
+        default_value = "on",
+        value_name = "MODE",
+        value_parser = ["on", "off"]
+    )]
+    check_dependencies: String,
+    #[arg(
+        long = "check-dependency-versions",
+        default_value = "strict",
+        value_name = "MODE",
+        value_parser = ["strict", "off"]
+    )]
+    check_dependency_versions: String,
 }
 
 #[derive(Args)]
@@ -198,7 +226,10 @@ fn add(args: AddArgs) -> Result<()> {
     let config = config::load_atlas_config(&root)?;
     let loader = config.versions.modloader;
     let minecraft_version = config.versions.mc;
+    let modloader_version = config.versions.modloader_version;
     let desired_version = args.version.clone();
+    let dependency_install_mode = DependencyInstallMode::from_input(&args.dependencies)?;
+    let dependency_version_mode = DependencyVersionMode::from_input(&args.dependency_versions)?;
     let asset_kind = AssetKind::from_input(&args.asset_type)?;
     let pack_type = asset_kind.resolver_pack_type();
 
@@ -248,13 +279,22 @@ fn add(args: AddArgs) -> Result<()> {
         println!("Cancelled.");
         return Ok(());
     };
+    let pinned_version = resolve_pinned_version(
+        provider,
+        pack_type,
+        &selected,
+        &loader,
+        &minecraft_version,
+        desired_version.as_deref(),
+        curseforge_auth.as_ref(),
+    )?;
 
     let mut existing = load_existing_mod_keys(&root)?;
     let mut visited_projects = HashSet::new();
     let mut queue = VecDeque::new();
     queue.push_back(QueuedResolution {
         project_id: selected.project_id.clone(),
-        desired_version: desired_version.clone(),
+        desired_version: pinned_version,
         preferred_name: Some(selected.title),
         preferred_project_url: selected.project_url,
     });
@@ -275,6 +315,20 @@ fn add(args: AddArgs) -> Result<()> {
         )?;
 
         let mut entry = resolved.entry;
+        entry.compat = protocol::config::mods::ModCompat {
+            minecraft: vec![minecraft_version.clone()],
+            loaders: vec![loader.clone()],
+            loader_versions: vec![modloader_version.clone()],
+            requires: resolved
+                .dependencies
+                .iter()
+                .map(|dependency| protocol::config::mods::ModCompatDependency {
+                    source: provider_label(provider).to_ascii_lowercase(),
+                    project_id: dependency.project_id.clone(),
+                    version: dependency.desired_version.clone(),
+                })
+                .collect(),
+        };
         if entry.metadata.name.trim().is_empty() {
             if let Some(name) = next.preferred_name.filter(|value| !value.trim().is_empty()) {
                 entry.metadata.name = name;
@@ -305,12 +359,12 @@ fn add(args: AddArgs) -> Result<()> {
             skipped_existing_count += 1;
         }
 
-        if asset_kind == AssetKind::Mod {
+        if asset_kind == AssetKind::Mod && dependency_install_mode == DependencyInstallMode::Auto {
             for dependency in resolved.dependencies {
                 if visited_projects.insert(dependency.project_id.clone()) {
                     queue.push_back(QueuedResolution {
                         project_id: dependency.project_id,
-                        desired_version: dependency.desired_version,
+                        desired_version: dependency_version_mode.select(dependency.desired_version),
                         preferred_name: None,
                         preferred_project_url: None,
                     });
@@ -326,6 +380,9 @@ fn add(args: AddArgs) -> Result<()> {
     }
     if skipped_existing_count > 0 {
         println!("Skipped {} existing mod(s).", skipped_existing_count);
+    }
+    if asset_kind == AssetKind::Mod && dependency_install_mode == DependencyInstallMode::Off {
+        println!("Dependency auto-install is disabled (--dependencies=off).");
     }
 
     Ok(())
@@ -547,6 +604,93 @@ fn resolve_project(
                 loader,
                 minecraft_version,
                 desired_version,
+                pack_type,
+            )
+        }
+    }
+}
+
+fn resolve_pinned_version(
+    provider: Provider,
+    pack_type: &str,
+    selected: &SearchCandidate,
+    loader: &str,
+    minecraft_version: &str,
+    explicit_version: Option<&str>,
+    curseforge_auth: Option<&CurseForgeAuth>,
+) -> Result<Option<String>> {
+    if let Some(version) = explicit_version {
+        let trimmed = version.trim();
+        if !trimmed.is_empty() {
+            return Ok(Some(trimmed.to_string()));
+        }
+    }
+
+    let compatible_versions = list_compatible_versions(
+        provider,
+        pack_type,
+        &selected.project_id,
+        loader,
+        minecraft_version,
+        curseforge_auth,
+    )?;
+
+    if compatible_versions.is_empty() {
+        return Ok(None);
+    }
+
+    if compatible_versions.len() == 1
+        || !stdio::stdin().is_terminal()
+        || !stdio::stdout().is_terminal()
+    {
+        return Ok(Some(compatible_versions[0].selector.clone()));
+    }
+
+    let labels = compatible_versions
+        .iter()
+        .map(|version| version.label.as_str())
+        .collect::<Vec<_>>();
+    let selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt(format!(
+            "Select {} version for {} (newest is default)",
+            provider_label(provider),
+            selected.title
+        ))
+        .items(&labels)
+        .default(0)
+        .interact()
+        .context("Failed to read version selection")?;
+
+    compatible_versions
+        .get(selection)
+        .map(|version| Some(version.selector.clone()))
+        .context("Invalid version selection")
+}
+
+fn list_compatible_versions(
+    provider: Provider,
+    pack_type: &str,
+    project_id: &str,
+    loader: &str,
+    minecraft_version: &str,
+    curseforge_auth: Option<&CurseForgeAuth>,
+) -> Result<Vec<mod_resolver::CompatibleVersion>> {
+    match provider {
+        Provider::Modrinth => mod_resolver::compatible_versions_by_project_id_blocking(
+            provider,
+            project_id,
+            loader,
+            minecraft_version,
+            pack_type,
+        ),
+        Provider::CurseForge => {
+            let auth = curseforge_auth.context("CurseForge authentication is required")?;
+            mod_resolver::compatible_curseforge_versions_by_project_id_via_proxy_blocking(
+                &auth.hub_url,
+                &auth.access_token,
+                project_id,
+                loader,
+                minecraft_version,
                 pack_type,
             )
         }
@@ -949,13 +1093,40 @@ fn validate(args: ValidateArgs) -> Result<()> {
         .canonicalize()
         .context("Failed to resolve input path")?;
     let config_text = io::read_to_string(&root.join("atlas.toml"))?;
-    let _config = protocol::config::atlas::parse_config(&config_text)
+    let config = protocol::config::atlas::parse_config(&config_text)
         .map_err(|_| anyhow::anyhow!("atlas.toml is invalid"))?;
+    validate_loader_version_against_minecraft(&config)?;
 
-    for path in pointer_paths(&root)? {
-        let contents = io::read_to_string(&path)?;
-        protocol::config::mods::parse_mod_toml(&contents)
-            .map_err(|_| anyhow::anyhow!("Invalid pointer file: {}", path.display()))?;
+    let dependency_check_mode = DependencyCheckMode::from_input(&args.check_dependencies)?;
+    let dependency_version_check_mode =
+        DependencyVersionCheckMode::from_input(&args.check_dependency_versions)?;
+
+    let pointers = load_pointer_resources(&root)?;
+    let mod_pointers = pointers
+        .iter()
+        .filter(|pointer| pointer.kind == PointerKind::Mod)
+        .collect::<Vec<_>>();
+    let index_by_project = mod_pointers
+        .iter()
+        .map(|pointer| {
+            (
+                mod_key(
+                    &pointer.entry.download.source,
+                    &pointer.entry.download.project_id,
+                ),
+                PointerIndexEntry::from_pointer(pointer),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+
+    for pointer in &mod_pointers {
+        validate_mod_compatibility(pointer, &config)?;
+    }
+
+    if dependency_check_mode == DependencyCheckMode::On {
+        for pointer in &mod_pointers {
+            validate_mod_dependencies(pointer, &index_by_project, dependency_version_check_mode)?;
+        }
     }
 
     println!("Pack config is valid.");
@@ -1034,6 +1205,14 @@ struct PointerResource {
     kind: PointerKind,
 }
 
+#[derive(Clone)]
+struct PointerIndexEntry {
+    source: String,
+    project_id: String,
+    selected_version: String,
+    selected_file_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PointerKind {
     Mod,
@@ -1045,6 +1224,220 @@ enum RemoveAssetFilter {
     Any,
     Mod,
     Resource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DependencyInstallMode {
+    Auto,
+    Off,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DependencyVersionMode {
+    Required,
+    Latest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DependencyCheckMode {
+    On,
+    Off,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DependencyVersionCheckMode {
+    Strict,
+    Off,
+}
+
+impl PointerIndexEntry {
+    fn from_pointer(pointer: &PointerResource) -> Self {
+        Self {
+            source: pointer.entry.download.source.clone(),
+            project_id: pointer.entry.download.project_id.clone(),
+            selected_version: pointer.entry.download.version.clone(),
+            selected_file_id: pointer.entry.download.file_id.clone(),
+        }
+    }
+}
+
+impl DependencyInstallMode {
+    fn from_input(input: &str) -> Result<Self> {
+        match input.trim().to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "off" => Ok(Self::Off),
+            other => bail!(
+                "Unsupported dependencies mode '{}'. Use auto or off.",
+                other
+            ),
+        }
+    }
+}
+
+impl DependencyVersionMode {
+    fn from_input(input: &str) -> Result<Self> {
+        match input.trim().to_ascii_lowercase().as_str() {
+            "required" => Ok(Self::Required),
+            "latest" => Ok(Self::Latest),
+            other => bail!(
+                "Unsupported dependency-versions mode '{}'. Use required or latest.",
+                other
+            ),
+        }
+    }
+
+    fn select(self, value: Option<String>) -> Option<String> {
+        match self {
+            Self::Required => value,
+            Self::Latest => None,
+        }
+    }
+}
+
+impl DependencyCheckMode {
+    fn from_input(input: &str) -> Result<Self> {
+        match input.trim().to_ascii_lowercase().as_str() {
+            "on" => Ok(Self::On),
+            "off" => Ok(Self::Off),
+            other => bail!(
+                "Unsupported check-dependencies mode '{}'. Use on or off.",
+                other
+            ),
+        }
+    }
+}
+
+impl DependencyVersionCheckMode {
+    fn from_input(input: &str) -> Result<Self> {
+        match input.trim().to_ascii_lowercase().as_str() {
+            "strict" => Ok(Self::Strict),
+            "off" => Ok(Self::Off),
+            other => bail!(
+                "Unsupported check-dependency-versions mode '{}'. Use strict or off.",
+                other
+            ),
+        }
+    }
+}
+
+fn validate_loader_version_against_minecraft(
+    config: &protocol::config::atlas::AtlasConfig,
+) -> Result<()> {
+    let catalog = crate::version_catalog::VersionCatalog::new()?;
+    let loader_versions =
+        catalog.fetch_loader_versions(&config.versions.modloader, &config.versions.mc)?;
+    let wanted = config.versions.modloader_version.trim();
+    let supported = loader_versions.iter().any(|value| value.trim() == wanted);
+    if supported {
+        return Ok(());
+    }
+
+    bail!(
+        "atlas.toml versions.modloader_version '{}' is not compatible with Minecraft {} ({})",
+        wanted,
+        config.versions.mc,
+        config.versions.modloader
+    )
+}
+
+fn validate_mod_compatibility(
+    pointer: &PointerResource,
+    config: &protocol::config::atlas::AtlasConfig,
+) -> Result<()> {
+    let compat = &pointer.entry.compat;
+
+    if !compat.minecraft.is_empty()
+        && !compat
+            .minecraft
+            .iter()
+            .any(|value| value.trim() == config.versions.mc)
+    {
+        bail!(
+            "{}: incompatible Minecraft version. Pointer supports {:?}, pack uses {}",
+            pointer.rel_path,
+            compat.minecraft,
+            config.versions.mc
+        );
+    }
+
+    if !compat.loaders.is_empty()
+        && !compat.loaders.iter().any(|value| {
+            value
+                .trim()
+                .eq_ignore_ascii_case(&config.versions.modloader)
+        })
+    {
+        bail!(
+            "{}: incompatible loader. Pointer supports {:?}, pack uses {}",
+            pointer.rel_path,
+            compat.loaders,
+            config.versions.modloader
+        );
+    }
+
+    if !compat.loader_versions.is_empty()
+        && !compat
+            .loader_versions
+            .iter()
+            .any(|value| value.trim() == config.versions.modloader_version)
+    {
+        bail!(
+            "{}: incompatible loader version. Pointer supports {:?}, pack uses {}",
+            pointer.rel_path,
+            compat.loader_versions,
+            config.versions.modloader_version
+        );
+    }
+
+    Ok(())
+}
+
+fn validate_mod_dependencies(
+    pointer: &PointerResource,
+    index_by_project: &HashMap<String, PointerIndexEntry>,
+    dependency_version_check_mode: DependencyVersionCheckMode,
+) -> Result<()> {
+    for dependency in &pointer.entry.compat.requires {
+        let key = mod_key(&dependency.source, &dependency.project_id);
+        let Some(installed) = index_by_project.get(&key) else {
+            bail!(
+                "{}: missing required dependency {}:{}",
+                pointer.rel_path,
+                dependency.source,
+                dependency.project_id
+            );
+        };
+
+        if dependency_version_check_mode == DependencyVersionCheckMode::Strict {
+            if let Some(required_version) = dependency
+                .version
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                let matches_file_id = installed
+                    .selected_file_id
+                    .as_deref()
+                    .map(str::trim)
+                    .map(|value| value == required_version)
+                    .unwrap_or(false);
+                let matches_version = installed.selected_version.trim() == required_version;
+                if !matches_file_id && !matches_version {
+                    bail!(
+                        "{}: dependency {}:{} requires version '{}', found '{}' (file_id={})",
+                        pointer.rel_path,
+                        installed.source,
+                        installed.project_id,
+                        required_version,
+                        installed.selected_version,
+                        installed.selected_file_id.as_deref().unwrap_or("-")
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 impl RemoveAssetFilter {

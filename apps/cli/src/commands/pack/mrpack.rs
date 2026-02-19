@@ -453,6 +453,7 @@ fn build_entry_from_mrpack_file(file: &MrpackFile, kind: AssetKind) -> Option<Mo
             project_url: project_url_for_source(&source, &project_id),
             disabled_client_oses: Vec::new(),
         },
+        compat: protocol::config::mods::ModCompat::default(),
         download: ModDownload {
             source,
             project_id,

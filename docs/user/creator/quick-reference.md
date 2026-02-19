@@ -37,6 +37,24 @@ atlas workflow update
 atlas completion
 ```
 
+## Mod add overrides
+
+Use these overrides when you need custom dependency behavior.
+
+```bash
+atlas mod add mr sodium --dependencies=off
+atlas mod add mr sodium --dependency-versions=latest
+```
+
+## Validate overrides
+
+Use these overrides when you want to relax dependency checks.
+
+```bash
+atlas validate --check-dependencies=off
+atlas validate --check-dependency-versions=off
+```
+
 ## Start a new pack release
 
 Use this flow for first publish from a repository.

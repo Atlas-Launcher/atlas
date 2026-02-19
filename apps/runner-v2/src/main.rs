@@ -5,7 +5,7 @@ use runner_v2_utils::runtime_paths_v2;
 use semver::Version;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 
 mod client;
 

@@ -1,6 +1,6 @@
 use crate::client::connect_or_start;
 use atlas_client::hub::HubClient;
-use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
 use runner_core_v2::proto::{Envelope, Outbound, Request, Response};
 use runner_core_v2::PROTOCOL_VERSION;
 use runner_v2_utils::{ensure_dir, runtime_paths_v2};
